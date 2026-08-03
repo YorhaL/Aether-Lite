@@ -983,6 +983,11 @@ fn build_imported_user_group_record(
     let allowed_api_formats = normalize_imported_user_api_formats(group, "allowed_api_formats")?;
     let allowed_models = normalize_imported_user_string_list(group, "allowed_models")?;
     let rate_limit = imported_optional_i32(group.get("rate_limit"), "rate_limit")?;
+    let daily_usage_limit_usd =
+        imported_optional_f64(group.get("daily_usage_limit_usd"), "daily_usage_limit_usd")?;
+    if daily_usage_limit_usd.is_some_and(|value| value < 0.0) {
+        return Err(format!("{field_name}.daily_usage_limit_usd 必须大于等于 0"));
+    }
 
     let allowed_providers_mode = imported_optional_list_policy_mode(
         group.get("allowed_providers_mode"),
@@ -1026,6 +1031,17 @@ fn build_imported_user_group_record(
                     "inherit".to_string()
                 }
             });
+    let daily_usage_limit_mode = imported_optional_rate_limit_policy_mode(
+        group.get("daily_usage_limit_mode"),
+        "daily_usage_limit_mode",
+    )?
+    .unwrap_or_else(|| {
+        if daily_usage_limit_usd.is_some() {
+            "custom".to_string()
+        } else {
+            "inherit".to_string()
+        }
+    });
 
     let normalized_name = name.to_ascii_lowercase();
 
@@ -1044,6 +1060,8 @@ fn build_imported_user_group_record(
             allowed_models_mode,
             rate_limit,
             rate_limit_mode,
+            daily_usage_limit_usd,
+            daily_usage_limit_mode,
         },
     ))
 }
@@ -2914,6 +2932,13 @@ impl<'a> AdminAppState<'a> {
                 let rate_limit =
                     invalid_value!(imported_optional_i32(key.get("rate_limit"), "rate_limit"))
                         .unwrap_or(0);
+                let daily_usage_limit_usd = invalid_value!(imported_optional_f64(
+                    key.get("daily_usage_limit_usd"),
+                    "daily_usage_limit_usd"
+                ));
+                if daily_usage_limit_usd.is_some_and(|value| value < 0.0) {
+                    return Ok(Err(invalid_request("daily_usage_limit_usd 必须大于等于 0")));
+                }
                 let concurrent_limit = invalid_value!(imported_optional_i32(
                     key.get("concurrent_limit"),
                     "concurrent_limit"
@@ -2971,6 +2996,9 @@ impl<'a> AdminAppState<'a> {
                                         api_key_id: existing_key.api_key_id.clone(),
                                         name: name.clone(),
                                         rate_limit: Some(rate_limit),
+                                        daily_usage_limit_present: key
+                                            .contains_key("daily_usage_limit_usd"),
+                                        daily_usage_limit_usd,
                                         concurrent_limit: if key.contains_key("concurrent_limit") {
                                             concurrent_limit
                                         } else {
@@ -3070,6 +3098,7 @@ impl<'a> AdminAppState<'a> {
                         allowed_models,
                         ip_rules,
                         rate_limit,
+                        daily_usage_limit_usd,
                         concurrent_limit,
                         force_capabilities,
                         is_active,
@@ -3170,6 +3199,13 @@ impl<'a> AdminAppState<'a> {
                 let rate_limit =
                     invalid_value!(imported_optional_i32(key.get("rate_limit"), "rate_limit"))
                         .unwrap_or(0);
+                let daily_usage_limit_usd = invalid_value!(imported_optional_f64(
+                    key.get("daily_usage_limit_usd"),
+                    "daily_usage_limit_usd"
+                ));
+                if daily_usage_limit_usd.is_some_and(|value| value < 0.0) {
+                    return Ok(Err(invalid_request("daily_usage_limit_usd 必须大于等于 0")));
+                }
                 let concurrent_limit = invalid_value!(imported_optional_i32(
                     key.get("concurrent_limit"),
                     "concurrent_limit"
@@ -3233,6 +3269,9 @@ impl<'a> AdminAppState<'a> {
                                     name: name.clone(),
                                     rate_limit_present: true,
                                     rate_limit: Some(rate_limit),
+                                    daily_usage_limit_present: key
+                                        .contains_key("daily_usage_limit_usd"),
+                                    daily_usage_limit_usd,
                                     concurrent_limit_present: key.contains_key("concurrent_limit"),
                                     concurrent_limit,
                                     allowed_providers: Some(allowed_providers.clone()),
@@ -3325,6 +3364,7 @@ impl<'a> AdminAppState<'a> {
                             allowed_models,
                             ip_rules,
                             rate_limit: Some(rate_limit),
+                            daily_usage_limit_usd,
                             concurrent_limit,
                             force_capabilities,
                             is_active,
