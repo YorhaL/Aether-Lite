@@ -1809,7 +1809,7 @@ impl GatewayDataState {
             allowed_api_formats,
             allowed_models,
         } = resolve_group_effective_list_policies(&groups);
-        let user_rate_limit = resolve_effective_rate_limit_policy(None, "system", &groups);
+        let user_rate_limit = resolve_group_effective_rate_limit_policy(&groups);
         snapshot.user_allowed_providers = allowed_providers;
         snapshot.user_allowed_api_formats = allowed_api_formats;
         snapshot.user_allowed_models = allowed_models;
@@ -2014,6 +2014,12 @@ fn resolve_effective_rate_limit_policy(
     });
     let user_policy = rate_limit_restriction_from_mode(user_mode, user_rate_limit);
     rate_limit_policy_value(intersect_rate_limit_policies(group_policy, user_policy))
+}
+
+pub(crate) fn resolve_group_effective_rate_limit_policy(
+    groups: &[aether_data::repository::users::StoredUserGroup],
+) -> Option<i32> {
+    resolve_effective_rate_limit_policy(None, "system", groups)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
