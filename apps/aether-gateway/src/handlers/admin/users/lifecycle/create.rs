@@ -229,8 +229,14 @@ pub(in super::super) async fn build_admin_create_user_response(
         None
     };
 
-    let mut payload =
-        build_admin_user_payload_with_groups(&user, None, None, payload.unlimited, &groups);
+    let mut payload = build_admin_user_payload_with_groups(
+        &user,
+        None,
+        None,
+        payload.unlimited,
+        &groups,
+        &groups,
+    );
     payload["feature_settings"] = feature_settings.unwrap_or(Value::Null);
 
     Ok(attach_admin_audit_response(

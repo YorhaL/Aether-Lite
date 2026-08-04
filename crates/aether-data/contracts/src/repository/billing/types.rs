@@ -436,6 +436,21 @@ pub trait BillingReadRepository: Send + Sync {
         Ok(None)
     }
 
+    async fn list_user_plan_entitlements_by_user_ids(
+        &self,
+        user_ids: &[String],
+    ) -> Result<Option<Vec<UserPlanEntitlementRecord>>, crate::DataLayerError> {
+        let mut available = false;
+        let mut entitlements = Vec::new();
+        for user_id in user_ids {
+            if let Some(mut items) = self.list_user_plan_entitlements(user_id).await? {
+                available = true;
+                entitlements.append(&mut items);
+            }
+        }
+        Ok(available.then_some(entitlements))
+    }
+
     async fn find_user_daily_quota_availability(
         &self,
         user_id: &str,

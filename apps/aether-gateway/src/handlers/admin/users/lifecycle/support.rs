@@ -38,7 +38,7 @@ pub(super) fn build_admin_user_payload(
     rate_limit: Option<i32>,
     unlimited: bool,
 ) -> serde_json::Value {
-    build_admin_user_payload_with_groups(user, rate_limit, None, unlimited, &[])
+    build_admin_user_payload_with_groups(user, rate_limit, None, unlimited, &[], &[])
 }
 
 pub(super) fn build_admin_user_payload_with_groups(
@@ -47,6 +47,7 @@ pub(super) fn build_admin_user_payload_with_groups(
     rate_limit_mode: Option<&str>,
     unlimited: bool,
     groups: &[aether_data::repository::users::StoredUserGroup],
+    policy_groups: &[aether_data::repository::users::StoredUserGroup],
 ) -> serde_json::Value {
     json!({
         "id": user.id,
@@ -74,7 +75,7 @@ pub(super) fn build_admin_user_payload_with_groups(
             &user.allowed_api_formats_mode,
             user.allowed_models.as_ref(),
             &user.allowed_models_mode,
-            groups,
+            policy_groups,
         ),
     })
 }
@@ -88,6 +89,7 @@ pub(super) fn build_admin_user_export_payload(
     request_count: u64,
     total_tokens: u64,
     groups: &[aether_data::repository::users::StoredUserGroup],
+    policy_groups: &[aether_data::repository::users::StoredUserGroup],
 ) -> serde_json::Value {
     json!({
         "id": row.id,
@@ -118,7 +120,7 @@ pub(super) fn build_admin_user_export_payload(
             &row.allowed_api_formats_mode,
             row.allowed_models.as_ref(),
             &row.allowed_models_mode,
-            groups,
+            policy_groups,
         ),
     })
 }
@@ -374,6 +376,7 @@ mod tests {
             Some(10),
             Some("custom"),
             false,
+            &[],
             &[],
         );
         let effective = &payload["effective_policy"]["rate_limit"];

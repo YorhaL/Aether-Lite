@@ -339,7 +339,7 @@ pub(in super::super) async fn build_admin_update_user_response(
         .as_ref()
         .is_some_and(|wallet| wallet.limit_mode.eq_ignore_ascii_case("unlimited"));
     let export_row = find_admin_export_user(state, &user_id).await?;
-    let groups = state.list_user_groups_for_user(&user_id).await?;
+    let group_policy_sets = state.user_group_policy_sets_for_user(&user_id).await?;
     let rate_limit = export_row.as_ref().and_then(|row| row.rate_limit);
 
     let mut payload = build_admin_user_payload_with_groups(
@@ -347,7 +347,8 @@ pub(in super::super) async fn build_admin_update_user_response(
         rate_limit,
         export_row.as_ref().map(|row| row.rate_limit_mode.as_str()),
         unlimited,
-        &groups,
+        &group_policy_sets.assigned_groups,
+        &group_policy_sets.effective_groups,
     );
     payload["feature_settings"] = export_row
         .as_ref()

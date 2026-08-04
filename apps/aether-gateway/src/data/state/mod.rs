@@ -376,7 +376,7 @@ impl fmt::Debug for GatewayDataState {
 }
 
 mod auth;
-pub(crate) use auth::resolve_group_effective_rate_limit_policy;
+pub(crate) use auth::{resolve_group_effective_rate_limit_policy, GatewayUserGroupPolicySets};
 mod auth_api_key_cache;
 mod candidate_cache;
 mod catalog;

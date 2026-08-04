@@ -44,6 +44,22 @@ impl InMemoryBillingReadRepository {
             entitlements_by_id: RwLock::new(BTreeMap::new()),
         }
     }
+
+    pub fn with_entitlements<I>(self, items: I) -> Self
+    where
+        I: IntoIterator<Item = UserPlanEntitlementRecord>,
+    {
+        {
+            let mut entitlements = self
+                .entitlements_by_id
+                .write()
+                .expect("billing repository lock");
+            for item in items {
+                entitlements.insert(item.id.clone(), item);
+            }
+        }
+        self
+    }
 }
 
 fn current_unix_secs() -> u64 {
@@ -363,6 +379,37 @@ impl BillingReadRepository for InMemoryBillingReadRepository {
             .cloned()
             .collect::<Vec<_>>();
         items.sort_by_key(|item| item.expires_at_unix_secs);
+        Ok(Some(items))
+    }
+
+    async fn list_user_plan_entitlements_by_user_ids(
+        &self,
+        user_ids: &[String],
+    ) -> Result<Option<Vec<UserPlanEntitlementRecord>>, DataLayerError> {
+        let now = current_unix_secs();
+        let user_ids = user_ids
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        let mut items = self
+            .entitlements_by_id
+            .read()
+            .expect("billing repository lock")
+            .values()
+            .filter(|item| {
+                user_ids.contains(&item.user_id)
+                    && item.status == "active"
+                    && item.expires_at_unix_secs > now
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            left.user_id
+                .cmp(&right.user_id)
+                .then_with(|| left.expires_at_unix_secs.cmp(&right.expires_at_unix_secs))
+                .then_with(|| left.created_at_unix_secs.cmp(&right.created_at_unix_secs))
+                .then_with(|| left.id.cmp(&right.id))
+        });
         Ok(Some(items))
     }
 
