@@ -1,4 +1,5 @@
 use super::super::format_optional_datetime_iso8601;
+use crate::data::state::resolve_group_effective_rate_limit_policy;
 use crate::handlers::admin::request::AdminAppState;
 use crate::GatewayError;
 use serde_json::json;
@@ -37,7 +38,7 @@ pub(super) fn build_admin_user_payload(
     rate_limit: Option<i32>,
     unlimited: bool,
 ) -> serde_json::Value {
-    build_admin_user_payload_with_groups(user, rate_limit, None, unlimited, &[])
+    build_admin_user_payload_with_groups(user, rate_limit, None, unlimited, &[], &[])
 }
 
 pub(super) fn build_admin_user_payload_with_groups(
@@ -46,6 +47,7 @@ pub(super) fn build_admin_user_payload_with_groups(
     rate_limit_mode: Option<&str>,
     unlimited: bool,
     groups: &[aether_data::repository::users::StoredUserGroup],
+    policy_groups: &[aether_data::repository::users::StoredUserGroup],
 ) -> serde_json::Value {
     json!({
         "id": user.id,
@@ -73,9 +75,7 @@ pub(super) fn build_admin_user_payload_with_groups(
             &user.allowed_api_formats_mode,
             user.allowed_models.as_ref(),
             &user.allowed_models_mode,
-            rate_limit,
-            rate_limit_mode.unwrap_or("system"),
-            groups,
+            policy_groups,
         ),
     })
 }
@@ -89,6 +89,7 @@ pub(super) fn build_admin_user_export_payload(
     request_count: u64,
     total_tokens: u64,
     groups: &[aether_data::repository::users::StoredUserGroup],
+    policy_groups: &[aether_data::repository::users::StoredUserGroup],
 ) -> serde_json::Value {
     json!({
         "id": row.id,
@@ -119,9 +120,7 @@ pub(super) fn build_admin_user_export_payload(
             &row.allowed_api_formats_mode,
             row.allowed_models.as_ref(),
             &row.allowed_models_mode,
-            row.rate_limit,
-            &row.rate_limit_mode,
-            groups,
+            policy_groups,
         ),
     })
 }
@@ -143,8 +142,6 @@ fn effective_policy_payload(
     allowed_api_formats_mode: &str,
     allowed_models: Option<&Vec<String>>,
     allowed_models_mode: &str,
-    rate_limit: Option<i32>,
-    rate_limit_mode: &str,
     groups: &[aether_data::repository::users::StoredUserGroup],
 ) -> serde_json::Value {
     let mut sorted_groups = groups.to_vec();
@@ -172,7 +169,7 @@ fn effective_policy_payload(
             &sorted_groups,
             |group| (&group.allowed_models_mode, group.allowed_models.as_ref()),
         ),
-        "rate_limit": effective_rate_limit_policy_payload(rate_limit, rate_limit_mode, &sorted_groups),
+        "rate_limit": effective_rate_limit_policy_payload(&sorted_groups),
     })
 }
 
@@ -209,28 +206,16 @@ fn effective_list_policy_payload(
 }
 
 fn effective_rate_limit_policy_payload(
-    user_rate_limit: Option<i32>,
-    user_mode: &str,
     groups: &[aether_data::repository::users::StoredUserGroup],
 ) -> serde_json::Value {
-    let mut effective = None;
-    let mut group_sources = Vec::new();
-    for group in groups {
-        if let Some(restriction) =
-            rate_limit_restriction_from_mode(&group.rate_limit_mode, group.rate_limit)
-        {
-            effective = intersect_rate_limit_policies(effective, Some(restriction));
-            group_sources.push(group);
-        }
-    }
-    let mut has_user_source = false;
-    if let Some(restriction) = rate_limit_restriction_from_mode(user_mode, user_rate_limit) {
-        effective = intersect_rate_limit_policies(effective, Some(restriction));
-        has_user_source = true;
-    }
-
-    let source = combined_policy_source(has_user_source, group_sources.len(), "fallback");
-    match rate_limit_policy_value(effective) {
+    // Per-user policy columns are legacy-only. Reuse the runtime group resolver so the
+    // admin payload reports the same grant (unlimited, otherwise the highest custom RPM).
+    let group_sources = groups
+        .iter()
+        .filter(|group| group.rate_limit_mode == "custom")
+        .collect::<Vec<_>>();
+    let source = combined_policy_source(false, group_sources.len(), "fallback");
+    match resolve_group_effective_rate_limit_policy(groups) {
         Some(rate_limit) => policy_payload("custom", json!(rate_limit), source, &group_sources),
         None => policy_payload("system", serde_json::Value::Null, source, &group_sources),
     }
@@ -262,29 +247,6 @@ fn list_restriction_from_mode(mode: &str, values: Option<Vec<String>>) -> Option
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum RateLimitRestriction {
-    Unlimited,
-    Limited(i32),
-}
-
-fn rate_limit_restriction_from_mode(
-    mode: &str,
-    rate_limit: Option<i32>,
-) -> Option<RateLimitRestriction> {
-    match mode {
-        "custom" => {
-            let rate_limit = rate_limit.unwrap_or(0).max(0);
-            if rate_limit == 0 {
-                Some(RateLimitRestriction::Unlimited)
-            } else {
-                Some(RateLimitRestriction::Limited(rate_limit))
-            }
-        }
-        _ => None,
-    }
-}
-
 fn intersect_list_policies(
     left: Option<Vec<String>>,
     right: Option<Vec<String>>,
@@ -303,34 +265,6 @@ fn intersect_list_policies(
                     .collect(),
             )
         }
-    }
-}
-
-fn intersect_rate_limit_policies(
-    left: Option<RateLimitRestriction>,
-    right: Option<RateLimitRestriction>,
-) -> Option<RateLimitRestriction> {
-    match (left, right) {
-        (None, None) => None,
-        (Some(value), None) | (None, Some(value)) => Some(value),
-        (Some(RateLimitRestriction::Unlimited), Some(RateLimitRestriction::Unlimited)) => {
-            Some(RateLimitRestriction::Unlimited)
-        }
-        (Some(RateLimitRestriction::Limited(value)), Some(RateLimitRestriction::Unlimited))
-        | (Some(RateLimitRestriction::Unlimited), Some(RateLimitRestriction::Limited(value))) => {
-            Some(RateLimitRestriction::Limited(value))
-        }
-        (Some(RateLimitRestriction::Limited(left)), Some(RateLimitRestriction::Limited(right))) => {
-            Some(RateLimitRestriction::Limited(left.min(right)))
-        }
-    }
-}
-
-fn rate_limit_policy_value(policy: Option<RateLimitRestriction>) -> Option<i32> {
-    match policy {
-        None => None,
-        Some(RateLimitRestriction::Unlimited) => Some(0),
-        Some(RateLimitRestriction::Limited(value)) => Some(value),
     }
 }
 
@@ -357,5 +291,99 @@ pub(super) fn admin_user_id_from_detail_path(request_path: &str) -> Option<Strin
         None
     } else {
         Some(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aether_data::repository::users::{StoredUserAuthRecord, StoredUserGroup};
+
+    fn sample_group(id: &str, name: &str, rate_limit: Option<i32>) -> StoredUserGroup {
+        StoredUserGroup {
+            id: id.to_string(),
+            name: name.to_string(),
+            normalized_name: name.to_ascii_lowercase(),
+            description: None,
+            priority: 0,
+            allowed_providers: None,
+            allowed_providers_mode: "inherit".to_string(),
+            allowed_api_formats: None,
+            allowed_api_formats_mode: "inherit".to_string(),
+            allowed_models: None,
+            allowed_models_mode: "inherit".to_string(),
+            rate_limit,
+            rate_limit_mode: "custom".to_string(),
+            created_at: None,
+            updated_at: None,
+        }
+    }
+
+    fn sample_user() -> StoredUserAuthRecord {
+        StoredUserAuthRecord {
+            id: "user-1".to_string(),
+            email: None,
+            email_verified: false,
+            username: "user-1".to_string(),
+            password_hash: None,
+            role: "user".to_string(),
+            auth_source: "local".to_string(),
+            allowed_providers: None,
+            allowed_providers_mode: "unrestricted".to_string(),
+            allowed_api_formats: None,
+            allowed_api_formats_mode: "unrestricted".to_string(),
+            allowed_models: None,
+            allowed_models_mode: "unrestricted".to_string(),
+            is_active: true,
+            is_deleted: false,
+            created_at: None,
+            last_login_at: None,
+        }
+    }
+
+    #[test]
+    fn effective_rate_limit_payload_uses_highest_group_grant() {
+        let payload = effective_rate_limit_policy_payload(&[
+            sample_group("group-basic", "Basic", Some(30)),
+            sample_group("group-pro", "Pro", Some(100)),
+        ]);
+
+        assert_eq!(payload["mode"], "custom");
+        assert_eq!(payload["value"], 100);
+        assert_eq!(payload["source"], "combined");
+        assert_eq!(
+            payload["group_ids"],
+            serde_json::json!(["group-basic", "group-pro"])
+        );
+    }
+
+    #[test]
+    fn effective_rate_limit_payload_treats_unlimited_group_as_highest_grant() {
+        let payload = effective_rate_limit_policy_payload(&[
+            sample_group("group-basic", "Basic", Some(30)),
+            sample_group("group-unlimited", "Unlimited", Some(0)),
+        ]);
+
+        assert_eq!(payload["mode"], "custom");
+        assert_eq!(payload["value"], 0);
+        assert_eq!(payload["source"], "combined");
+    }
+
+    #[test]
+    fn effective_rate_limit_payload_ignores_legacy_user_policy_fields() {
+        let payload = build_admin_user_payload_with_groups(
+            &sample_user(),
+            Some(10),
+            Some("custom"),
+            false,
+            &[],
+            &[],
+        );
+        let effective = &payload["effective_policy"]["rate_limit"];
+
+        assert_eq!(payload["rate_limit"], 10);
+        assert_eq!(effective["mode"], "system");
+        assert!(effective["value"].is_null());
+        assert_eq!(effective["source"], "fallback");
     }
 }

@@ -235,6 +235,10 @@ import {
   buildApiKeyRedactionFeatureSettingsPatch,
   resolveApiKeyRedactionFormState,
 } from '@/features/users/apiKeyFeatureSettings'
+import {
+  formatUserEffectiveRateLimitSource,
+  resolveUserEffectiveRateLimit,
+} from '@/features/users/rateLimitPolicy'
 import type { UserManagementRow } from '@/features/users/components/user-management-types'
 import {
   USER_ROLE_FILTER_OPTIONS,
@@ -384,6 +388,7 @@ const userRows = computed<UserManagementRow[]>(() =>
   paginatedUsers.value.map((user) => {
     const totalBalance = getUserWalletTotalBalance(user)
     const walletStatus = getUserWalletStatus(user.id)
+    const effectiveRateLimit = resolveUserEffectiveRateLimit(user)
     return {
       user,
       roleLabel: legacyT(formatUserRoleLabel(user.role)),
@@ -399,9 +404,9 @@ const userRows = computed<UserManagementRow[]>(() =>
       walletStatusVariant: walletStatusBadge(walletStatus),
       requestCountLabel: formatNumber(user.request_count),
       tokensLabel: formatTokens(user.total_tokens ?? 0),
-      rateLimitLabel: formatRateLimitInheritable(user.rate_limit),
-      rateLimitSource: formatUserEffectiveRateLimitSource(user),
-      rateLimitAsBadge: isRateLimitInherited(user.rate_limit) || isRateLimitUnlimited(user.rate_limit),
+      rateLimitLabel: formatRateLimitInheritable(effectiveRateLimit),
+      rateLimitSource: formatUserEffectiveRateLimitSource(user, legacyT, locale.value),
+      rateLimitAsBadge: isRateLimitInherited(effectiveRateLimit) || isRateLimitUnlimited(effectiveRateLimit),
       createdAtLabel: formatDate(user.created_at),
       statusLabel: legacyT(user.is_active ? '活跃' : '禁用'),
       statusVariant: user.is_active ? 'success' : 'destructive',
@@ -667,22 +672,6 @@ function parseIpRulesInput(value: string): string[] | null {
     .map((item) => item.trim())
     .filter(Boolean)
   return items.length > 0 ? items : null
-}
-
-function formatUserEffectiveRateLimitSource(user: User): string {
-  const source = user.effective_policy?.rate_limit
-  if (!source) return ''
-  if (source.source === 'group' && source.group_name) {
-    return `${legacyT('继承自分组：')}${source.group_name}`
-  }
-  if (source.source === 'combined') {
-    const groupNames = Array.isArray(source.group_names) ? source.group_names.join(locale.value === 'en-US' ? ', ' : '、') : ''
-    return groupNames ? `${legacyT('用户额外限制与分组叠加：')}${groupNames}` : legacyT('用户额外限制与分组叠加')
-  }
-  if (source.source === 'user') {
-    return legacyT('用户单独配置')
-  }
-  return legacyT('系统默认')
 }
 
 function isNegativeWalletValue(value: number | null): boolean {

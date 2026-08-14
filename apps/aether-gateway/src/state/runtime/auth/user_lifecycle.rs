@@ -345,6 +345,27 @@ impl AppState {
             .map(|value| value.unwrap_or_default())
     }
 
+    pub(crate) async fn user_group_policy_sets_for_user(
+        &self,
+        user_id: &str,
+    ) -> Result<crate::data::state::GatewayUserGroupPolicySets, GatewayError> {
+        self.data
+            .user_group_policy_sets_for_user(user_id)
+            .await
+            .map_err(|err| GatewayError::Internal(err.to_string()))
+    }
+
+    pub(crate) async fn user_group_policy_sets_for_users(
+        &self,
+        user_ids: &[String],
+    ) -> Result<BTreeMap<String, crate::data::state::GatewayUserGroupPolicySets>, GatewayError>
+    {
+        self.data
+            .user_group_policy_sets_for_users(user_ids)
+            .await
+            .map_err(|err| GatewayError::Internal(err.to_string()))
+    }
+
     pub(crate) async fn list_user_group_memberships_by_user_ids(
         &self,
         user_ids: &[String],

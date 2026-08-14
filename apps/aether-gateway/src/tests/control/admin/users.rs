@@ -4,6 +4,7 @@ use aether_crypto::{encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY}
 use aether_data::repository::auth::{
     InMemoryAuthApiKeySnapshotRepository, StoredAuthApiKeyExportRecord, StoredAuthApiKeySnapshot,
 };
+use aether_data::repository::billing::InMemoryBillingReadRepository;
 use aether_data::repository::usage::InMemoryUsageReadRepository;
 use aether_data::repository::users::{
     InMemoryUserReadRepository, StoredUserAuthRecord, StoredUserExportRow, UpsertUserGroupRecord,
@@ -11,6 +12,7 @@ use aether_data::repository::users::{
 };
 use aether_data::repository::wallet::InMemoryWalletRepository;
 use aether_data::repository::wallet::StoredWalletSnapshot;
+use aether_data_contracts::repository::billing::UserPlanEntitlementRecord;
 use aether_data_contracts::repository::usage::StoredRequestUsageAudit;
 use axum::body::Body;
 use axum::routing::{any, delete, get, patch, post, put};
@@ -319,6 +321,101 @@ async fn gateway_sorts_admin_users_by_created_at() {
         .map(|item| item["id"].as_str().expect("id should be string"))
         .collect::<Vec<_>>();
     assert_eq!(asc_ids, vec!["user-old", "user-middle", "user-new"]);
+
+    gateway_handle.abort();
+}
+
+#[tokio::test]
+async fn gateway_admin_users_include_plan_membership_groups_in_effective_rpm() {
+    let user_repository = Arc::new(
+        InMemoryUserReadRepository::seed_auth_users(vec![sample_admin_user("user-1")])
+            .with_export_users(vec![sample_admin_export_user("user-1")]),
+    );
+    let plan_group = user_repository
+        .create_user_group(UpsertUserGroupRecord {
+            name: "Plan RPM".to_string(),
+            description: None,
+            priority: 10,
+            allowed_providers: None,
+            allowed_providers_mode: "unrestricted".to_string(),
+            allowed_api_formats: None,
+            allowed_api_formats_mode: "unrestricted".to_string(),
+            allowed_models: None,
+            allowed_models_mode: "unrestricted".to_string(),
+            rate_limit: Some(100),
+            rate_limit_mode: "custom".to_string(),
+        })
+        .await
+        .expect("plan group should create")
+        .expect("plan group should exist");
+    let now = Utc::now().timestamp().max(0) as u64;
+    let billing_repository = Arc::new(
+        InMemoryBillingReadRepository::seed(Vec::new()).with_entitlements(vec![
+            UserPlanEntitlementRecord {
+                id: "entitlement-1".to_string(),
+                user_id: "user-1".to_string(),
+                plan_id: "plan-1".to_string(),
+                payment_order_id: "order-1".to_string(),
+                status: "active".to_string(),
+                starts_at_unix_secs: now.saturating_sub(60),
+                expires_at_unix_secs: now.saturating_add(3600),
+                entitlements_snapshot: json!([{
+                    "type": "membership_group",
+                    "grant_user_groups": [plan_group.id],
+                }]),
+                created_at_unix_secs: now.saturating_sub(60),
+                updated_at_unix_secs: now.saturating_sub(60),
+            },
+        ]),
+    );
+    let data_state = GatewayDataState::with_billing_reader_for_tests(billing_repository)
+        .with_user_reader(user_repository);
+    let gateway = build_router_with_state(
+        AppState::new()
+            .expect("gateway should build")
+            .with_data_state_for_tests(data_state),
+    );
+    let (gateway_url, gateway_handle) = start_server(gateway).await;
+    let client = reqwest::Client::new();
+
+    let list_response = client
+        .get(format!("{gateway_url}/api/admin/users?skip=0&limit=10"))
+        .header(GATEWAY_HEADER, "rust-phase3b")
+        .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
+        .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
+        .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
+        .send()
+        .await
+        .expect("list request should succeed");
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let list_payload: serde_json::Value = list_response.json().await.expect("json should parse");
+    let user = &list_payload["items"][0];
+    assert_eq!(user["rate_limit"], 60);
+    assert_eq!(user["groups"], json!([]));
+    assert_eq!(user["effective_policy"]["rate_limit"]["value"], 100);
+    assert_eq!(user["effective_policy"]["rate_limit"]["source"], "group");
+    assert_eq!(
+        user["effective_policy"]["rate_limit"]["group_name"],
+        "Plan RPM"
+    );
+
+    let detail_response = client
+        .get(format!("{gateway_url}/api/admin/users/user-1"))
+        .header(GATEWAY_HEADER, "rust-phase3b")
+        .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
+        .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
+        .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
+        .send()
+        .await
+        .expect("detail request should succeed");
+    assert_eq!(detail_response.status(), StatusCode::OK);
+    let detail_payload: serde_json::Value =
+        detail_response.json().await.expect("json should parse");
+    assert_eq!(detail_payload["groups"], json!([]));
+    assert_eq!(
+        detail_payload["effective_policy"]["rate_limit"]["value"],
+        100
+    );
 
     gateway_handle.abort();
 }

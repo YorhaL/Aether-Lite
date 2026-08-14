@@ -133,6 +133,23 @@ impl<'a> AdminAppState<'a> {
         self.app.list_user_groups_for_user(user_id).await
     }
 
+    pub(crate) async fn user_group_policy_sets_for_user(
+        &self,
+        user_id: &str,
+    ) -> Result<crate::data::state::GatewayUserGroupPolicySets, GatewayError> {
+        self.app.user_group_policy_sets_for_user(user_id).await
+    }
+
+    pub(crate) async fn user_group_policy_sets_for_users(
+        &self,
+        user_ids: &[String],
+    ) -> Result<
+        std::collections::BTreeMap<String, crate::data::state::GatewayUserGroupPolicySets>,
+        GatewayError,
+    > {
+        self.app.user_group_policy_sets_for_users(user_ids).await
+    }
+
     pub(crate) async fn list_user_group_memberships_by_user_ids(
         &self,
         user_ids: &[String],

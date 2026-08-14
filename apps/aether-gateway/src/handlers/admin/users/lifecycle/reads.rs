@@ -64,18 +64,11 @@ pub(in super::super) async fn build_admin_list_users_response(
         .iter()
         .map(|row| row.id.clone())
         .collect::<Vec<_>>();
-    let (
-        auth_rows_result,
-        wallet_rows_result,
-        usage_totals_result,
-        memberships_result,
-        groups_result,
-    ) = tokio::join!(
+    let (auth_rows_result, wallet_rows_result, usage_totals_result, group_policy_sets_result) = tokio::join!(
         state.list_user_auth_by_ids(&user_ids),
         state.list_wallet_snapshots_by_user_ids(&user_ids),
         state.summarize_usage_totals_by_user_ids(&user_ids),
-        state.list_user_group_memberships_by_user_ids(&user_ids),
-        state.list_user_groups(),
+        state.user_group_policy_sets_for_users(&user_ids),
     );
     let auth_by_user_id = auth_rows_result?
         .into_iter()
@@ -89,17 +82,7 @@ pub(in super::super) async fn build_admin_list_users_response(
         .into_iter()
         .map(|item| (item.user_id.clone(), item))
         .collect::<BTreeMap<_, _>>();
-    let groups_by_id = groups_result?
-        .into_iter()
-        .map(|group| (group.id.clone(), group))
-        .collect::<BTreeMap<_, _>>();
-    let mut group_ids_by_user_id = BTreeMap::<String, Vec<String>>::new();
-    for membership in memberships_result? {
-        group_ids_by_user_id
-            .entry(membership.user_id)
-            .or_default()
-            .push(membership.group_id);
-    }
+    let group_policy_sets_by_user_id = group_policy_sets_result?;
 
     let mut payload = Vec::with_capacity(paged_rows.len());
     for row in paged_rows {
@@ -108,12 +91,13 @@ pub(in super::super) async fn build_admin_list_users_response(
             .get(&row.id)
             .is_some_and(|wallet| wallet.limit_mode.eq_ignore_ascii_case("unlimited"));
         let usage_totals = usage_totals_by_user_id.get(&row.id);
-        let groups = group_ids_by_user_id
-            .get(&row.id)
-            .into_iter()
-            .flatten()
-            .filter_map(|group_id| groups_by_id.get(group_id).cloned())
-            .collect::<Vec<_>>();
+        let group_policy_sets = group_policy_sets_by_user_id.get(&row.id);
+        let assigned_groups = group_policy_sets
+            .map(|groups| groups.assigned_groups.as_slice())
+            .unwrap_or_default();
+        let effective_groups = group_policy_sets
+            .map(|groups| groups.effective_groups.as_slice())
+            .unwrap_or_default();
         payload.push(build_admin_user_export_payload(
             &row,
             unlimited,
@@ -125,7 +109,8 @@ pub(in super::super) async fn build_admin_list_users_response(
             usage_totals
                 .map(|item| item.total_tokens)
                 .unwrap_or_default(),
-            &groups,
+            assigned_groups,
+            effective_groups,
         ));
     }
 
@@ -161,7 +146,7 @@ pub(in super::super) async fn build_admin_get_user_response(
         ))
         .await?;
     let export_row = find_admin_export_user(state, &user_id).await?;
-    let groups = state.list_user_groups_for_user(&user_id).await?;
+    let group_policy_sets = state.user_group_policy_sets_for_user(&user_id).await?;
     let unlimited = wallet
         .as_ref()
         .is_some_and(|wallet| wallet.limit_mode.eq_ignore_ascii_case("unlimited"));
@@ -170,7 +155,8 @@ pub(in super::super) async fn build_admin_get_user_response(
         export_row.as_ref().and_then(|row| row.rate_limit),
         export_row.as_ref().map(|row| row.rate_limit_mode.as_str()),
         unlimited,
-        &groups,
+        &group_policy_sets.assigned_groups,
+        &group_policy_sets.effective_groups,
     );
     payload["feature_settings"] = export_row
         .as_ref()

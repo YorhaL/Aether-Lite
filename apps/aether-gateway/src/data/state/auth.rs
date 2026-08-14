@@ -10,6 +10,7 @@ use super::{
     StoredProxyNodeEvent, StoredProxyNodeMetricsBucket, StoredUserAuthRecord,
     StoredUserOAuthLinkSummary, StoredUserPreferenceRecord, StoredUserSessionRecord,
     StoredWalletSnapshot, UpdateManagementTokenRecord, UpsertOAuthProviderConfigRecord,
+    UserPlanEntitlementRecord,
 };
 use crate::LocalMutationOutcome;
 use aether_data::repository::auth::ResolvedAuthApiKeySnapshotReader;
@@ -19,6 +20,12 @@ pub(crate) struct GatewayUserEffectiveListPolicies {
     pub(crate) allowed_providers: Option<Vec<String>>,
     pub(crate) allowed_api_formats: Option<Vec<String>>,
     pub(crate) allowed_models: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct GatewayUserGroupPolicySets {
+    pub(crate) assigned_groups: Vec<aether_data::repository::users::StoredUserGroup>,
+    pub(crate) effective_groups: Vec<aether_data::repository::users::StoredUserGroup>,
 }
 
 impl GatewayDataState {
@@ -1809,7 +1816,7 @@ impl GatewayDataState {
             allowed_api_formats,
             allowed_models,
         } = resolve_group_effective_list_policies(&groups);
-        let user_rate_limit = resolve_effective_rate_limit_policy(None, "system", &groups);
+        let user_rate_limit = resolve_group_effective_rate_limit_policy(&groups);
         snapshot.user_allowed_providers = allowed_providers;
         snapshot.user_allowed_api_formats = allowed_api_formats;
         snapshot.user_allowed_models = allowed_models;
@@ -1865,6 +1872,123 @@ impl GatewayDataState {
         Ok(groups)
     }
 
+    pub(crate) async fn user_group_policy_sets_for_user(
+        &self,
+        user_id: &str,
+    ) -> Result<GatewayUserGroupPolicySets, DataLayerError> {
+        Ok(self
+            .user_group_policy_sets_for_users(&[user_id.to_string()])
+            .await?
+            .remove(user_id)
+            .unwrap_or_default())
+    }
+
+    pub(crate) async fn user_group_policy_sets_for_users(
+        &self,
+        user_ids: &[String],
+    ) -> Result<std::collections::BTreeMap<String, GatewayUserGroupPolicySets>, DataLayerError>
+    {
+        let mut assigned_group_ids_by_user = user_ids
+            .iter()
+            .cloned()
+            .map(|user_id| (user_id, std::collections::BTreeSet::new()))
+            .collect::<std::collections::BTreeMap<_, _>>();
+        if user_ids.is_empty() {
+            return Ok(std::collections::BTreeMap::new());
+        }
+        let Some(user_repository) = self.user_reader.as_ref() else {
+            return Ok(assigned_group_ids_by_user
+                .into_keys()
+                .map(|user_id| (user_id, GatewayUserGroupPolicySets::default()))
+                .collect());
+        };
+        let normalized_user_ids = assigned_group_ids_by_user
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let entitlements = async {
+            match self.billing_reader.as_ref() {
+                Some(repository) => {
+                    repository
+                        .list_user_plan_entitlements_by_user_ids(&normalized_user_ids)
+                        .await
+                }
+                None => Ok(None),
+            }
+        };
+        let (memberships, entitlements) = tokio::try_join!(
+            user_repository.list_user_group_memberships_by_user_ids(&normalized_user_ids),
+            entitlements,
+        )?;
+        for membership in memberships {
+            if let Some(group_ids) = assigned_group_ids_by_user.get_mut(&membership.user_id) {
+                group_ids.insert(membership.group_id);
+            }
+        }
+        let mut effective_group_ids_by_user = assigned_group_ids_by_user.clone();
+        if let Some(entitlements) = entitlements {
+            let now = chrono::Utc::now().timestamp().max(0) as u64;
+            for (user_id, dynamic_group_ids) in
+                active_membership_group_ids_by_user(&entitlements, now)
+            {
+                if let Some(group_ids) = effective_group_ids_by_user.get_mut(&user_id) {
+                    group_ids.extend(dynamic_group_ids);
+                }
+            }
+        }
+
+        let all_group_ids = effective_group_ids_by_user
+            .values()
+            .flatten()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let groups_by_id = if all_group_ids.is_empty() {
+            std::collections::BTreeMap::new()
+        } else {
+            user_repository
+                .list_user_groups_by_ids(&all_group_ids)
+                .await?
+                .into_iter()
+                .map(|group| (group.id.clone(), group))
+                .collect::<std::collections::BTreeMap<_, _>>()
+        };
+        Ok(assigned_group_ids_by_user
+            .into_iter()
+            .map(|(user_id, assigned_group_ids)| {
+                let mut assigned_groups = assigned_group_ids
+                    .into_iter()
+                    .filter_map(|group_id| groups_by_id.get(&group_id).cloned())
+                    .collect::<Vec<_>>();
+                assigned_groups.sort_by(|left, right| {
+                    left.name
+                        .cmp(&right.name)
+                        .then_with(|| left.id.cmp(&right.id))
+                });
+                let mut effective_groups = effective_group_ids_by_user
+                    .remove(&user_id)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(|group_id| groups_by_id.get(&group_id).cloned())
+                    .collect::<Vec<_>>();
+                effective_groups.sort_by(|left, right| {
+                    left.name
+                        .cmp(&right.name)
+                        .then_with(|| left.id.cmp(&right.id))
+                });
+                (
+                    user_id,
+                    GatewayUserGroupPolicySets {
+                        assigned_groups,
+                        effective_groups,
+                    },
+                )
+            })
+            .collect())
+    }
+
     async fn active_membership_group_ids_for_user(
         &self,
         user_id: &str,
@@ -1876,39 +2000,53 @@ impl GatewayDataState {
             return Ok(Vec::new());
         };
         let now = chrono::Utc::now().timestamp().max(0) as u64;
-        let mut group_ids = std::collections::BTreeSet::new();
-        for entitlement in entitlements {
-            if entitlement.status != "active"
-                || entitlement.starts_at_unix_secs > now
-                || entitlement.expires_at_unix_secs <= now
-            {
+        Ok(active_membership_group_ids_by_user(&entitlements, now)
+            .remove(user_id)
+            .unwrap_or_default()
+            .into_iter()
+            .collect())
+    }
+}
+
+fn active_membership_group_ids_by_user<'a>(
+    entitlements: impl IntoIterator<Item = &'a UserPlanEntitlementRecord>,
+    now_unix_secs: u64,
+) -> std::collections::BTreeMap<String, std::collections::BTreeSet<String>> {
+    let mut group_ids_by_user =
+        std::collections::BTreeMap::<String, std::collections::BTreeSet<String>>::new();
+    for entitlement in entitlements {
+        if entitlement.status != "active"
+            || entitlement.starts_at_unix_secs > now_unix_secs
+            || entitlement.expires_at_unix_secs <= now_unix_secs
+        {
+            continue;
+        }
+        let Some(items) = entitlement.entitlements_snapshot.as_array() else {
+            continue;
+        };
+        for item in items {
+            if item.get("type").and_then(serde_json::Value::as_str) != Some("membership_group") {
                 continue;
             }
-            let Some(items) = entitlement.entitlements_snapshot.as_array() else {
+            let Some(groups) = item
+                .get("grant_user_groups")
+                .and_then(serde_json::Value::as_array)
+            else {
                 continue;
             };
-            for item in items {
-                if item.get("type").and_then(serde_json::Value::as_str) != Some("membership_group")
-                {
-                    continue;
-                }
-                let Some(groups) = item
-                    .get("grant_user_groups")
-                    .and_then(serde_json::Value::as_array)
-                else {
-                    continue;
-                };
-                for group_id in groups {
-                    if let Some(group_id) = group_id.as_str().map(str::trim) {
-                        if !group_id.is_empty() {
-                            group_ids.insert(group_id.to_string());
-                        }
+            for group_id in groups {
+                if let Some(group_id) = group_id.as_str().map(str::trim) {
+                    if !group_id.is_empty() {
+                        group_ids_by_user
+                            .entry(entitlement.user_id.clone())
+                            .or_default()
+                            .insert(group_id.to_string());
                     }
                 }
             }
         }
-        Ok(group_ids.into_iter().collect())
     }
+    group_ids_by_user
 }
 
 // Per-user list policy columns are retained only for legacy import/export compatibility.
@@ -2014,6 +2152,12 @@ fn resolve_effective_rate_limit_policy(
     });
     let user_policy = rate_limit_restriction_from_mode(user_mode, user_rate_limit);
     rate_limit_policy_value(intersect_rate_limit_policies(group_policy, user_policy))
+}
+
+pub(crate) fn resolve_group_effective_rate_limit_policy(
+    groups: &[aether_data::repository::users::StoredUserGroup],
+) -> Option<i32> {
+    resolve_effective_rate_limit_policy(None, "system", groups)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -2126,6 +2270,7 @@ mod tests {
         InMemoryAuthApiKeySnapshotRepository, StoredAuthApiKeyExportRecord,
         StoredAuthApiKeySnapshot,
     };
+    use aether_data::repository::billing::InMemoryBillingReadRepository;
     use aether_data::repository::users::{
         InMemoryUserReadRepository, StoredUserAuthRecord, StoredUserGroup, UpsertUserGroupRecord,
         UserReadRepository,
@@ -2453,6 +2598,125 @@ mod tests {
             resolve_effective_rate_limit_policy(Some(60), "custom", &groups),
             Some(60)
         );
+    }
+
+    #[tokio::test]
+    async fn effective_user_groups_include_active_plan_memberships_in_batch() {
+        let user_repository = Arc::new(InMemoryUserReadRepository::seed_auth_users(vec![
+            sample_auth_user("user-1", "user"),
+            sample_auth_user("user-2", "user"),
+        ]));
+        let direct_group = user_repository
+            .create_user_group(UpsertUserGroupRecord {
+                name: "Direct".to_string(),
+                description: None,
+                priority: 10,
+                allowed_providers: None,
+                allowed_providers_mode: "unrestricted".to_string(),
+                allowed_api_formats: None,
+                allowed_api_formats_mode: "unrestricted".to_string(),
+                allowed_models: None,
+                allowed_models_mode: "unrestricted".to_string(),
+                rate_limit: Some(30),
+                rate_limit_mode: "custom".to_string(),
+            })
+            .await
+            .expect("direct group should create")
+            .expect("direct group should exist");
+        let plan_group = user_repository
+            .create_user_group(UpsertUserGroupRecord {
+                name: "Plan".to_string(),
+                description: None,
+                priority: 20,
+                allowed_providers: None,
+                allowed_providers_mode: "unrestricted".to_string(),
+                allowed_api_formats: None,
+                allowed_api_formats_mode: "unrestricted".to_string(),
+                allowed_models: None,
+                allowed_models_mode: "unrestricted".to_string(),
+                rate_limit: Some(100),
+                rate_limit_mode: "custom".to_string(),
+            })
+            .await
+            .expect("plan group should create")
+            .expect("plan group should exist");
+        user_repository
+            .add_user_to_group(&direct_group.id, "user-1")
+            .await
+            .expect("direct membership should create");
+
+        let now = chrono::Utc::now().timestamp().max(0) as u64;
+        let billing_repository = Arc::new(
+            InMemoryBillingReadRepository::seed(Vec::new()).with_entitlements(vec![
+                UserPlanEntitlementRecord {
+                    id: "entitlement-active".to_string(),
+                    user_id: "user-1".to_string(),
+                    plan_id: "plan-1".to_string(),
+                    payment_order_id: "order-1".to_string(),
+                    status: "active".to_string(),
+                    starts_at_unix_secs: now.saturating_sub(60),
+                    expires_at_unix_secs: now.saturating_add(3600),
+                    entitlements_snapshot: serde_json::json!([{
+                        "type": "membership_group",
+                        "grant_user_groups": [plan_group.id.clone()],
+                    }]),
+                    created_at_unix_secs: now.saturating_sub(60),
+                    updated_at_unix_secs: now.saturating_sub(60),
+                },
+                UserPlanEntitlementRecord {
+                    id: "entitlement-future".to_string(),
+                    user_id: "user-2".to_string(),
+                    plan_id: "plan-2".to_string(),
+                    payment_order_id: "order-2".to_string(),
+                    status: "active".to_string(),
+                    starts_at_unix_secs: now.saturating_add(3600),
+                    expires_at_unix_secs: now.saturating_add(7200),
+                    entitlements_snapshot: serde_json::json!([{
+                        "type": "membership_group",
+                        "grant_user_groups": [plan_group.id.clone()],
+                    }]),
+                    created_at_unix_secs: now,
+                    updated_at_unix_secs: now,
+                },
+            ]),
+        );
+        let state = GatewayDataState::with_billing_reader_for_tests(billing_repository)
+            .with_user_reader(user_repository);
+
+        let resolved = state
+            .user_group_policy_sets_for_users(&["user-1".to_string(), "user-2".to_string()])
+            .await
+            .expect("effective groups should resolve");
+        let user_one_groups = resolved.get("user-1").expect("user-1 should resolve");
+        assert_eq!(
+            user_one_groups
+                .assigned_groups
+                .iter()
+                .map(|group| group.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Direct"]
+        );
+        assert_eq!(
+            user_one_groups
+                .effective_groups
+                .iter()
+                .map(|group| group.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Direct", "Plan"]
+        );
+        assert_eq!(
+            resolve_group_effective_rate_limit_policy(&user_one_groups.effective_groups),
+            Some(100)
+        );
+        let user_two_groups = resolved.get("user-2").expect("user-2 should resolve");
+        assert!(user_two_groups.assigned_groups.is_empty());
+        assert!(user_two_groups.effective_groups.is_empty());
+
+        let single = state
+            .effective_user_groups_for_user("user-1")
+            .await
+            .expect("single-user effective groups should resolve");
+        assert_eq!(single, user_one_groups.effective_groups);
     }
 
     #[tokio::test]

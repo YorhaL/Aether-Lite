@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use sqlx::{PgPool, Row};
+use sqlx::{PgPool, Postgres, QueryBuilder, Row};
 
 use aether_data_contracts::repository::billing::{
     AdminBillingCollectorRecord, AdminBillingCollectorWriteInput, AdminBillingMutationOutcome,
@@ -992,6 +992,51 @@ ORDER BY expires_at ASC, created_at ASC
         .fetch_all(&self.pool)
         .await
         .map_postgres_err()?;
+        Ok(Some(
+            rows.iter()
+                .map(map_user_plan_entitlement_row)
+                .collect::<Result<Vec<_>, _>>()?,
+        ))
+    }
+
+    async fn list_user_plan_entitlements_by_user_ids(
+        &self,
+        user_ids: &[String],
+    ) -> Result<Option<Vec<UserPlanEntitlementRecord>>, DataLayerError> {
+        if user_ids.is_empty() {
+            return Ok(Some(Vec::new()));
+        }
+        let mut query = QueryBuilder::<Postgres>::new(
+            r#"
+SELECT
+  id, user_id, plan_id, payment_order_id, status,
+  CAST(EXTRACT(EPOCH FROM starts_at) AS BIGINT) AS starts_at_unix_secs,
+  CAST(EXTRACT(EPOCH FROM expires_at) AS BIGINT) AS expires_at_unix_secs,
+  entitlements_snapshot,
+  CAST(EXTRACT(EPOCH FROM created_at) AS BIGINT) AS created_at_unix_secs,
+  CAST(EXTRACT(EPOCH FROM updated_at) AS BIGINT) AS updated_at_unix_secs
+FROM user_plan_entitlements
+WHERE user_id IN (
+            "#,
+        );
+        {
+            let mut user_ids_query = query.separated(", ");
+            for user_id in user_ids {
+                user_ids_query.push_bind(user_id);
+            }
+        }
+        query.push(
+            r#")
+  AND status = 'active'
+  AND expires_at > NOW()
+ORDER BY user_id ASC, expires_at ASC, created_at ASC, id ASC
+            "#,
+        );
+        let rows = query
+            .build()
+            .fetch_all(&self.pool)
+            .await
+            .map_postgres_err()?;
         Ok(Some(
             rows.iter()
                 .map(map_user_plan_entitlement_row)

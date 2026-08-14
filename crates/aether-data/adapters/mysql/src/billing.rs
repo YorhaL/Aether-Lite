@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use sqlx::{mysql::MySqlRow, Row};
+use sqlx::{mysql::MySqlRow, MySql, QueryBuilder, Row};
 
 use aether_data_contracts::repository::billing::{
     AdminBillingCollectorRecord, AdminBillingCollectorWriteInput, AdminBillingMutationOutcome,
@@ -913,6 +913,42 @@ ORDER BY expires_at ASC, created_at ASC
         .fetch_all(&self.pool)
         .await
         .map_sql_err()?;
+        Ok(Some(
+            rows.iter()
+                .map(map_user_plan_entitlement_mysql)
+                .collect::<Result<Vec<_>, _>>()?,
+        ))
+    }
+
+    async fn list_user_plan_entitlements_by_user_ids(
+        &self,
+        user_ids: &[String],
+    ) -> Result<Option<Vec<UserPlanEntitlementRecord>>, DataLayerError> {
+        if user_ids.is_empty() {
+            return Ok(Some(Vec::new()));
+        }
+        let mut query = QueryBuilder::<MySql>::new(
+            r#"
+SELECT
+  id, user_id, plan_id, payment_order_id, status,
+  starts_at AS starts_at_unix_secs, expires_at AS expires_at_unix_secs,
+  entitlements_snapshot, created_at AS created_at_unix_secs,
+  updated_at AS updated_at_unix_secs
+FROM user_plan_entitlements
+WHERE user_id IN (
+            "#,
+        );
+        {
+            let mut user_ids_query = query.separated(", ");
+            for user_id in user_ids {
+                user_ids_query.push_bind(user_id);
+            }
+        }
+        query
+            .push(") AND status = 'active' AND expires_at > ")
+            .push_bind(current_unix_secs_i64())
+            .push(" ORDER BY user_id ASC, expires_at ASC, created_at ASC, id ASC");
+        let rows = query.build().fetch_all(&self.pool).await.map_sql_err()?;
         Ok(Some(
             rows.iter()
                 .map(map_user_plan_entitlement_mysql)
