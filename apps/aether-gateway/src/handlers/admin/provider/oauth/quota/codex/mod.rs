@@ -1241,7 +1241,7 @@ async fn refresh_codex_provider_quota_locally_with_reset_fence(
             continue;
         }
         let persisted_key = state
-            .read_provider_catalog_keys_by_ids(&[key.id.clone()])
+            .read_provider_catalog_keys_by_ids(std::slice::from_ref(&key.id))
             .await?
             .into_iter()
             .next();

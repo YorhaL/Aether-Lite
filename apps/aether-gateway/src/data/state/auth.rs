@@ -1817,10 +1817,12 @@ impl GatewayDataState {
             allowed_models,
         } = resolve_group_effective_list_policies(&groups);
         let user_rate_limit = resolve_group_effective_rate_limit_policy(&groups);
+        let user_daily_usage_limit_usd = resolve_group_effective_daily_usage_limit_policy(&groups);
         snapshot.user_allowed_providers = allowed_providers;
         snapshot.user_allowed_api_formats = allowed_api_formats;
         snapshot.user_allowed_models = allowed_models;
         snapshot.user_rate_limit = user_rate_limit;
+        snapshot.user_daily_usage_limit_usd = user_daily_usage_limit_usd;
         Ok(Some(GatewayAuthApiKeySnapshot::from_stored(
             snapshot,
             now_unix_secs,
@@ -2160,6 +2162,23 @@ pub(crate) fn resolve_group_effective_rate_limit_policy(
     resolve_effective_rate_limit_policy(None, "system", groups)
 }
 
+pub(crate) fn resolve_group_effective_daily_usage_limit_policy(
+    groups: &[aether_data::repository::users::StoredUserGroup],
+) -> Option<f64> {
+    let mut limit: Option<f64> = None;
+    for group in groups
+        .iter()
+        .filter(|group| group.daily_usage_limit_mode == "custom")
+    {
+        let value = group.daily_usage_limit_usd.unwrap_or(0.0).max(0.0);
+        if value == 0.0 {
+            return Some(0.0);
+        }
+        limit = Some(limit.map_or(value, |current| current.max(value)));
+    }
+    limit
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RateLimitRestriction {
     Unlimited,
@@ -2360,9 +2379,84 @@ mod tests {
             allowed_models_mode: allowed_models_mode.to_string(),
             rate_limit,
             rate_limit_mode: rate_limit_mode.to_string(),
+            daily_usage_limit_usd: None,
+            daily_usage_limit_mode: "inherit".to_string(),
             created_at: None,
             updated_at: None,
         }
+    }
+
+    fn with_daily_usage_limit(
+        mut group: StoredUserGroup,
+        value: Option<f64>,
+        mode: &str,
+    ) -> StoredUserGroup {
+        group.daily_usage_limit_usd = value;
+        group.daily_usage_limit_mode = mode.to_string();
+        group
+    }
+
+    #[test]
+    fn daily_usage_group_policy_falls_back_without_custom_groups() {
+        let groups = vec![
+            with_daily_usage_limit(
+                sample_group("system", 0, None, "unrestricted", None, "system"),
+                Some(10.0),
+                "system",
+            ),
+            with_daily_usage_limit(
+                sample_group("inherit", 0, None, "unrestricted", None, "system"),
+                Some(5.0),
+                "inherit",
+            ),
+        ];
+
+        assert_eq!(
+            resolve_group_effective_daily_usage_limit_policy(&groups),
+            None
+        );
+    }
+
+    #[test]
+    fn daily_usage_group_policy_uses_highest_custom_grant() {
+        let groups = vec![
+            with_daily_usage_limit(
+                sample_group("basic", 0, None, "unrestricted", None, "system"),
+                Some(10.0),
+                "custom",
+            ),
+            with_daily_usage_limit(
+                sample_group("premium", 0, None, "unrestricted", None, "system"),
+                Some(25.0),
+                "custom",
+            ),
+        ];
+
+        assert_eq!(
+            resolve_group_effective_daily_usage_limit_policy(&groups),
+            Some(25.0)
+        );
+    }
+
+    #[test]
+    fn daily_usage_group_policy_treats_any_custom_zero_as_unlimited() {
+        let groups = vec![
+            with_daily_usage_limit(
+                sample_group("limited", 0, None, "unrestricted", None, "system"),
+                Some(25.0),
+                "custom",
+            ),
+            with_daily_usage_limit(
+                sample_group("unlimited", 0, None, "unrestricted", None, "system"),
+                Some(0.0),
+                "custom",
+            ),
+        ];
+
+        assert_eq!(
+            resolve_group_effective_daily_usage_limit_policy(&groups),
+            Some(0.0)
+        );
     }
 
     #[test]
@@ -2619,6 +2713,8 @@ mod tests {
                 allowed_models_mode: "unrestricted".to_string(),
                 rate_limit: Some(30),
                 rate_limit_mode: "custom".to_string(),
+                daily_usage_limit_usd: None,
+                daily_usage_limit_mode: "inherit".to_string(),
             })
             .await
             .expect("direct group should create")
@@ -2636,6 +2732,8 @@ mod tests {
                 allowed_models_mode: "unrestricted".to_string(),
                 rate_limit: Some(100),
                 rate_limit_mode: "custom".to_string(),
+                daily_usage_limit_usd: None,
+                daily_usage_limit_mode: "inherit".to_string(),
             })
             .await
             .expect("plan group should create")
@@ -2749,6 +2847,8 @@ mod tests {
                 allowed_models_mode: "specific".to_string(),
                 rate_limit: Some(1),
                 rate_limit_mode: "custom".to_string(),
+                daily_usage_limit_usd: None,
+                daily_usage_limit_mode: "inherit".to_string(),
             })
             .await
             .expect("group should create")
@@ -2866,6 +2966,8 @@ mod tests {
                 allowed_models_mode: "specific".to_string(),
                 rate_limit: Some(30),
                 rate_limit_mode: "custom".to_string(),
+                daily_usage_limit_usd: None,
+                daily_usage_limit_mode: "inherit".to_string(),
             })
             .await
             .expect("group should create")
@@ -2939,6 +3041,8 @@ mod tests {
                 allowed_models_mode: "unrestricted".to_string(),
                 rate_limit: None,
                 rate_limit_mode: "system".to_string(),
+                daily_usage_limit_usd: None,
+                daily_usage_limit_mode: "inherit".to_string(),
             })
             .await
             .expect("group should create")
