@@ -1,0 +1,234 @@
+name: Publish Lite Docker image
+
+on:
+  push:
+    branches:
+      - lite
+    tags:
+      - "lite-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: lite-docker-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: yorhal/aether-lite
+
+jobs:
+  preflight:
+    name: Classify Lite build
+    runs-on: ubuntu-latest
+    outputs:
+      build_version: ${{ steps.classify.outputs.build_version }}
+      channel: ${{ steps.classify.outputs.channel }}
+      version: ${{ steps.classify.outputs.version }}
+      minor_version: ${{ steps.classify.outputs.minor_version }}
+      make_latest: ${{ steps.classify.outputs.make_latest }}
+      beta: ${{ steps.classify.outputs.beta }}
+      rc: ${{ steps.classify.outputs.rc }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Classify ref
+        id: classify
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "channel=" >> "${GITHUB_OUTPUT}"
+          echo "version=" >> "${GITHUB_OUTPUT}"
+          echo "minor_version=" >> "${GITHUB_OUTPUT}"
+          echo "make_latest=false" >> "${GITHUB_OUTPUT}"
+          echo "beta=false" >> "${GITHUB_OUTPUT}"
+          echo "rc=false" >> "${GITHUB_OUTPUT}"
+
+          if [[ "${GITHUB_REF_TYPE}" == "branch" ]]; then
+            if [[ "${GITHUB_REF_NAME}" != "lite" ]]; then
+              echo "Lite images can only be built from the lite branch." >&2
+              exit 1
+            fi
+
+            short_sha="${GITHUB_SHA:0:7}"
+            echo "build_version=lite-${short_sha}" >> "${GITHUB_OUTPUT}"
+            echo "channel=edge" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "${tag}" =~ ^lite-v([0-9]+)\.([0-9]+)\.([0-9]+)(-(beta|rc)\.([0-9]+))?$ ]]; then
+            echo "Invalid Lite release tag: ${tag}" >&2
+            echo "Expected lite-vX.Y.Z, lite-vX.Y.Z-beta.N, or lite-vX.Y.Z-rc.N." >&2
+            exit 1
+          fi
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+
+          git fetch --no-tags origin "+refs/heads/lite:refs/remotes/origin/lite"
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/lite; then
+            echo "Lite release tags must point to a commit contained in the lite branch." >&2
+            exit 1
+          fi
+
+          version="${tag#lite-v}"
+          echo "build_version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "channel=release" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+          if [[ "${version}" == *-beta.* ]]; then
+            echo "beta=true" >> "${GITHUB_OUTPUT}"
+          elif [[ "${version}" == *-rc.* ]]; then
+            echo "rc=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "minor_version=${major}.${minor}" >> "${GITHUB_OUTPUT}"
+            echo "make_latest=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+  frontend:
+    name: Build frontend
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install and build
+        working-directory: frontend
+        env:
+          AETHER_BUILD_VERSION: ${{ needs.preflight.outputs.build_version }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: lite-frontend-dist
+          path: frontend/dist/
+          if-no-files-found: error
+          retention-days: 1
+
+  gateway:
+    name: Build gateway (${{ matrix.arch }})
+    needs: preflight
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            target: x86_64-unknown-linux-musl
+          - arch: arm64
+            target: aarch64-unknown-linux-musl
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: lite-docker-${{ matrix.target }}
+          workspaces: . -> target
+
+      - name: Install cross
+        uses: taiki-e/install-action@cross
+
+      - name: Build gateway
+        env:
+          AETHER_BUILD_VERSION: ${{ needs.preflight.outputs.build_version }}
+          AETHER_BUILD_TYPE: release
+          CARGO_TERM_COLOR: always
+        run: cross build --release --locked -p aether-gateway --target ${{ matrix.target }}
+
+      - name: Upload gateway artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: lite-gateway-linux-${{ matrix.arch }}
+          path: target/${{ matrix.target }}/release/aether-gateway
+          if-no-files-found: error
+          retention-days: 1
+
+  docker:
+    name: Publish multi-platform image
+    needs:
+      - preflight
+      - frontend
+      - gateway
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: artifacts
+
+      - name: Prepare Docker build context
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp artifacts/lite-gateway-linux-amd64/aether-gateway dist/aether-gateway-amd64
+          cp artifacts/lite-gateway-linux-arm64/aether-gateway dist/aether-gateway-arm64
+          chmod +x dist/aether-gateway-amd64 dist/aether-gateway-arm64
+          cp -r artifacts/lite-frontend-dist dist/frontend
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to this repository's GHCR namespace
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=edge,enable=${{ needs.preflight.outputs.channel == 'edge' }}
+            type=raw,value=${{ needs.preflight.outputs.version }},enable=${{ needs.preflight.outputs.channel == 'release' }}
+            type=raw,value=${{ needs.preflight.outputs.minor_version }},enable=${{ needs.preflight.outputs.make_latest == 'true' }}
+            type=raw,value=latest,enable=${{ needs.preflight.outputs.make_latest == 'true' }}
+            type=raw,value=beta,enable=${{ needs.preflight.outputs.beta == 'true' }}
+            type=raw,value=rc,enable=${{ needs.preflight.outputs.rc == 'true' }}
+            type=sha,prefix=sha-
+          flavor: |
+            latest=false
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=Aether Lite
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.app
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha,scope=lite-runtime
+          cache-to: type=gha,mode=max,scope=lite-runtime

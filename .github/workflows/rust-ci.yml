@@ -3,8 +3,7 @@ name: Rust CI
 on:
   push:
     branches:
-      - master
-      - main
+      - lite
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
@@ -12,6 +11,8 @@ on:
       - "apps/**"
       - ".github/workflows/rust-ci.yml"
   pull_request:
+    branches:
+      - lite
     paths:
       - "Cargo.toml"
       - "Cargo.lock"

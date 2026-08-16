@@ -36,8 +36,6 @@ export default defineConfig(({ mode }) => {
   const gatewayTarget = `http://127.0.0.1:${appPort}`
 
   return {
-    // GitHub Pages 部署时使用仓库名作为 base
-    base: process.env.GITHUB_PAGES === 'true' ? '/Aether/' : '/',
     plugins: [legacyTemplateI18nPlugin(), vue()],
     define: {
       __APP_VERSION__: JSON.stringify(getGitVersion()),

@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn admin_system_build_version_contract_uses_explicit_local_build_arg() {
+fn admin_system_build_version_contract_uses_explicit_lite_release_version() {
     let build_rs = read_workspace_file("apps/aether-gateway/build.rs");
     for pattern in [
         "cargo:rerun-if-env-changed=AETHER_BUILD_VERSION",
@@ -13,29 +13,14 @@ fn admin_system_build_version_contract_uses_explicit_local_build_arg() {
         );
     }
 
-    let dockerfile = read_workspace_file("Dockerfile.app.local");
+    let workflow = read_workspace_file(".github/workflows/lite-docker.yml");
     for pattern in [
-        "ARG AETHER_BUILD_VERSION",
-        "ENV AETHER_BUILD_VERSION=${AETHER_BUILD_VERSION}",
-        "AETHER_VERSION=${AETHER_BUILD_VERSION}",
+        "AETHER_BUILD_VERSION: ${{ needs.preflight.outputs.build_version }}",
+        "AETHER_BUILD_TYPE: release",
     ] {
         assert!(
-            dockerfile.contains(pattern),
-            "Dockerfile.app.local should pass explicit build version pattern {pattern}"
-        );
-    }
-
-    let deploy = read_workspace_file("deploy.sh");
-    for pattern in [
-        "detect_build_version()",
-        "git describe --tags --match 'v[0-9]*' --always --dirty",
-        "AETHER_BUILD_VERSION=\"${AETHER_BUILD_VERSION:-$(detect_build_version)}\"",
-        "--build-arg \"AETHER_BUILD_VERSION=$AETHER_BUILD_VERSION\"",
-        ">>> AETHER_BUILD_VERSION",
-    ] {
-        assert!(
-            deploy.contains(pattern),
-            "deploy.sh should pass deterministic local build version pattern {pattern}"
+            workflow.contains(pattern),
+            "lite-docker.yml should pass explicit build version pattern {pattern}"
         );
     }
 
@@ -61,7 +46,6 @@ fn admin_system_build_version_contract_uses_explicit_local_build_arg() {
             "api/core.rs should expose build version pattern {pattern}"
         );
     }
-
 }
 
 #[test]

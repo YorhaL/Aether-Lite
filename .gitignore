@@ -63,15 +63,6 @@ frontend/public/*-firework.svg
 debug_*.html
 extracted_*.ts
 
-# Deploy script cache
-.deps-hash
-.code-hash
-.migration-hash
-.hub-hash
-
-# Hub prebuilt binaries
-aether-hub/dist/
-
 # Analysis folder (third-party code for reference)
 analysis/
 new-api/
