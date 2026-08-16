@@ -231,6 +231,37 @@ impl GatewayDataState {
         ))
     }
 
+    pub(crate) async fn resolve_principal_admission_policy(
+        &self,
+        user_id: &str,
+        group_ids: &[String],
+    ) -> Result<AdmissionPolicyDocument, DataLayerError> {
+        let mut scopes = Vec::with_capacity(group_ids.len() + 2);
+        scopes.push(AdmissionPolicyScope::system());
+        scopes.extend(
+            group_ids
+                .iter()
+                .cloned()
+                .map(|subject_id| AdmissionPolicyScope {
+                    kind: AdmissionScopeKind::UserGroup,
+                    subject_id,
+                }),
+        );
+        scopes.push(AdmissionPolicyScope {
+            kind: AdmissionScopeKind::User,
+            subject_id: user_id.to_string(),
+        });
+
+        let policies = self
+            .list_admission_policies(&scopes)
+            .await?
+            .into_iter()
+            .map(|policy| (policy.scope, policy.document))
+            .collect::<HashMap<_, _>>();
+
+        Ok(resolve_admission_policy_documents(user_id, "", group_ids, false, &policies).principal)
+    }
+
     pub(crate) async fn scoped_admission_document(
         &self,
         kind: AdmissionScopeKind,

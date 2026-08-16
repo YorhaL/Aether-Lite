@@ -5,8 +5,8 @@ use aether_data_contracts::repository::provider_catalog::StoredProviderCatalogKe
 use aether_scheduler_core::{
     auth_api_key_concurrency_limit_reached, build_provider_concurrent_limit_map,
     candidate_is_selectable_with_runtime_state, candidate_runtime_skip_reason_with_state,
-    count_recent_active_requests_for_user, effective_provider_key_rpm_limit,
-    CandidateRuntimeSelectabilityInput,
+    effective_provider_key_rpm_limit, CandidateRuntimeSelectabilityInput,
+    ACTIVE_REQUEST_WINDOW_SECS,
 };
 
 use crate::data::auth::GatewayAuthApiKeySnapshot;
@@ -18,6 +18,7 @@ pub(super) struct CandidateRuntimeSelectionSnapshot {
     pub(super) recent_candidates: Vec<StoredRequestCandidate>,
     pub(super) provider_concurrent_limits: BTreeMap<String, usize>,
     pub(super) provider_key_rpm_states: BTreeMap<String, StoredProviderCatalogKey>,
+    active_principal_requests: Option<usize>,
     provider_key_rpm_reset_ats: BTreeMap<String, Option<u64>>,
 }
 
@@ -29,6 +30,8 @@ pub(super) async fn read_candidate_runtime_selection_snapshot(
 ) -> Result<CandidateRuntimeSelectionSnapshot, GatewayError> {
     let provider_concurrent_limits = read_provider_concurrent_limits(state, candidates).await?;
     let provider_key_rpm_states = read_provider_key_rpm_states(state, candidates).await?;
+    let active_principal_requests =
+        read_active_principal_requests(state, auth_snapshot, now_unix_secs).await?;
     let recent_candidates = if runtime_snapshot_requires_recent_candidates(
         auth_snapshot,
         &provider_concurrent_limits,
@@ -46,6 +49,7 @@ pub(super) async fn read_candidate_runtime_selection_snapshot(
         recent_candidates,
         provider_concurrent_limits,
         provider_key_rpm_states,
+        active_principal_requests,
         provider_key_rpm_reset_ats,
     })
 }
@@ -56,7 +60,7 @@ fn runtime_snapshot_requires_recent_candidates(
     provider_key_rpm_states: &BTreeMap<String, StoredProviderCatalogKey>,
     now_unix_secs: u64,
 ) -> bool {
-    if auth_snapshot.is_some_and(auth_snapshot_has_concurrency_limit) {
+    if auth_snapshot.is_some_and(auth_snapshot_has_candidate_concurrency_limit) {
         return true;
     }
 
@@ -97,11 +101,7 @@ pub(super) fn auth_snapshot_concurrency_limit_reached(
     }
 
     if principal_limit > 0
-        && count_recent_active_requests_for_user(
-            &snapshot.recent_candidates,
-            auth.user_id.as_str(),
-            now_unix_secs,
-        ) >= principal_limit as usize
+        && snapshot.active_principal_requests.unwrap_or_default() >= principal_limit as usize
     {
         return true;
     }
@@ -116,7 +116,7 @@ pub(super) fn auth_snapshot_concurrency_limit_reached(
     })
 }
 
-fn auth_snapshot_has_concurrency_limit(snapshot: &GatewayAuthApiKeySnapshot) -> bool {
+fn auth_snapshot_has_candidate_concurrency_limit(snapshot: &GatewayAuthApiKeySnapshot) -> bool {
     let principal = snapshot
         .admission_policy
         .principal
@@ -126,8 +126,37 @@ fn auth_snapshot_has_concurrency_limit(snapshot: &GatewayAuthApiKeySnapshot) -> 
     if snapshot.api_key_is_standalone {
         key.unwrap_or(principal) > 0
     } else {
-        principal > 0 || key.is_some_and(|limit| limit > 0)
+        key.is_some_and(|limit| limit > 0)
     }
+}
+
+async fn read_active_principal_requests(
+    state: &(impl SchedulerRuntimeState + ?Sized),
+    auth_snapshot: Option<&GatewayAuthApiKeySnapshot>,
+    now_unix_secs: u64,
+) -> Result<Option<usize>, GatewayError> {
+    let Some(auth) = auth_snapshot else {
+        return Ok(None);
+    };
+    if auth.api_key_is_standalone
+        || auth
+            .admission_policy
+            .principal
+            .concurrent_requests()
+            .unwrap_or_default()
+            == 0
+    {
+        return Ok(None);
+    }
+    let count = state
+        .count_active_request_candidates_for_user_since(
+            auth.user_id.as_str(),
+            now_unix_secs.saturating_sub(ACTIVE_REQUEST_WINDOW_SECS),
+        )
+        .await?;
+    usize::try_from(count)
+        .map(Some)
+        .map_err(|_| GatewayError::Internal("active request count exceeds usize".to_string()))
 }
 
 pub(super) fn is_candidate_selectable(

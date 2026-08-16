@@ -57,6 +57,17 @@ impl AppState {
             .map_err(|err| GatewayError::Internal(err.to_string()))
     }
 
+    pub(crate) async fn count_active_request_candidates_for_user_since(
+        &self,
+        user_id: &str,
+        active_since_unix_secs: u64,
+    ) -> Result<u64, GatewayError> {
+        self.data
+            .count_active_request_candidates_for_user_since(user_id, active_since_unix_secs)
+            .await
+            .map_err(|err| GatewayError::Internal(err.to_string()))
+    }
+
     pub(crate) async fn upsert_request_candidate(
         &self,
         candidate: candidates::UpsertRequestCandidateRecord,

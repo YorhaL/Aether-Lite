@@ -132,6 +132,104 @@
           </template>
         </div>
 
+        <div
+          v-if="!isAdmin"
+          data-testid="account-admission-status"
+          class="mt-6"
+        >
+          <div class="mb-3 flex items-center justify-between">
+            <h3 class="text-sm font-medium text-foreground">
+              流控策略
+            </h3>
+            <Badge
+              variant="outline"
+              class="text-[10px]"
+            >
+              账户
+            </Badge>
+          </div>
+          <div class="divide-y divide-border border-y border-border">
+            <template v-if="loadingAdmissionStatus">
+              <div
+                v-for="index in 3"
+                :key="`admission-skeleton-${index}`"
+                class="flex min-h-16 items-center gap-3 px-1 py-3"
+              >
+                <Skeleton class="h-9 w-9 flex-none" />
+                <div class="min-w-0 flex-1">
+                  <Skeleton class="h-4 w-24" />
+                  <Skeleton class="mt-2 h-3 w-36" />
+                </div>
+                <Skeleton class="h-5 w-24 flex-none" />
+              </div>
+            </template>
+            <template v-else-if="admissionRules.length > 0">
+              <div
+                v-for="rule in admissionRules"
+                :key="rule.kind"
+                data-admission-rule
+                class="grid min-h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-1 py-3"
+              >
+                <div class="flex min-w-0 items-center gap-3">
+                  <div
+                    class="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-border bg-muted/30 text-muted-foreground"
+                  >
+                    <component
+                      :is="getAdmissionRuleIcon(rule.kind)"
+                      class="h-4 w-4"
+                    />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <p class="text-sm font-medium text-foreground">
+                        {{ getAdmissionRuleLabel(rule.kind) }}
+                      </p>
+                      <Badge
+                        v-if="rule.status === 'unlimited'"
+                        variant="secondary"
+                        class="text-[10px]"
+                      >
+                        不限
+                      </Badge>
+                      <Badge
+                        v-else-if="!rule.available"
+                        variant="outline"
+                        class="text-[10px] text-muted-foreground"
+                      >
+                        暂不可用
+                      </Badge>
+                    </div>
+                    <p
+                      v-if="getAdmissionRuleMeta(rule)"
+                      class="mt-0.5 truncate text-xs text-muted-foreground"
+                    >
+                      {{ getAdmissionRuleMeta(rule) }}
+                    </p>
+                    <div
+                      v-if="getAdmissionRuleProgress(rule) !== null"
+                      class="mt-2 h-1 w-full max-w-56 overflow-hidden rounded-full bg-muted"
+                    >
+                      <div
+                        class="h-full rounded-full bg-primary transition-[width]"
+                        :style="{ width: `${getAdmissionRuleProgress(rule)}%` }"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <p class="whitespace-nowrap text-right text-sm font-semibold text-foreground sm:text-base">
+                  {{ formatAdmissionRuleValue(rule) }}
+                </p>
+              </div>
+            </template>
+            <div
+              v-else
+              class="flex min-h-16 items-center px-1 py-3 text-sm text-muted-foreground"
+            >
+              流控状态暂不可用
+            </div>
+          </div>
+        </div>
+
         <!-- 管理员：系统健康摘要 -->
         <div
           v-if="isAdmin && systemHealth"
@@ -905,6 +1003,11 @@ import { getDateRangeFromPeriod } from "@/features/usage/composables";
 import type { DateRangeParams } from "@/features/usage/types";
 import { announcementApi, type Announcement } from "@/api/announcements";
 import {
+  admissionApi,
+  type AccountAdmissionRule,
+  type AccountAdmissionRuleKind,
+} from "@/api/admission";
+import {
   Card,
   Badge,
   Button,
@@ -938,6 +1041,9 @@ import {
   Clock,
   Database,
   Shuffle,
+  Gauge,
+  Layers3,
+  CalendarClock,
 } from "lucide-vue-next";
 import { formatTokens, formatCurrency } from "@/utils/format";
 import { parseDateLike } from "@/utils/date";
@@ -1113,10 +1219,90 @@ const cacheStats = ref<{
 } | null>(null);
 
 const userMonthlyCost = ref<number | null>(null);
+const admissionRules = ref<AccountAdmissionRule[]>([]);
+const loadingAdmissionStatus = ref(false);
 
 const hasCacheData = computed(
   () => cacheStats.value && cacheStats.value.total_cache_tokens > 0,
 );
+
+function getAdmissionRuleLabel(kind: AccountAdmissionRuleKind): string {
+  switch (kind) {
+    case "request_count":
+      return "每分钟请求";
+    case "concurrent_requests":
+      return "当前并发";
+    case "usage_cost_usd":
+      return "今日额度";
+  }
+}
+
+function getAdmissionRuleIcon(kind: AccountAdmissionRuleKind): Component {
+  switch (kind) {
+    case "request_count":
+      return Gauge;
+    case "concurrent_requests":
+      return Layers3;
+    case "usage_cost_usd":
+      return CalendarClock;
+  }
+}
+
+function formatAdmissionAmount(
+  rule: AccountAdmissionRule,
+  value: number,
+): string {
+  return rule.kind === "usage_cost_usd"
+    ? formatCurrency(value)
+    : Math.max(0, Math.floor(value)).toLocaleString();
+}
+
+function formatAdmissionRuleValue(rule: AccountAdmissionRule): string {
+  const limit = rule.limit > 0
+    ? formatAdmissionAmount(rule, rule.limit)
+    : "不限";
+  if (rule.used === null) {
+    return rule.limit > 0 ? `-- / ${limit}` : limit;
+  }
+  return `${formatAdmissionAmount(rule, rule.used)} / ${limit}`;
+}
+
+function formatAdmissionResetAt(rule: AccountAdmissionRule): string {
+  if (!rule.reset_at) return "";
+  const resetAt = new Date(rule.reset_at);
+  if (Number.isNaN(resetAt.getTime())) return "";
+  const options: Intl.DateTimeFormatOptions = rule.kind === "usage_cost_usd"
+    ? {
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone: rule.timezone,
+      }
+    : {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      };
+  return new Intl.DateTimeFormat("zh-CN", options).format(resetAt);
+}
+
+function getAdmissionRuleMeta(rule: AccountAdmissionRule): string {
+  if (!rule.available || rule.kind === "concurrent_requests") return "";
+  const resetAt = formatAdmissionResetAt(rule);
+  if (!resetAt) return rule.timezone || "";
+  if (rule.kind === "usage_cost_usd" && rule.timezone) {
+    return `${rule.timezone} · ${resetAt} 重置`;
+  }
+  return `${resetAt} 重置`;
+}
+
+function getAdmissionRuleProgress(rule: AccountAdmissionRule): number | null {
+  if (!rule.available || rule.used === null || rule.limit <= 0) return null;
+  return Math.min(100, Math.max(0, (rule.used / rule.limit) * 100));
+}
 
 const tokenBreakdown = ref<{
   input: number;
@@ -1474,6 +1660,7 @@ onMounted(async () => {
     loadDashboardData(),
     loadDailyStats(),
     loadAnnouncements(),
+    ...(!isAdmin.value ? [loadAdmissionStatus()] : []),
   ]);
   await nextTick();
   setupTimelineResizeObserver();
@@ -1529,6 +1716,18 @@ async function loadDashboardData() {
     }
   } finally {
     loading.value = false;
+  }
+}
+
+async function loadAdmissionStatus() {
+  loadingAdmissionStatus.value = true;
+  try {
+    const response = await admissionApi.getAccountStatus();
+    admissionRules.value = response.rules;
+  } catch {
+    admissionRules.value = [];
+  } finally {
+    loadingAdmissionStatus.value = false;
   }
 }
 

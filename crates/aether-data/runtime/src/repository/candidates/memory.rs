@@ -90,6 +90,36 @@ impl RequestCandidateReadRepository for InMemoryRequestCandidateRepository {
         Ok(rows)
     }
 
+    async fn count_active_for_user_since(
+        &self,
+        user_id: &str,
+        active_since_unix_secs: u64,
+    ) -> Result<u64, DataLayerError> {
+        let active_since_unix_ms = active_since_unix_secs.saturating_mul(1000);
+        let count = self
+            .by_id
+            .read()
+            .expect("request candidate repository lock")
+            .values()
+            .filter(|row| row.user_id.as_deref() == Some(user_id))
+            .filter(|row| row.finished_at_unix_ms.is_none())
+            .filter(|row| {
+                matches!(
+                    row.status,
+                    RequestCandidateStatus::Pending | RequestCandidateStatus::Streaming
+                )
+            })
+            .filter(|row| {
+                row.started_at_unix_ms.unwrap_or(row.created_at_unix_ms) >= active_since_unix_ms
+            })
+            .count();
+        u64::try_from(count).map_err(|_| {
+            DataLayerError::UnexpectedValue(
+                "active request candidate count out of range".to_string(),
+            )
+        })
+    }
+
     async fn list_by_provider_id(
         &self,
         provider_id: &str,
@@ -529,6 +559,36 @@ mod tests {
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].id, "cand-2");
         assert_eq!(rows[1].id, "cand-1");
+    }
+
+    #[tokio::test]
+    async fn counts_only_current_active_requests_for_the_selected_user() {
+        let mut active = sample_candidate("active", "req-active", 200_000);
+        active.status = RequestCandidateStatus::Streaming;
+        active.finished_at_unix_ms = None;
+
+        let mut finished = sample_candidate("finished", "req-finished", 210_000);
+        finished.status = RequestCandidateStatus::Streaming;
+
+        let mut stale = sample_candidate("stale", "req-stale", 90_000);
+        stale.status = RequestCandidateStatus::Pending;
+        stale.started_at_unix_ms = None;
+        stale.finished_at_unix_ms = None;
+
+        let mut another_user = sample_candidate("other", "req-other", 220_000);
+        another_user.user_id = Some("user-2".to_string());
+        another_user.status = RequestCandidateStatus::Pending;
+        another_user.finished_at_unix_ms = None;
+
+        let repository =
+            InMemoryRequestCandidateRepository::seed(vec![active, finished, stale, another_user]);
+
+        let count = repository
+            .count_active_for_user_since("user-1", 100)
+            .await
+            .expect("count should succeed");
+
+        assert_eq!(count, 1);
     }
 
     #[tokio::test]

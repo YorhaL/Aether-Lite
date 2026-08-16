@@ -458,6 +458,12 @@ pub trait RequestCandidateReadRepository: Send + Sync {
         limit: usize,
     ) -> Result<Vec<StoredRequestCandidate>, crate::DataLayerError>;
 
+    async fn count_active_for_user_since(
+        &self,
+        user_id: &str,
+        active_since_unix_secs: u64,
+    ) -> Result<u64, crate::DataLayerError>;
+
     async fn list_by_provider_id(
         &self,
         provider_id: &str,

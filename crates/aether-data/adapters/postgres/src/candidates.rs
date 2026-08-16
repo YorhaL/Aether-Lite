@@ -537,6 +537,29 @@ impl SqlxRequestCandidateReadRepository {
         collect_query_rows(builder.build().fetch(&self.pool), map_request_candidate_row).await
     }
 
+    pub async fn count_active_for_user_since(
+        &self,
+        user_id: &str,
+        active_since_unix_secs: u64,
+    ) -> Result<u64, DataLayerError> {
+        let row = sqlx::query(
+            "SELECT COUNT(id) AS count FROM request_candidates \
+             WHERE user_id = $1 AND finished_at IS NULL \
+             AND status IN ('pending', 'streaming') \
+             AND COALESCE(started_at, created_at) >= TO_TIMESTAMP($2)",
+        )
+        .bind(user_id)
+        .bind(active_since_unix_secs as f64)
+        .fetch_one(&self.pool)
+        .await
+        .map_postgres_err()?;
+        u64::try_from(row_get::<i64>(&row, "count")?).map_err(|_| {
+            DataLayerError::UnexpectedValue(
+                "active request candidate count out of range".to_string(),
+            )
+        })
+    }
+
     pub async fn list_by_provider_id(
         &self,
         provider_id: &str,
@@ -1022,6 +1045,14 @@ impl RequestCandidateReadRepository for SqlxRequestCandidateReadRepository {
         limit: usize,
     ) -> Result<Vec<StoredRequestCandidate>, DataLayerError> {
         Self::list_recent(self, limit).await
+    }
+
+    async fn count_active_for_user_since(
+        &self,
+        user_id: &str,
+        active_since_unix_secs: u64,
+    ) -> Result<u64, DataLayerError> {
+        Self::count_active_for_user_since(self, user_id, active_since_unix_secs).await
     }
 
     async fn list_finalized_by_endpoint_ids_since(

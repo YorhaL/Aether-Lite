@@ -28,6 +28,12 @@ pub(crate) trait SchedulerRuntimeState {
         limit: usize,
     ) -> Result<Vec<StoredRequestCandidate>, GatewayError>;
 
+    async fn count_active_request_candidates_for_user_since(
+        &self,
+        user_id: &str,
+        active_since_unix_secs: u64,
+    ) -> Result<u64, GatewayError>;
+
     fn provider_key_rpm_reset_at(&self, key_id: &str, now_unix_secs: u64) -> Option<u64>;
 
     fn read_cached_scheduler_affinity_target(

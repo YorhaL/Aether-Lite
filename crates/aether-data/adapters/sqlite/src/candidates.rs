@@ -104,6 +104,29 @@ impl RequestCandidateReadRepository for SqliteRequestCandidateRepository {
         rows.iter().map(map_candidate_row).collect()
     }
 
+    async fn count_active_for_user_since(
+        &self,
+        user_id: &str,
+        active_since_unix_secs: u64,
+    ) -> Result<u64, DataLayerError> {
+        let row = sqlx::query(
+            "SELECT COUNT(id) AS count FROM request_candidates \
+             WHERE user_id = ? AND finished_at IS NULL \
+             AND status IN ('pending', 'streaming') \
+             AND COALESCE(started_at, created_at) >= ?",
+        )
+        .bind(user_id)
+        .bind(unix_secs_to_ms_i64(active_since_unix_secs)?)
+        .fetch_one(&self.pool)
+        .await
+        .map_sql_err()?;
+        u64::try_from(row.try_get::<i64, _>("count").map_sql_err()?).map_err(|_| {
+            DataLayerError::UnexpectedValue(
+                "active request candidate count out of range".to_string(),
+            )
+        })
+    }
+
     async fn list_by_provider_id(
         &self,
         provider_id: &str,

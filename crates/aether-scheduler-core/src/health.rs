@@ -5,7 +5,7 @@ use aether_data_contracts::repository::provider_catalog::StoredProviderCatalogKe
 
 const FAILURE_COOLDOWN_WINDOW_SECS: u64 = 60;
 const FAILURE_COOLDOWN_THRESHOLD: usize = 8;
-const ACTIVE_REQUEST_WINDOW_SECS: u64 = 300;
+pub const ACTIVE_REQUEST_WINDOW_SECS: u64 = 300;
 pub const PROVIDER_KEY_RPM_WINDOW_SECS: u64 = 60;
 const PROBE_PHASE_REQUESTS: u32 = 100;
 const PROBE_RESERVATION_RATIO: f64 = 0.1;

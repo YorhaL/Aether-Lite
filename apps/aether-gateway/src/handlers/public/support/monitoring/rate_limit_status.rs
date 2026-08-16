@@ -7,88 +7,74 @@ use axum::{
 use chrono::Utc;
 use serde_json::json;
 
-use crate::control::{GatewayControlAuthContext, GatewayControlDecision};
-
 use super::{
     build_auth_error_response, resolve_authenticated_local_user, AppState,
     GatewayPublicRequestContext,
 };
 
-fn daily_usage_available_payload(
-    status: crate::daily_usage_limit::FrontdoorDailyUsageStatus,
-) -> serde_json::Value {
-    if !status.available {
-        return daily_usage_empty_payload(
-            false,
-            "unavailable",
-            &status.timezone,
-            &status.window_start,
-            &status.window_end,
-            &status.window_end,
-        );
+fn rule_status(available: bool, limit: f64) -> &'static str {
+    if !available {
+        "unavailable"
+    } else if limit > 0.0 {
+        "available"
+    } else {
+        "unlimited"
     }
-    let primary = match (status.user.as_ref(), status.key.as_ref()) {
-        (Some(user), Some(key)) => {
-            if user.remaining_usd <= key.remaining_usd {
-                Some(user)
-            } else {
-                Some(key)
-            }
-        }
-        (Some(user), None) => Some(user),
-        (None, Some(key)) => Some(key),
-        (None, None) => None,
-    };
+}
+
+fn request_count_rule(
+    available: bool,
+    limit: u32,
+    used: Option<u32>,
+    window_seconds: u64,
+    reset_at: &str,
+) -> serde_json::Value {
     json!({
-        "available": true,
-        "status": "available",
-        "limit_usd": primary.map(|scope| scope.limit_usd),
-        "used_usd": primary.map(|scope| scope.used_usd),
-        "remaining_usd": primary.map(|scope| scope.remaining_usd),
-        "scope": primary.map(|scope| scope.scope),
-        "user": status.user.map(|scope| json!({
-            "limit_usd": scope.limit_usd,
-            "used_usd": scope.used_usd,
-            "remaining_usd": scope.remaining_usd,
-        })),
-        "key": status.key.map(|scope| json!({
-            "limit_usd": scope.limit_usd,
-            "used_usd": scope.used_usd,
-            "remaining_usd": scope.remaining_usd,
-        })),
-        "timezone": status.timezone,
-        "window": "1d",
-        "window_start": status.window_start,
-        "window_end": status.window_end,
-        "reset_time": chrono::DateTime::<Utc>::from_timestamp(
-            status.reset_at_unix_secs as i64,
-            0,
-        ).map(|value| value.to_rfc3339()),
+        "kind": "request_count",
+        "available": available,
+        "status": rule_status(available, f64::from(limit)),
+        "limit": limit,
+        "used": used,
+        "remaining": used
+            .filter(|_| limit > 0)
+            .map(|used| limit.saturating_sub(used)),
+        "window_seconds": window_seconds,
+        "reset_at": reset_at,
     })
 }
 
-fn daily_usage_empty_payload(
-    available: bool,
-    status: &'static str,
-    timezone: &str,
-    window_start: &str,
-    window_end: &str,
-    reset_time: &str,
+fn concurrent_requests_rule(available: bool, limit: u32, used: Option<u64>) -> serde_json::Value {
+    json!({
+        "kind": "concurrent_requests",
+        "available": available,
+        "status": rule_status(available, f64::from(limit)),
+        "limit": limit,
+        "used": used,
+        "remaining": used
+            .filter(|_| limit > 0)
+            .map(|used| u64::from(limit).saturating_sub(used)),
+    })
+}
+
+fn daily_usage_rule(
+    status: &crate::daily_usage_limit::FrontdoorPrincipalDailyUsageStatus,
+    limit_usd: f64,
 ) -> serde_json::Value {
     json!({
-        "available": available,
-        "status": status,
-        "limit_usd": null,
-        "used_usd": null,
-        "remaining_usd": null,
-        "scope": null,
-        "user": null,
-        "key": null,
-        "timezone": timezone,
-        "window": "1d",
-        "window_start": window_start,
-        "window_end": window_end,
-        "reset_time": reset_time,
+        "kind": "usage_cost_usd",
+        "available": status.available,
+        "status": rule_status(status.available, limit_usd),
+        "limit": limit_usd,
+        "used": status.used_usd,
+        "remaining": status
+            .used_usd
+            .filter(|_| limit_usd > 0.0)
+            .map(|used| (limit_usd - used).max(0.0)),
+        "period": "calendar_day",
+        "timezone": status.timezone,
+        "window_start": status.window_start,
+        "window_end": status.window_end,
+        "reset_at": status.window_end,
     })
 }
 
@@ -102,270 +88,165 @@ pub(super) async fn handle_user_rate_limit_status(
         Err(response) => return response,
     };
 
-    let limiter = state.frontdoor_user_rpm();
-    let now = Utc::now();
-    let now_unix_secs = u64::try_from(now.timestamp()).unwrap_or(0);
-    let bucket = limiter.current_bucket(now_unix_secs);
-    let reset_time = (now
-        + chrono::Duration::seconds(
-            i64::try_from(limiter.retry_after(now_unix_secs)).unwrap_or(0),
-        ))
-    .to_rfc3339();
-    let window = format!("{}s", limiter.config().bucket_seconds());
-    let daily_limiter = state.frontdoor_daily_usage();
-    let daily_timezone = crate::app_timezone::app_timezone();
-    let (_, daily_window_start, daily_window_end) =
-        crate::app_timezone::local_day_window(now, daily_timezone);
-    let daily_window_start = daily_window_start.to_rfc3339();
-    let daily_window_end = daily_window_end.to_rfc3339();
-    let daily_reset_at = daily_window_end.clone();
-
-    let export_records = match state
-        .list_auth_api_key_export_records_by_user_ids(std::slice::from_ref(&auth.user.id))
+    let groups = match state.list_user_groups_for_user(&auth.user.id).await {
+        Ok(value) => value,
+        Err(err) => {
+            return build_auth_error_response(
+                http::StatusCode::INTERNAL_SERVER_ERROR,
+                format!("user admission groups read failed: {err:?}"),
+                false,
+            )
+        }
+    };
+    let group_ids = groups
+        .iter()
+        .map(|group| group.id.clone())
+        .collect::<Vec<_>>();
+    let principal = match state
+        .data
+        .resolve_principal_admission_policy(&auth.user.id, &group_ids)
         .await
     {
         Ok(value) => value,
         Err(err) => {
             return build_auth_error_response(
                 http::StatusCode::INTERNAL_SERVER_ERROR,
-                format!("user rate limit status read failed: {err:?}"),
+                format!("user admission policy read failed: {err:?}"),
                 false,
             )
         }
     };
 
-    let mut api_keys = Vec::new();
-    for record in export_records {
-        if !record.is_active {
-            continue;
-        }
-
-        let snapshot = match state
-            .data
-            .read_auth_api_key_snapshot(&auth.user.id, &record.api_key_id, now_unix_secs)
-            .await
-        {
-            Ok(value) => value,
-            Err(err) => {
-                return build_auth_error_response(
-                    http::StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("user api key snapshot read failed: {err:?}"),
-                    false,
-                )
-            }
-        };
-        let is_standalone = snapshot
-            .as_ref()
-            .map(|value| value.api_key_is_standalone)
-            .unwrap_or(record.is_standalone);
-        let admission_policy = snapshot
-            .as_ref()
-            .map(|value| value.admission_policy.clone())
-            .unwrap_or_default();
-        let user_limit = if is_standalone {
-            admission_policy
-                .api_key
-                .requests_per_minute()
-                .or_else(|| admission_policy.principal.requests_per_minute())
-                .unwrap_or_default()
-        } else {
-            admission_policy
-                .principal
-                .requests_per_minute()
-                .unwrap_or_default()
-        };
-        let key_limit = if is_standalone {
-            0
-        } else {
-            admission_policy
-                .api_key
-                .requests_per_minute()
-                .unwrap_or_default()
-        };
-
-        let user_scope_key = if is_standalone {
-            limiter.standalone_scope_key(&record.api_key_id, bucket)
-        } else {
-            limiter.user_scope_key(&auth.user.id, bucket)
-        };
-        let key_scope_key = limiter.key_scope_key(&record.api_key_id, bucket);
-
-        let user_count = if user_limit > 0 {
-            match limiter
-                .get_scope_count(state, &user_scope_key, bucket)
-                .await
-            {
-                Ok(value) => value,
-                Err(err) => {
-                    tracing::warn!(error = ?err, scope_key = %user_scope_key, "user rpm scope read failed");
-                    0
-                }
-            }
-        } else {
-            0
-        };
-        let key_count = if key_limit > 0 {
-            match limiter.get_scope_count(state, &key_scope_key, bucket).await {
-                Ok(value) => value,
-                Err(err) => {
-                    tracing::warn!(error = ?err, scope_key = %key_scope_key, "api key rpm scope read failed");
-                    0
-                }
-            }
-        } else {
-            0
-        };
-
-        let user_remaining = if user_limit > 0 {
-            Some(user_limit.saturating_sub(user_count))
-        } else {
-            None
-        };
-        let key_remaining = if key_limit > 0 {
-            Some(key_limit.saturating_sub(key_count))
-        } else {
-            None
-        };
-
-        let primary_scope = match (user_remaining, key_remaining) {
-            (Some(user_remaining), Some(key_remaining)) => {
-                if user_remaining <= key_remaining {
-                    Some(("user", user_limit, user_remaining))
-                } else {
-                    Some(("key", key_limit, key_remaining))
-                }
-            }
-            (Some(user_remaining), None) => Some(("user", user_limit, user_remaining)),
-            (None, Some(key_remaining)) => Some(("key", key_limit, key_remaining)),
-            (None, None) => None,
-        };
-
-        let mut daily_decision = GatewayControlDecision::synthetic(
-            "/v1/monitoring/rate-limit-status",
-            Some("ai_public".to_string()),
-            Some("openai".to_string()),
-            Some("chat".to_string()),
-            Some("openai:chat".to_string()),
-        );
-        daily_decision.auth_context = Some(GatewayControlAuthContext {
-            user_id: auth.user.id.clone(),
-            api_key_id: record.api_key_id.clone(),
-            username: Some(auth.user.username.clone()),
-            api_key_name: record.name.clone(),
-            balance_remaining: None,
-            access_allowed: true,
-            admission_policy,
-            api_key_is_standalone: is_standalone,
-            admin_bypass_limits: snapshot.as_ref().is_some_and(|value| {
-                value.user_role.eq_ignore_ascii_case("admin") && !value.api_key_is_standalone
-            }),
-            ip_bypass_limits: false,
-            local_rejection: None,
-            allowed_models: None,
-            ip_rules: None,
-        });
-        let daily_usage = match daily_limiter.current_status(state, &daily_decision).await {
-            Ok(Some(status)) => daily_usage_available_payload(status),
-            Ok(None) => daily_usage_empty_payload(
-                true,
-                "unlimited",
-                daily_timezone.name(),
-                &daily_window_start,
-                &daily_window_end,
-                &daily_reset_at,
-            ),
+    let now = Utc::now();
+    let now_unix_secs = u64::try_from(now.timestamp()).unwrap_or_default();
+    let rpm_limiter = state.frontdoor_user_rpm();
+    let rpm_limit = principal.requests_per_minute().unwrap_or_default();
+    let rpm_reset_at = (now
+        + chrono::Duration::seconds(
+            i64::try_from(rpm_limiter.retry_after(now_unix_secs)).unwrap_or_default(),
+        ))
+    .to_rfc3339();
+    let (rpm_available, rpm_used) = if rpm_limit == 0 {
+        (true, None)
+    } else {
+        let bucket = rpm_limiter.current_bucket(now_unix_secs);
+        let scope_key = rpm_limiter.user_scope_key(&auth.user.id, bucket);
+        match rpm_limiter.get_scope_count(state, &scope_key, bucket).await {
+            Ok(value) => (true, Some(value)),
             Err(err) => {
                 tracing::warn!(
                     error = ?err,
-                    api_key_id = %record.api_key_id,
-                    "daily usage runtime status unavailable"
+                    user_id = %auth.user.id,
+                    "account rpm status unavailable"
                 );
-                daily_usage_empty_payload(
-                    false,
-                    "unavailable",
-                    daily_timezone.name(),
-                    &daily_window_start,
-                    &daily_window_end,
-                    &daily_reset_at,
-                )
+                (false, None)
             }
-        };
+        }
+    };
 
-        api_keys.push(json!({
-            "api_key_name": record
-                .name
-                .clone()
-                .unwrap_or_else(|| format!("Key-{}", record.api_key_id)),
-            "limit": primary_scope.map(|(_, limit, _)| limit),
-            "remaining": primary_scope.map(|(_, _, remaining)| remaining),
-            "scope": primary_scope.map(|(scope, _, _)| scope),
-            "reset_time": primary_scope.map(|_| reset_time.clone()),
-            "window": primary_scope.map(|_| window.clone()),
-            "user_limit": if user_limit > 0 { Some(user_limit) } else { None::<u32> },
-            "user_remaining": user_remaining,
-            "key_limit": if key_limit > 0 { Some(key_limit) } else { None::<u32> },
-            "key_remaining": key_remaining,
-            "daily_usage": daily_usage,
-        }));
-    }
+    let concurrent_limit = principal.concurrent_requests().unwrap_or_default();
+    let active_since =
+        now_unix_secs.saturating_sub(aether_scheduler_core::ACTIVE_REQUEST_WINDOW_SECS);
+    let (concurrent_available, concurrent_used) = match state
+        .count_active_request_candidates_for_user_since(&auth.user.id, active_since)
+        .await
+    {
+        Ok(value) => (true, Some(value)),
+        Err(err) => {
+            tracing::warn!(
+                error = ?err,
+                user_id = %auth.user.id,
+                "account concurrency status unavailable"
+            );
+            (false, None)
+        }
+    };
+
+    let daily_limit_usd = principal.daily_usage_limit_usd().unwrap_or_default();
+    let daily_status = match state
+        .frontdoor_daily_usage()
+        .current_principal_status(state, &auth.user.id)
+        .await
+    {
+        Ok(value) => value,
+        Err(err) => {
+            tracing::warn!(
+                error = ?err,
+                user_id = %auth.user.id,
+                "account daily usage status unavailable"
+            );
+            let timezone = crate::app_timezone::app_timezone();
+            let (_, start, end) = crate::app_timezone::local_day_window(now, timezone);
+            crate::daily_usage_limit::FrontdoorPrincipalDailyUsageStatus {
+                available: false,
+                timezone: timezone.name().to_string(),
+                window_start: start.to_rfc3339(),
+                window_end: end.to_rfc3339(),
+                reset_at_unix_secs: end.timestamp().max(0) as u64,
+                used_usd: None,
+            }
+        }
+    };
 
     Json(json!({
         "user_id": auth.user.id,
-        "api_keys": api_keys,
+        "rules": [
+            request_count_rule(
+                rpm_available,
+                rpm_limit,
+                rpm_used,
+                rpm_limiter.config().bucket_seconds(),
+                &rpm_reset_at,
+            ),
+            concurrent_requests_rule(
+                concurrent_available,
+                concurrent_limit,
+                concurrent_used,
+            ),
+            daily_usage_rule(&daily_status, daily_limit_usd),
+        ],
     }))
     .into_response()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::daily_usage_available_payload;
-    use crate::daily_usage_limit::{DailyUsageScopeStatus, FrontdoorDailyUsageStatus};
+    use super::{concurrent_requests_rule, daily_usage_rule, request_count_rule};
+    use crate::daily_usage_limit::FrontdoorPrincipalDailyUsageStatus;
 
     #[test]
-    fn daily_usage_monitoring_payload_exposes_primary_and_nested_scopes() {
-        let payload = daily_usage_available_payload(FrontdoorDailyUsageStatus {
-            available: true,
-            timezone: "Asia/Shanghai".to_string(),
-            window_start: "2026-08-02T16:00:00Z".to_string(),
-            window_end: "2026-08-03T16:00:00Z".to_string(),
-            reset_at_unix_secs: 1_775_232_000,
-            user: Some(DailyUsageScopeStatus {
-                scope: "user",
-                limit_usd: 10.0,
-                used_usd: 4.0,
-                remaining_usd: 6.0,
-            }),
-            key: Some(DailyUsageScopeStatus {
-                scope: "key",
-                limit_usd: 5.0,
-                used_usd: 3.0,
-                remaining_usd: 2.0,
-            }),
-        });
+    fn account_rules_expose_usage_and_remaining_values() {
+        let rpm = request_count_rule(true, 100, Some(37), 60, "rpm-reset");
+        let concurrent = concurrent_requests_rule(true, 8, Some(2));
+        let daily = daily_usage_rule(
+            &FrontdoorPrincipalDailyUsageStatus {
+                available: true,
+                timezone: "Asia/Hong_Kong".to_string(),
+                window_start: "day-start".to_string(),
+                window_end: "day-end".to_string(),
+                reset_at_unix_secs: 123,
+                used_usd: Some(4.25),
+            },
+            20.0,
+        );
 
-        assert_eq!(payload["status"], "available");
-        assert_eq!(payload["scope"], "key");
-        assert_eq!(payload["limit_usd"], 5.0);
-        assert_eq!(payload["user"]["used_usd"], 4.0);
-        assert_eq!(payload["key"]["remaining_usd"], 2.0);
-        assert_eq!(payload["timezone"], "Asia/Shanghai");
+        assert_eq!(rpm["used"], 37);
+        assert_eq!(rpm["remaining"], 63);
+        assert_eq!(concurrent["used"], 2);
+        assert_eq!(concurrent["remaining"], 6);
+        assert_eq!(daily["used"], 4.25);
+        assert_eq!(daily["remaining"], 15.75);
+        assert_eq!(daily["timezone"], "Asia/Hong_Kong");
     }
 
     #[test]
-    fn daily_usage_monitoring_payload_marks_runtime_failures_unavailable() {
-        let payload = daily_usage_available_payload(FrontdoorDailyUsageStatus {
-            available: false,
-            timezone: "Asia/Shanghai".to_string(),
-            window_start: "start".to_string(),
-            window_end: "end".to_string(),
-            reset_at_unix_secs: 0,
-            user: None,
-            key: None,
-        });
+    fn account_rules_distinguish_unlimited_and_unavailable() {
+        let unlimited = concurrent_requests_rule(true, 0, Some(2));
+        let unavailable = request_count_rule(false, 100, None, 60, "rpm-reset");
 
-        assert_eq!(payload["available"], false);
-        assert_eq!(payload["status"], "unavailable");
-        assert!(payload["used_usd"].is_null());
-        assert!(payload["remaining_usd"].is_null());
+        assert_eq!(unlimited["status"], "unlimited");
+        assert!(unlimited["remaining"].is_null());
+        assert_eq!(unavailable["status"], "unavailable");
+        assert!(unavailable["used"].is_null());
     }
 }

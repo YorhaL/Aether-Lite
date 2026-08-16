@@ -266,6 +266,19 @@ impl SchedulerRuntimeState for AppState {
         AppState::read_recent_request_candidates(self, limit).await
     }
 
+    async fn count_active_request_candidates_for_user_since(
+        &self,
+        user_id: &str,
+        active_since_unix_secs: u64,
+    ) -> Result<u64, GatewayError> {
+        AppState::count_active_request_candidates_for_user_since(
+            self,
+            user_id,
+            active_since_unix_secs,
+        )
+        .await
+    }
+
     fn provider_key_rpm_reset_at(&self, key_id: &str, now_unix_secs: u64) -> Option<u64> {
         AppState::provider_key_rpm_reset_at(self, key_id, now_unix_secs)
     }

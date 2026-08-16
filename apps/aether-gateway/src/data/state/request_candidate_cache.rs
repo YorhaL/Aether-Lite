@@ -95,6 +95,16 @@ impl RequestCandidateReadRepository for CachedRequestCandidateReadRepository {
         Ok(rows)
     }
 
+    async fn count_active_for_user_since(
+        &self,
+        user_id: &str,
+        active_since_unix_secs: u64,
+    ) -> Result<u64, aether_data::DataLayerError> {
+        self.inner
+            .count_active_for_user_since(user_id, active_since_unix_secs)
+            .await
+    }
+
     async fn list_by_provider_id(
         &self,
         provider_id: &str,

@@ -37,7 +37,8 @@ pub use health::{
     is_candidate_in_recent_failure_cooldown, is_provider_key_circuit_open,
     is_provider_key_circuit_open_at, provider_key_circuit_payload_is_active_open_at,
     provider_key_health_bucket, provider_key_health_score, provider_key_rpm_allows_request,
-    provider_key_rpm_allows_request_since, ProviderKeyHealthBucket, PROVIDER_KEY_RPM_WINDOW_SECS,
+    provider_key_rpm_allows_request_since, ProviderKeyHealthBucket, ACTIVE_REQUEST_WINDOW_SECS,
+    PROVIDER_KEY_RPM_WINDOW_SECS,
 };
 pub use model::{
     candidate_model_names, extract_global_priority_for_format, matches_model_mapping,

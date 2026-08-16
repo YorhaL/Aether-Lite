@@ -50,6 +50,21 @@ impl GatewayDataState {
         }
     }
 
+    pub(crate) async fn count_active_request_candidates_for_user_since(
+        &self,
+        user_id: &str,
+        active_since_unix_secs: u64,
+    ) -> Result<u64, DataLayerError> {
+        match &self.request_candidate_reader {
+            Some(repository) => {
+                repository
+                    .count_active_for_user_since(user_id, active_since_unix_secs)
+                    .await
+            }
+            None => Ok(0),
+        }
+    }
+
     pub(crate) async fn list_finalized_request_candidates_by_endpoint_ids_since(
         &self,
         endpoint_ids: &[String],

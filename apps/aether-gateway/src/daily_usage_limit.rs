@@ -46,6 +46,16 @@ pub(crate) struct FrontdoorDailyUsageStatus {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub(crate) struct FrontdoorPrincipalDailyUsageStatus {
+    pub(crate) available: bool,
+    pub(crate) timezone: String,
+    pub(crate) window_start: String,
+    pub(crate) window_end: String,
+    pub(crate) reset_at_unix_secs: u64,
+    pub(crate) used_usd: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct FrontdoorDailyUsageRejection {
     pub(crate) scope: &'static str,
     pub(crate) limit_usd: f64,
@@ -221,6 +231,60 @@ impl FrontdoorDailyUsageLimiter {
             user,
             key,
         }))
+    }
+
+    pub(crate) async fn current_principal_status(
+        &self,
+        state: &AppState,
+        user_id: &str,
+    ) -> Result<FrontdoorPrincipalDailyUsageStatus, GatewayError> {
+        let timezone = app_timezone();
+        let now = Utc::now();
+        let (_, start, end) = local_day_window(now, timezone);
+        let bucket = start.timestamp().max(0) as u64;
+        let user_scope_key = daily_usage_user_scope_key(user_id, bucket);
+        let unused_key_scope_key = daily_usage_key_scope_key("account-status", bucket);
+        let mut counts = state
+            .runtime_state
+            .daily_usage_limit_counts(DailyUsageLimitCountInput {
+                state_key: DAILY_USAGE_RUNTIME_STATE_KEY,
+                user_key: Some(user_scope_key.as_str()),
+                key_key: unused_key_scope_key.as_str(),
+                bucket,
+            })
+            .await
+            .map_err(|err| GatewayError::Internal(err.to_string()))?;
+        if !counts.state_ready && recover_daily_usage_runtime(state).await? {
+            counts = state
+                .runtime_state
+                .daily_usage_limit_counts(DailyUsageLimitCountInput {
+                    state_key: DAILY_USAGE_RUNTIME_STATE_KEY,
+                    user_key: Some(user_scope_key.as_str()),
+                    key_key: unused_key_scope_key.as_str(),
+                    bucket,
+                })
+                .await
+                .map_err(|err| GatewayError::Internal(err.to_string()))?;
+        }
+        if !counts.state_ready {
+            self.trigger_runtime_recovery(state);
+            return Ok(FrontdoorPrincipalDailyUsageStatus {
+                available: false,
+                timezone: timezone.name().to_string(),
+                window_start: rfc3339(start),
+                window_end: rfc3339(end),
+                reset_at_unix_secs: end.timestamp().max(0) as u64,
+                used_usd: None,
+            });
+        }
+        Ok(FrontdoorPrincipalDailyUsageStatus {
+            available: true,
+            timezone: timezone.name().to_string(),
+            window_start: rfc3339(start),
+            window_end: rfc3339(end),
+            reset_at_unix_secs: end.timestamp().max(0) as u64,
+            used_usd: Some(units_to_usd(counts.user_units)),
+        })
     }
 
     fn trigger_runtime_recovery(&self, state: &AppState) {

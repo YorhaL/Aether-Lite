@@ -8,16 +8,26 @@ const dashboardApiMocks = vi.hoisted(() => ({
   getDailyStats: vi.fn(),
 }))
 
+const admissionApiMocks = vi.hoisted(() => ({
+  getAccountStatus: vi.fn(),
+}))
+
+const authStoreMock = vi.hoisted(() => ({
+  canAccessAdmin: false,
+  isAdmin: false,
+  isAuditAdmin: false,
+}))
+
 vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({
-    canAccessAdmin: false,
-    isAdmin: false,
-    isAuditAdmin: false,
-  }),
+  useAuthStore: () => authStoreMock,
 }))
 
 vi.mock('@/api/dashboard', () => ({
   dashboardApi: dashboardApiMocks,
+}))
+
+vi.mock('@/api/admission', () => ({
+  admissionApi: admissionApiMocks,
 }))
 
 vi.mock('@/api/announcements', () => ({
@@ -101,6 +111,9 @@ vi.mock('lucide-vue-next', async () => {
     Clock: Icon,
     Database: Icon,
     Shuffle: Icon,
+    Gauge: Icon,
+    Layers3: Icon,
+    CalendarClock: Icon,
   }
 })
 
@@ -123,12 +136,20 @@ async function settle() {
 }
 
 beforeEach(() => {
+  authStoreMock.canAccessAdmin = false
+  authStoreMock.isAdmin = false
+  authStoreMock.isAuditAdmin = false
   dashboardApiMocks.getStats.mockReset()
   dashboardApiMocks.getDailyStats.mockReset()
+  admissionApiMocks.getAccountStatus.mockReset()
   dashboardApiMocks.getDailyStats.mockResolvedValue({
     daily_stats: [],
     model_summary: [],
     period: { start_date: '2026-05-01', end_date: '2026-05-15', days: 15 },
+  })
+  admissionApiMocks.getAccountStatus.mockResolvedValue({
+    user_id: 'user-1',
+    rules: [],
   })
 })
 
@@ -165,6 +186,69 @@ describe('Dashboard ordinary user wallet card', () => {
 
     expect(root.textContent).toContain('$110.00')
     expect(root.textContent).toContain('可用额度 $110.00')
+  })
+})
+
+describe('Dashboard account admission status', () => {
+  it('renders account usage and limits as a vertical list for ordinary users', async () => {
+    dashboardApiMocks.getStats.mockResolvedValue({ stats: [] })
+    admissionApiMocks.getAccountStatus.mockResolvedValue({
+      user_id: 'user-1',
+      rules: [
+        {
+          kind: 'request_count',
+          available: true,
+          status: 'available',
+          limit: 100,
+          used: 37,
+          remaining: 63,
+          window_seconds: 60,
+          reset_at: '2026-08-17T12:01:00Z',
+        },
+        {
+          kind: 'concurrent_requests',
+          available: true,
+          status: 'available',
+          limit: 8,
+          used: 2,
+          remaining: 6,
+        },
+        {
+          kind: 'usage_cost_usd',
+          available: true,
+          status: 'available',
+          limit: 20,
+          used: 4.25,
+          remaining: 15.75,
+          period: 'calendar_day',
+          timezone: 'Asia/Hong_Kong',
+          reset_at: '2026-08-17T16:00:00Z',
+        },
+      ],
+    })
+
+    const root = mountDashboard()
+    await settle()
+
+    expect(root.querySelectorAll('[data-admission-rule]')).toHaveLength(3)
+    expect(root.textContent).toContain('每分钟请求')
+    expect(root.textContent).toContain('37 / 100')
+    expect(root.textContent).toContain('当前并发')
+    expect(root.textContent).toContain('2 / 8')
+    expect(root.textContent).toContain('今日额度')
+    expect(root.textContent).toContain('$4.25 / $20.00')
+  })
+
+  it('does not request or render account admission status for administrators', async () => {
+    authStoreMock.canAccessAdmin = true
+    authStoreMock.isAdmin = true
+    dashboardApiMocks.getStats.mockResolvedValue({ stats: [] })
+
+    const root = mountDashboard()
+    await settle()
+
+    expect(admissionApiMocks.getAccountStatus).not.toHaveBeenCalled()
+    expect(root.querySelector('[data-testid="account-admission-status"]')).toBeNull()
   })
 })
 
