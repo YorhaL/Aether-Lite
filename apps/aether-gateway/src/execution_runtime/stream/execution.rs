@@ -53,8 +53,9 @@ use super::error::{
 mod execution_failures;
 use self::execution_failures::{
     build_stream_failure_from_execution_error, build_stream_failure_from_provider_error_body,
-    build_stream_failure_report, build_stream_transport_failure_report,
-    handle_prefetch_stream_failure, submit_midstream_stream_failure, StreamFailureReport,
+    build_stream_failure_report, build_stream_http_failure_report,
+    build_stream_transport_failure_report, handle_prefetch_stream_failure,
+    submit_midstream_stream_failure, StreamFailureReport,
 };
 use crate::ai_serving::api::StreamingStandardTerminalObserver;
 use crate::ai_serving::is_openai_responses_family_format;
@@ -772,6 +773,57 @@ fn direct_upstream_response_byte_stream(
     futures_stream::iter(prefetched_body)
         .chain(response_stream)
         .boxed()
+}
+
+async fn collect_direct_upstream_error_body(
+    prefetched_body: VecDeque<Result<Bytes, String>>,
+    response: DirectUpstreamResponse,
+    upstream_started_at: Instant,
+    stream_first_byte_timeout: Option<Duration>,
+) -> Vec<u8> {
+    let mut upstream = direct_upstream_response_byte_stream(prefetched_body, response);
+    let mut body = Vec::new();
+    let first_item = match await_direct_passthrough_first_item(
+        upstream.next(),
+        upstream_started_at,
+        stream_first_byte_timeout,
+    )
+    .await
+    {
+        Ok(item) => item,
+        Err(timeout) => {
+            warn!(
+                timeout_ms = timeout.as_millis() as u64,
+                "gateway timed out while reading upstream stream error body"
+            );
+            return body;
+        }
+    };
+
+    let mut next_item = first_item;
+    loop {
+        let Some(item) = next_item else {
+            break;
+        };
+        match item {
+            Ok(chunk) => {
+                let remaining = MAX_ERROR_BODY_BYTES.saturating_sub(body.len());
+                body.extend_from_slice(&chunk[..chunk.len().min(remaining)]);
+                if body.len() >= MAX_ERROR_BODY_BYTES {
+                    break;
+                }
+            }
+            Err(error) => {
+                warn!(
+                    error = %error,
+                    "gateway stopped reading upstream stream error body after a transport error"
+                );
+                break;
+            }
+        }
+        next_item = upstream.next().await;
+    }
+    body
 }
 
 async fn await_direct_passthrough_first_item<T, F>(
@@ -1809,6 +1861,8 @@ async fn execute_stream_from_direct_passthrough(
     mut stage_trace: RequestStageTrace,
     execution: DirectUpstreamStreamExecution,
     pending_recorded: bool,
+    retry_scope_out: Option<&mut AiAttemptRetryScope>,
+    retry_fallback_out: Option<&mut Option<Response<Body>>>,
 ) -> Result<Option<Response<Body>>, GatewayError> {
     let DirectUpstreamStreamExecution {
         request_id: _,
@@ -1845,6 +1899,97 @@ async fn execute_stream_from_direct_passthrough(
         response_observation.response_headers_observed_at_unix_ms,
         &response_observation.request_order_id,
     );
+
+    if !(200..300).contains(&status_code) {
+        let provider_error_body = collect_direct_upstream_error_body(
+            prefetched_body,
+            response,
+            upstream_started_at,
+            stream_first_byte_timeout,
+        )
+        .await;
+        let provider_body_json =
+            serde_json::from_slice::<Value>(strip_utf8_bom_and_ws(provider_error_body.as_slice()))
+                .ok();
+        let failure = provider_body_json.as_ref().map_or_else(
+            || {
+                let error_message = std::str::from_utf8(provider_error_body.as_slice())
+                    .ok()
+                    .map(str::trim)
+                    .filter(|message| !message.is_empty())
+                    .map(ToOwned::to_owned)
+                    .unwrap_or_else(|| {
+                        format!("upstream stream returned error status {status_code}")
+                    });
+                build_stream_http_failure_report(status_code, error_message)
+            },
+            |body_json| build_stream_failure_from_provider_error_body(status_code, body_json),
+        );
+        let failure_report_kind =
+            resolve_core_stream_error_finalize_report_kind(plan_kind, status_code)
+                .or_else(|| report_kind.clone())
+                .unwrap_or_default();
+        let telemetry = ExecutionTelemetry {
+            ttfb_ms: Some(
+                response_observation
+                    .response_headers_observed_at_unix_ms
+                    .saturating_sub(response_observation.request_started_at_unix_ms),
+            ),
+            elapsed_ms: Some(stream_elapsed_ms_since(stream_started_at)),
+            upstream_bytes: Some(provider_error_body.len() as u64),
+        };
+        let (handled, retry_disposition) = handle_prefetch_stream_failure(
+            state,
+            trace_id,
+            decision,
+            &plan,
+            report_context.clone(),
+            request_id.as_str(),
+            candidate_id.as_deref(),
+            failure_report_kind.as_str(),
+            headers.clone(),
+            Some(telemetry),
+            provider_error_body.as_slice(),
+            candidate_started_unix_secs,
+            stream_elapsed_ms_since(stream_started_at),
+            failure,
+            retry_scope_out,
+        )
+        .await?;
+
+        let mut client_headers = headers;
+        apply_endpoint_response_header_rules(
+            state,
+            &plan,
+            &mut client_headers,
+            provider_body_json.as_ref(),
+        )
+        .await?;
+        client_headers.remove("content-length");
+        let build_upstream_error_response = || {
+            attach_control_metadata_headers(
+                build_client_response_from_parts(
+                    status_code,
+                    &client_headers,
+                    Body::from(provider_error_body.clone()),
+                    trace_id,
+                    Some(decision),
+                )?,
+                Some(request_id.as_str()),
+                candidate_id.as_deref(),
+            )
+        };
+
+        if handled.is_none() {
+            if retry_disposition.is_some_and(|disposition| disposition.preserve_upstream_error) {
+                if let Some(retry_fallback) = retry_fallback_out {
+                    *retry_fallback = Some(build_upstream_error_response()?);
+                }
+            }
+            return Ok(None);
+        }
+        return build_upstream_error_response().map(Some);
+    }
 
     let lifecycle_seed = build_lifecycle_usage_seed(&plan, report_context.as_ref());
     let max_stream_body_buffer_bytes = resolve_stream_body_buffer_limit(state).await;
@@ -2112,7 +2257,6 @@ async fn execute_execution_runtime_stream_inner(
         .and_then(|context| context.candidate_index)
         .map(|value| value.to_string())
         .unwrap_or_else(|| "-".to_string());
-    let _ = (&mut retry_scope_out, &mut retry_fallback_out);
     let upstream_headers_started_at = Instant::now();
     let execution = match execute_in_process_stream_with_report_context(
         state,
@@ -2203,6 +2347,8 @@ async fn execute_execution_runtime_stream_inner(
         stage_trace,
         execution,
         lifecycle_pending_recorded,
+        retry_scope_out,
+        retry_fallback_out,
     ))
     .await
 }
@@ -3086,5 +3232,114 @@ fn apply_stream_summary_report_context(
 ) {
     if let Some(report_context) = report_context.cloned() {
         execution.stream_summary_report_context = report_context;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use aether_contracts::{ExecutionPlan, RequestBody};
+    use axum::routing::post;
+    use axum::{Json, Router};
+    use http::StatusCode;
+
+    use super::execute_execution_runtime_stream_with_retry_scope;
+    use crate::control::GatewayControlDecision;
+    use crate::AppState;
+    use aether_ai_serving::{AiAttemptExecutionOutcome, AiAttemptRetryScope};
+
+    #[tokio::test]
+    async fn stream_http_429_retries_before_committing_the_upstream_error() {
+        let upstream = Router::new().route(
+            "/v1/chat/completions",
+            post(|| async {
+                (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(serde_json::json!({
+                        "error": {
+                            "type": "rate_limit_error",
+                            "message": "All credentials for model gpt-5.6-sol are cooling down"
+                        }
+                    })),
+                )
+            }),
+        );
+        let listener = crate::test_support::bind_loopback_listener()
+            .await
+            .expect("upstream listener should bind");
+        let address = listener
+            .local_addr()
+            .expect("upstream address should resolve");
+        let upstream_handle = tokio::spawn(async move {
+            axum::serve(listener, upstream)
+                .await
+                .expect("upstream should run");
+        });
+
+        let plan = ExecutionPlan {
+            request_id: "req-stream-429-failover".to_string(),
+            candidate_id: Some("candidate-primary".to_string()),
+            provider_name: Some("primary".to_string()),
+            provider_id: "provider-primary".to_string(),
+            endpoint_id: "endpoint-primary".to_string(),
+            key_id: "key-primary".to_string(),
+            method: "POST".to_string(),
+            url: format!("http://{address}/v1/chat/completions"),
+            headers: BTreeMap::from([("content-type".to_string(), "application/json".to_string())]),
+            content_type: Some("application/json".to_string()),
+            content_encoding: None,
+            body: RequestBody::from_json(serde_json::json!({
+                "model": "gpt-5.6-sol",
+                "messages": [],
+                "stream": true
+            })),
+            stream: true,
+            client_api_format: "openai:chat".to_string(),
+            provider_api_format: "openai:chat".to_string(),
+            model_name: Some("gpt-5.6-sol".to_string()),
+            transport_profile: None,
+            timeouts: None,
+        };
+        let decision = GatewayControlDecision::synthetic(
+            "/v1/chat/completions",
+            Some("ai_public".to_string()),
+            Some("openai".to_string()),
+            Some("chat".to_string()),
+            Some("openai:chat".to_string()),
+        );
+        let state = AppState::new().expect("gateway state should build");
+
+        let outcome = execute_execution_runtime_stream_with_retry_scope(
+            &state,
+            plan,
+            "trace-stream-429-failover",
+            &decision,
+            "openai_chat_stream",
+            None,
+            Some(serde_json::json!({
+                "request_id": "req-stream-429-failover",
+                "candidate_id": "candidate-primary",
+                "candidate_index": 0,
+                "retry_index": 0,
+                "provider_id": "provider-primary",
+                "endpoint_id": "endpoint-primary",
+                "key_id": "key-primary"
+            })),
+        )
+        .await
+        .expect("stream execution should complete");
+
+        let AiAttemptExecutionOutcome::Retry {
+            scope,
+            fallback_response,
+        } = outcome
+        else {
+            panic!("429 stream response should schedule the next candidate");
+        };
+        assert_eq!(scope, AiAttemptRetryScope::Candidate);
+        assert!(fallback_response.is_none());
+
+        upstream_handle.abort();
     }
 }

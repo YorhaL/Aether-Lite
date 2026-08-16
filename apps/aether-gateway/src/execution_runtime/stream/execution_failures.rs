@@ -219,6 +219,22 @@ pub(super) fn build_stream_failure_from_provider_error_body(
     }
 }
 
+pub(super) fn build_stream_http_failure_report(
+    status_code: u16,
+    error_message: impl Into<String>,
+) -> StreamFailureReport {
+    StreamFailureReport {
+        status_code,
+        error_type: "upstream_error".to_string(),
+        error_message: error_message.into(),
+        upstream_status_code: Some(status_code),
+        transport_error: false,
+        honor_http_failover: true,
+        extra_error_fields: Map::new(),
+        provider_body_json: None,
+    }
+}
+
 fn execution_error_is_transport(error: &ExecutionError) -> bool {
     if error.upstream_status.is_some() {
         return false;
@@ -472,7 +488,13 @@ pub(super) async fn handle_prefetch_stream_failure(
     candidate_elapsed_ms: u64,
     failure: StreamFailureReport,
     retry_scope_out: Option<&mut AiAttemptRetryScope>,
-) -> Result<Option<Response<Body>>, GatewayError> {
+) -> Result<
+    (
+        Option<Response<Body>>,
+        Option<crate::orchestration::FailureDisposition>,
+    ),
+    GatewayError,
+> {
     let transport_error = failure.transport_error;
     let candidate_status_code = failure.upstream_status_code;
     let honor_http_failover = failure.honor_http_failover;
@@ -492,7 +514,7 @@ pub(super) async fn handle_prefetch_stream_failure(
             upstream_bytes: None,
         });
         telemetry.elapsed_ms.get_or_insert(candidate_elapsed_ms);
-        return handle_prefetch_transport_stream_failure(
+        let response = handle_prefetch_transport_stream_failure(
             state,
             trace_id,
             decision,
@@ -504,7 +526,8 @@ pub(super) async fn handle_prefetch_stream_failure(
             candidate_elapsed_ms,
             retry_scope_out,
         )
-        .await;
+        .await?;
+        return Ok((response, None));
     }
     let honor_local_failover = honor_http_failover && retry_scope_out.is_some();
     let failure_analysis = record_stream_sync_failure(
@@ -545,16 +568,19 @@ pub(super) async fn handle_prefetch_stream_failure(
             failover_classification = failure_analysis.classification.as_str(),
             "gateway local stream decision retrying next candidate after prefetched execution error"
         );
-        return Ok(None);
+        return Ok((None, Some(failure_disposition)));
     }
 
     let response =
         submit_local_core_error_or_sync_finalize(state, trace_id, decision, payload).await?;
-    Ok(Some(attach_control_metadata_headers(
-        response,
-        Some(request_id),
-        candidate_id,
-    )?))
+    Ok((
+        Some(attach_control_metadata_headers(
+            response,
+            Some(request_id),
+            candidate_id,
+        )?),
+        None,
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]
