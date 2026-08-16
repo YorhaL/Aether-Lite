@@ -49,7 +49,7 @@ async fn admin_oauth_endpoint_reachable(client: &reqwest::Client, url: &str) -> 
         .header(reqwest::header::ACCEPT, "*/*")
         .header(
             reqwest::header::USER_AGENT,
-            "Aether OAuth configuration tester",
+            "Aether Lite OAuth configuration tester",
         )
         .send()
         .await

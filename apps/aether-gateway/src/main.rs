@@ -1200,10 +1200,7 @@ impl GatewayLoggingArgs {
 }
 
 #[derive(Parser, Debug)]
-#[command(
-    name = "aether-gateway",
-    about = "Phase 3a Rust ingress gateway for Aether"
-)]
+#[command(name = "aether-gateway", about = "Aether Lite AI gateway")]
 struct Args {
     #[command(subcommand)]
     command: Option<DataCommand>,

@@ -3,9 +3,9 @@ name: Publish Lite Docker image
 on:
   push:
     branches:
-      - lite
+      - master
     tags:
-      - "lite-v*"
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -51,33 +51,33 @@ jobs:
           echo "rc=false" >> "${GITHUB_OUTPUT}"
 
           if [[ "${GITHUB_REF_TYPE}" == "branch" ]]; then
-            if [[ "${GITHUB_REF_NAME}" != "lite" ]]; then
-              echo "Lite images can only be built from the lite branch." >&2
+            if [[ "${GITHUB_REF_NAME}" != "master" ]]; then
+              echo "Aether Lite images can only be built from the master branch." >&2
               exit 1
             fi
 
             short_sha="${GITHUB_SHA:0:7}"
-            echo "build_version=lite-${short_sha}" >> "${GITHUB_OUTPUT}"
+            echo "build_version=edge-${short_sha}" >> "${GITHUB_OUTPUT}"
             echo "channel=edge" >> "${GITHUB_OUTPUT}"
             exit 0
           fi
 
           tag="${GITHUB_REF_NAME}"
-          if [[ ! "${tag}" =~ ^lite-v([0-9]+)\.([0-9]+)\.([0-9]+)(-(beta|rc)\.([0-9]+))?$ ]]; then
-            echo "Invalid Lite release tag: ${tag}" >&2
-            echo "Expected lite-vX.Y.Z, lite-vX.Y.Z-beta.N, or lite-vX.Y.Z-rc.N." >&2
+          if [[ ! "${tag}" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(-(beta|rc)\.([0-9]+))?$ ]]; then
+            echo "Invalid Aether Lite release tag: ${tag}" >&2
+            echo "Expected vX.Y.Z, vX.Y.Z-beta.N, or vX.Y.Z-rc.N." >&2
             exit 1
           fi
           major="${BASH_REMATCH[1]}"
           minor="${BASH_REMATCH[2]}"
 
-          git fetch --no-tags origin "+refs/heads/lite:refs/remotes/origin/lite"
-          if ! git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/lite; then
-            echo "Lite release tags must point to a commit contained in the lite branch." >&2
+          git fetch --no-tags origin "+refs/heads/master:refs/remotes/origin/master"
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/master; then
+            echo "Aether Lite release tags must point to a commit contained in the master branch." >&2
             exit 1
           fi
 
-          version="${tag#lite-v}"
+          version="${tag#v}"
           echo "build_version=${version}" >> "${GITHUB_OUTPUT}"
           echo "channel=release" >> "${GITHUB_OUTPUT}"
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
@@ -232,3 +232,40 @@ jobs:
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha,scope=lite-runtime
           cache-to: type=gha,mode=max,scope=lite-runtime
+
+  release:
+    name: Publish Aether Lite release
+    needs:
+      - preflight
+      - docker
+    if: needs.preflight.outputs.channel == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+          IS_BETA: ${{ needs.preflight.outputs.beta }}
+          IS_RC: ${{ needs.preflight.outputs.rc }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "GitHub release ${GITHUB_REF_NAME} already exists."
+            exit 0
+          fi
+
+          prerelease_args=()
+          if [[ "${IS_BETA}" == "true" || "${IS_RC}" == "true" ]]; then
+            prerelease_args+=(--prerelease)
+          fi
+
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --verify-tag \
+            --title "Aether Lite ${VERSION}" \
+            --generate-notes \
+            "${prerelease_args[@]}"

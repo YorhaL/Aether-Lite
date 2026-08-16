@@ -122,7 +122,7 @@ async fn resolve_admin_smtp_config(
             .as_ref()
             .and_then(|value| system_config_string(Some(value)))
             .or_else(|| system_config_string(smtp_from_name.as_ref()))
-            .unwrap_or_else(|| "Aether".to_string()),
+            .unwrap_or_else(|| "Aether Lite".to_string()),
     })
 }
 
@@ -258,7 +258,7 @@ mod tests {
             use_tls: true,
             use_ssl: false,
             from_email: None,
-            from_name: "Aether".to_string(),
+            from_name: "Aether Lite".to_string(),
         };
         assert_eq!(
             missing_smtp_fields(&config),

@@ -14,7 +14,7 @@ import { Target } from 'lucide-vue-next'
         关键策略
       </h1>
       <p class="text-base text-[#666663] dark:text-[#a3a094] max-w-2xl">
-        了解 Aether 内部的日志记录、智能调度模式以及服务限制策略。
+        了解 Aether Lite 内部的日志记录、智能调度模式以及服务限制策略。
       </p>
     </div>
 

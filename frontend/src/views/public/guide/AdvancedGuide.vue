@@ -14,7 +14,7 @@ import { Settings } from 'lucide-vue-next'
         高级功能
       </h1>
       <p class="text-base text-[#666663] dark:text-[#a3a094] max-w-2xl">
-        解锁 Aether 的自定义请求修改、智能转换机制以及进阶配置。
+        解锁 Aether Lite 的自定义请求修改以及进阶配置。
       </p>
     </div>
 

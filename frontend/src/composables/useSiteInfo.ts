@@ -7,7 +7,7 @@ interface SiteInfo {
 }
 
 const DEFAULT_SITE_INFO: SiteInfo = {
-  site_name: 'Aether',
+  site_name: 'Aether Lite',
   site_subtitle: 'AI Gateway',
 }
 
@@ -35,7 +35,7 @@ async function fetchSiteInfo() {
     const response = await apiClient.get<SiteInfo>('/api/public/site-info')
     applySiteInfo(response.data)
   } catch {
-    // 加载失败时才使用 upstream 默认站点信息，避免配置加载前闪出默认品牌文案
+    // 加载失败时才使用默认站点信息，避免配置加载前闪出默认品牌文案
     if (!siteName.value || !siteSubtitle.value) {
       applySiteInfo(DEFAULT_SITE_INFO)
     }

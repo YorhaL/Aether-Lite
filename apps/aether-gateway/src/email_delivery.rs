@@ -63,7 +63,7 @@ pub(crate) async fn read_smtp_delivery_config(
         use_ssl: system_config_bool(smtp_use_ssl.as_ref(), false),
         from_email,
         from_name: system_config_string(smtp_from_name.as_ref())
-            .unwrap_or_else(|| "Aether".to_string()),
+            .unwrap_or_else(|| "Aether Lite".to_string()),
     }))
 }
 

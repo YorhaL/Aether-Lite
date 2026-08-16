@@ -34,7 +34,7 @@ const toggleFaq = (index: number) => {
         常见问题
       </h1>
       <p class="text-base text-[#666663] dark:text-[#a3a094] max-w-2xl">
-        在使用 Aether 过程中遇到的常见问题与排错指南。
+        在使用 Aether Lite 过程中遇到的常见问题与排错指南。
       </p>
     </div>
 

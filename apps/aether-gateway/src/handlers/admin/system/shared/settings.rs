@@ -26,8 +26,8 @@ use serde_json::{json, Value};
 use std::time::Duration;
 
 const AETHER_RELEASES_API_URL: &str =
-    "https://api.github.com/repos/fawney19/Aether/releases?per_page=20";
-const AETHER_RELEASE_TAG_URL_BASE: &str = "https://github.com/fawney19/Aether/releases/tag";
+    "https://api.github.com/repos/YorhaL/Aether/releases?per_page=20";
+const AETHER_RELEASE_TAG_URL_BASE: &str = "https://github.com/YorhaL/Aether/releases/tag";
 const SOURCE_BUILD_UPDATE_BLOCKER: &str = "当前为源码构建，请使用 git pull 后重新编译。";
 const SOURCE_BUILD_RELEASE_BLOCKER: &str = "当前为源码构建，请手动切换到对应标签后重新编译。";
 
@@ -334,7 +334,10 @@ async fn fetch_github_releases_with_client(
 ) -> Result<Vec<GitHubRelease>, GitHubReleaseFetchError> {
     let mut request = client
         .get(AETHER_RELEASES_API_URL)
-        .header(reqwest::header::USER_AGENT, "Aether-Gateway update-check")
+        .header(
+            reqwest::header::USER_AGENT,
+            "Aether-Lite-Gateway update-check",
+        )
         .header(reqwest::header::ACCEPT, "application/vnd.github+json");
     if let Some(token) = github_token {
         request = request.bearer_auth(token);
@@ -704,7 +707,7 @@ mod tests {
     fn github_release_tag_url_points_to_explicit_tag_page() {
         assert_eq!(
             github_release_tag_url("v0.7.3"),
-            "https://github.com/fawney19/Aether/releases/tag/v0.7.3"
+            "https://github.com/YorhaL/Aether/releases/tag/v0.7.3"
         );
     }
 

@@ -153,7 +153,7 @@ pub(super) async fn maybe_build_local_ccswitch_response(
     Some(
         Json(json!({
             "is_valid": true,
-            "plan_name": if unlimited { "Aether Unlimited" } else { "Aether" },
+            "plan_name": if unlimited { "Aether Lite Unlimited" } else { "Aether Lite" },
             "remaining": remaining.map(|value| round_to(value.max(0.0), 6)),
             "used": round_to(used_today.max(0.0), 6),
             "unit": wallet_payload

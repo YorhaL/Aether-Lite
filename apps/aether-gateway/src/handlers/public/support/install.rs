@@ -191,8 +191,8 @@ CLI_LABEL={label}
 CLI_BIN={binary}
 NPM_PACKAGE={npm_package}
 
-say() {{ printf '%s\n' "[Aether] $1"; }}
-fail() {{ printf '%s\n' "[Aether] $1" >&2; exit 1; }}
+say() {{ printf '%s\n' "[Aether Lite] $1"; }}
+fail() {{ printf '%s\n' "[Aether Lite] $1" >&2; exit 1; }}
 
 os="$(uname -s 2>/dev/null || printf unknown)"
 case "$os" in
@@ -206,7 +206,7 @@ if [ "$TARGET_SYSTEM" = "windows" ]; then
   fail "该 install code 绑定 Windows，请复制 PowerShell 命令执行。"
 fi
 if [ "$TARGET_SYSTEM" != "auto" ] && [ "$TARGET_SYSTEM" != "$actual_system" ]; then
-  fail "所选系统 $TARGET_SYSTEM 与当前系统 $actual_system 不一致，请回到 Aether 重新选择目标系统。"
+  fail "所选系统 $TARGET_SYSTEM 与当前系统 $actual_system 不一致，请回到 Aether Lite 重新选择目标系统。"
 fi
 
 say "准备安装/复用 $CLI_LABEL"
@@ -283,9 +283,9 @@ while result and result[-1].strip() == '':
 if result:
     result.append('')
 result.extend([
-    '# Managed by Aether',
+    '# Managed by Aether Lite',
     '[model_providers.aether]',
-    'name = "Aether"',
+    'name = "Aether Lite"',
     f'base_url = {{quote_toml(base_url)}}',
     'wire_api = "responses"',
     'requires_openai_auth = false',
@@ -314,7 +314,7 @@ PY
     ;;
 esac
 
-say "$CLI_LABEL 已配置到 Aether。执行 $CLI_BIN --version 验证安装。"
+say "$CLI_LABEL 已配置到 Aether Lite。执行 $CLI_BIN --version 验证安装。"
 "###,
         target_cli = target_cli,
         target_system = target_system,
@@ -342,8 +342,8 @@ $CliLabel = {label}
 $CliBin = {binary}
 $NpmPackage = {npm_package}
 
-function Say($Message) {{ Write-Host "[Aether] $Message" }}
-function Fail($Message) {{ Write-Error "[Aether] $Message"; exit 1 }}
+function Say($Message) {{ Write-Host "[Aether Lite] $Message" }}
+function Fail($Message) {{ Write-Error "[Aether Lite] $Message"; exit 1 }}
 
 if ($TargetSystem -ne 'auto' -and $TargetSystem -ne 'windows') {{ Fail "该 install code 绑定 $TargetSystem，请复制 macOS/Linux 命令执行。" }}
 
@@ -406,9 +406,9 @@ if ($TargetCli -eq 'claude_code') {{
   if ($Result.Count -gt 0) {{ $Result.Add('') }}
   $EscapedBaseUrl = ($AetherBaseUrl.TrimEnd('/') + '/v1').Replace('\', '\\').Replace('"', '\"')
   $EscapedApiKey = $AetherApiKey.Replace('\', '\\').Replace('"', '\"')
-  $Result.Add('# Managed by Aether')
+  $Result.Add('# Managed by Aether Lite')
   $Result.Add('[model_providers.aether]')
-  $Result.Add('name = "Aether"')
+  $Result.Add('name = "Aether Lite"')
   $Result.Add("base_url = `"$EscapedBaseUrl`"")
   $Result.Add('wire_api = "responses"')
   $Result.Add('requires_openai_auth = false')
@@ -423,7 +423,7 @@ if ($TargetCli -eq 'claude_code') {{
   $Data | ConvertTo-Json -Depth 8 | Set-Content $Path -Encoding UTF8
 }}
 
-Say "$CliLabel 已配置到 Aether。执行 $CliBin --version 验证安装。"
+Say "$CliLabel 已配置到 Aether Lite。执行 $CliBin --version 验证安装。"
 "###,
         target_cli = powershell_single_quote(target_cli),
         target_system = powershell_single_quote(match session.target_system {

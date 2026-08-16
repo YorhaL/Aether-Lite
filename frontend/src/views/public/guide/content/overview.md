@@ -6,7 +6,7 @@
 ### 1. 预构建镜像 (Docker Compose)
 ```markdown
 # 1. 克隆代码
-git clone https://github.com/fawney19/Aether.git
+git clone --branch master --single-branch https://github.com/YorhaL/Aether.git
 cd Aether
 
 # 2. 配置环境变量

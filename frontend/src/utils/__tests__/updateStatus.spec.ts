@@ -30,7 +30,7 @@ describe('updateStatus', () => {
     expect(describeUpdateStatus(updateStatus({
       latest_version: 'v0.7.0-rc28',
       has_update: true,
-      release_url: 'https://github.com/fawney19/Aether/releases/tag/v0.7.0-rc28',
+      release_url: 'https://github.com/YorhaL/Aether/releases/tag/v0.7.0-rc28',
     }))).toBe('有新版本')
   })
 

@@ -15,7 +15,7 @@ import { panelClasses } from './guide-config'
         模块管理
       </h1>
       <p class="text-base text-[#666663] dark:text-[#a3a094] max-w-2xl">
-        Aether 提供高可插入的模块化管理机制，帮助连接外部服务和授权系统。
+        Aether Lite 提供高可插入的模块化管理机制，帮助连接外部服务和授权系统。
       </p>
     </div>
 

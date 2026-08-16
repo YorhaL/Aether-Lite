@@ -4,9 +4,9 @@
 
 // 应用配置
 export const APP_CONFIG = {
-  NAME: 'Aether',
+  NAME: 'Aether Lite',
   VERSION: '9.1.0',
-  DESCRIPTION: 'Claude API 代理服务管理平台',
+  DESCRIPTION: '面向内部 API 分发的轻量 AI 网关',
 } as const
 
 // 网络配置

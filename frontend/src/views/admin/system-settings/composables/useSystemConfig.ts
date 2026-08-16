@@ -93,7 +93,7 @@ const CONFIG_KEYS = [
 function createDefaultConfig(): SystemConfig {
   return {
     // 站点信息
-    site_name: 'Aether',
+    site_name: 'Aether Lite',
     site_subtitle: 'AI Gateway',
     // 基础配置
     default_user_initial_balance_usd: 10.0,

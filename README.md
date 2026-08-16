@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/YorhaL/Aether/actions/workflows/lite-docker.yml">
-    <img src="https://github.com/YorhaL/Aether/actions/workflows/lite-docker.yml/badge.svg?branch=lite" alt="Lite Docker Build">
+    <img src="https://github.com/YorhaL/Aether/actions/workflows/lite-docker.yml/badge.svg?branch=master" alt="Lite Docker Build">
   </a>
 </p>
 
@@ -32,7 +32,7 @@ Lite 定位和长期演进边界见 [Lite 版本策略](docs/architecture/lite-e
 要求 Docker Engine 和 Docker Compose Plugin。
 
 ```bash
-git clone --branch lite --single-branch https://github.com/YorhaL/Aether.git
+git clone --branch master --single-branch https://github.com/YorhaL/Aether.git
 cd Aether
 ./install.sh
 ```
@@ -55,7 +55,7 @@ DB_PASSWORD=replace-with-a-database-password
 REDIS_PASSWORD=replace-with-a-redis-password
 ```
 
-`latest` 对应最新稳定版。也可以固定为 `1.2.3` 等具体版本，或使用持续跟踪 `lite` 分支的 `edge`。
+`latest` 对应最新稳定版。也可以固定为 `1.2.3` 等具体版本，或使用持续跟踪 `master` 分支的 `edge`。
 
 ### PostgreSQL + Redis
 
@@ -105,7 +105,7 @@ SQLite 单节点部署使用：
 
 ## 发布镜像
 
-推送 `lite-vX.Y.Z` 标签会自动构建 `linux/amd64` 和 `linux/arm64` 镜像，并发布到：
+推送 `vX.Y.Z` 标签会自动构建 `linux/amd64` 和 `linux/arm64` 镜像、创建对应的 GitHub Release，并发布到：
 
 ```text
 ghcr.io/yorhal/aether-lite
@@ -114,10 +114,10 @@ ghcr.io/yorhal/aether-lite
 创建稳定版本：
 
 ```bash
-git switch lite
-git pull --ff-only origin lite
-git tag lite-v1.0.0
-git push origin lite-v1.0.0
+git switch master
+git pull --ff-only origin master
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 对应镜像标签：
@@ -128,7 +128,7 @@ ghcr.io/yorhal/aether-lite:1.0
 ghcr.io/yorhal/aether-lite:latest
 ```
 
-预发布标签支持 `lite-v1.0.0-beta.1` 和 `lite-v1.0.0-rc.1`。每次推送 `lite` 分支也会更新 `edge` 和对应的 `sha-*` 镜像。
+预发布标签支持 `v1.0.0-beta.1` 和 `v1.0.0-rc.1`。每次推送 `master` 分支也会更新 `edge` 和对应的 `sha-*` 镜像。
 
 ## 本地开发
 

@@ -398,16 +398,6 @@
           <LanguageSwitcher />
           <!-- Theme Toggle -->
           <ThemeModeButton />
-          <!-- GitHub Link -->
-          <a
-            href="https://github.com/fawney19/Aether"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition"
-            :title="t('common.githubRepository')"
-          >
-            <GithubIcon class="h-4 w-4" />
-          </a>
         </div>
       </header>
     </template>
@@ -515,7 +505,6 @@ import {
   PanelLeftOpen,
 } from 'lucide-vue-next'
 
-import GithubIcon from '@/components/icons/GithubIcon.vue'
 import { prefetchNavigationTarget } from '@/utils/adminNavigationPrefetch'
 import { sanitizeMarkdown } from '@/utils/sanitize'
 import { useI18n, type MessageKey } from '@/i18n'
@@ -1017,7 +1006,7 @@ function showDebugUpdateDialog() {
     current_version: currentVersion,
     latest_version: 'v0.7.0-rc99',
     has_update: true,
-    release_url: 'https://github.com/fawney19/Aether/releases',
+    release_url: 'https://github.com/YorhaL/Aether/releases',
     release_notes: [
       "### What's Changed",
       '- 调整版本更新提示样式',
@@ -1040,7 +1029,7 @@ function showDebugVersionStatus(hasUpdate = true) {
     current_version: currentVersion,
     latest_version: hasUpdate ? 'v0.7.0-rc99' : currentVersion,
     has_update: hasUpdate,
-    release_url: hasUpdate ? 'https://github.com/fawney19/Aether/releases' : null,
+    release_url: hasUpdate ? 'https://github.com/YorhaL/Aether/releases' : null,
     release_notes: hasUpdate
       ? [
         "### What's Changed",

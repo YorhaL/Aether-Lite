@@ -62,7 +62,7 @@ const AETHER_USAGE_QUERY_SCRIPT = [
   '',
   '    return {',
   '      isValid: true,',
-  '      planName: response.plan_name || "Aether",',
+  '      planName: response.plan_name || "Aether Lite",',
   '      remaining: response.remaining,',
   '      used: response.used,',
   '      total: response.total,',
@@ -112,7 +112,7 @@ export function ccSwitchTargetLabel(targetApp: CcSwitchTargetApp): string {
 export function defaultCcSwitchProviderName(
   siteName?: string,
 ): string {
-  return siteName?.trim() || 'Aether'
+  return siteName?.trim() || 'Aether Lite'
 }
 
 function buildCodexToml(baseUrl: string, modelId: string): string {
@@ -123,7 +123,7 @@ function buildCodexToml(baseUrl: string, modelId: string): string {
     'disable_response_storage = true',
     '',
     '[model_providers.aether]',
-    'name = "Aether"',
+    'name = "Aether Lite"',
     `base_url = ${quoteTomlString(aetherV1BaseUrl(baseUrl))}`,
     'wire_api = "responses"',
     'requires_openai_auth = true',

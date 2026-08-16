@@ -317,9 +317,9 @@ pub(crate) async fn build_important_notification_test_payload(
         state.app(),
         item_key,
         ImportantNotification {
-            title: "Aether 通知服务测试".to_string(),
-            markdown_body: "这是一条来自 Aether 的通知服务测试。".to_string(),
-            text_body: "这是一条来自 Aether 的通知服务测试。".to_string(),
+            title: "Aether Lite 通知服务测试".to_string(),
+            markdown_body: "这是一条来自 Aether Lite 的通知服务测试。".to_string(),
+            text_body: "这是一条来自 Aether Lite 的通知服务测试。".to_string(),
         },
         &variables,
         filter,

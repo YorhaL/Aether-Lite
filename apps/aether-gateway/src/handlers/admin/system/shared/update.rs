@@ -539,7 +539,7 @@ async fn download_update_bytes(
         idle_timeout,
         client
             .get(url)
-            .header(reqwest::header::USER_AGENT, "Aether-Gateway update")
+            .header(reqwest::header::USER_AGENT, "Aether-Lite-Gateway update")
             .send(),
     )
     .await
@@ -1129,7 +1129,7 @@ mod tests {
     #[test]
     fn update_validates_download_urls() {
         assert!(validate_update_download_url(
-            "https://github.com/fawney19/Aether/releases/download/v1/aether.tar.gz"
+            "https://github.com/YorhaL/Aether/releases/download/v1/aether.tar.gz"
         )
         .is_ok());
         assert!(validate_update_download_url(
@@ -1137,7 +1137,7 @@ mod tests {
         )
         .is_ok());
         assert!(validate_update_download_url(
-            "http://github.com/fawney19/Aether/releases/download/v1/aether.tar.gz"
+            "http://github.com/YorhaL/Aether/releases/download/v1/aether.tar.gz"
         )
         .is_err());
         assert!(validate_update_download_url("https://example.com/aether.tar.gz").is_err());

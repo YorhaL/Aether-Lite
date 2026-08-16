@@ -695,7 +695,7 @@
 
       <div class="space-y-5">
         <div class="rounded-lg border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
-          选择要配置的 CLI 和目标系统，Aether 会生成 15 分钟内有效的一次性 install code。页面命令不会包含原始 API Key。
+          选择要配置的 CLI 和目标系统，Aether Lite 会生成 15 分钟内有效的一次性 install code。页面命令不会包含原始 API Key。
         </div>
 
         <div class="space-y-2">

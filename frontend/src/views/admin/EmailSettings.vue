@@ -142,7 +142,7 @@
               id="smtp-from-name"
               v-model="emailConfig.smtp_from_name"
               type="text"
-              placeholder="Aether"
+              placeholder="Aether Lite"
               class="mt-1"
             />
             <p class="mt-1 text-xs text-muted-foreground">
@@ -563,7 +563,7 @@ const emailConfig = ref<EmailConfig>({
   smtp_use_tls: true,
   smtp_use_ssl: false,
   smtp_from_email: null,
-  smtp_from_name: 'Aether',
+  smtp_from_name: 'Aether Lite',
   // 注册邮箱限制
   email_suffix_mode: 'none',
   email_suffix_list: [],

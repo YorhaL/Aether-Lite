@@ -4,7 +4,7 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Rust ingress gateway for Aether phase 3a transparent proxy"
+description = "Aether Lite AI gateway"
 
 [features]
 default = []

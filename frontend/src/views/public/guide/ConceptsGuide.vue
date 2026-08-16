@@ -14,7 +14,7 @@ import { BookOpen } from 'lucide-vue-next'
         相关概念
       </h1>
       <p class="text-base text-[#666663] dark:text-[#a3a094] max-w-2xl">
-        深入理解 Aether 运行时的核心模块和层级结构。
+        深入理解 Aether Lite 运行时的核心模块和层级结构。
       </p>
     </div>
 

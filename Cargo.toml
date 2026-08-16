@@ -48,7 +48,7 @@ resolver = "2"
 [workspace.package]
 edition = "2021"
 license = "LicenseRef-Aether-NonCommercial"
-repository = "https://github.com/fawney19/Aether.git"
+repository = "https://github.com/YorhaL/Aether.git"
 
 [workspace.dependencies]
 aether-admin = { path = "crates/aether-admin" }

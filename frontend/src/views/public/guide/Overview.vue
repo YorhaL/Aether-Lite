@@ -20,7 +20,7 @@ const copiedStep = ref<string | null>(null)
 const productionSteps = [
   {
     title: '克隆代码',
-    code: 'git clone https://github.com/fawney19/Aether.git\ncd Aether',
+    code: 'git clone --branch master --single-branch https://github.com/YorhaL/Aether.git\ncd Aether',
     icon: Code
   },
   {
@@ -80,7 +80,7 @@ function copyStep(stepId: string, code: string) {
     <div class="space-y-4">
       <div class="inline-flex items-center gap-1.5 rounded-full bg-[#cc785c]/10 dark:bg-[#cc785c]/20 border border-[#cc785c]/20 dark:border-[#cc785c]/40 px-3 py-1 text-xs font-medium text-[#cc785c] dark:text-[#d4a27f]">
         <Zap class="h-3 w-3" />
-        Aether 官方文档
+        Aether Lite 官方文档
       </div>
       <h1 class="text-3xl font-bold text-[#262624] dark:text-[#f1ead8]">
         快速开始
