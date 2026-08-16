@@ -548,11 +548,12 @@ WHERE provider_priority >= ?
         sqlx::query(
             r#"
 INSERT INTO providers (
-  id, name, description, website, provider_priority, is_active,
-  concurrent_limit, max_retries, request_timeout,
+  id, name, description, website, provider_type, billing_type,
+  provider_priority, is_active, keep_priority_on_conversion,
+  enable_format_conversion, concurrent_limit, max_retries, request_timeout,
   stream_first_byte_timeout, config, created_at, updated_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, 'custom', 'pay_as_you_go', ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)
 "#,
         )
         .bind(&provider.id)
@@ -2465,4 +2466,50 @@ fn map_key_row(row: &SqliteRow) -> Result<StoredProviderCatalogKey, DataLayerErr
         )?;
         Ok::<_, DataLayerError>(key)
     })?
+}
+
+#[cfg(test)]
+mod tests {
+    use aether_data_contracts::repository::provider_catalog::StoredProviderCatalogProvider;
+    use sqlx::Row;
+
+    use super::SqliteProviderCatalogReadRepository;
+
+    #[tokio::test]
+    async fn create_provider_writes_upstream_defaults_for_retained_columns() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("sqlite pool should connect");
+        crate::run_migrations(&pool)
+            .await
+            .expect("sqlite migrations should run");
+
+        let provider = StoredProviderCatalogProvider::new(
+            "provider-lite".to_string(),
+            "Lite Provider".to_string(),
+            None,
+        )
+        .expect("provider should build");
+        SqliteProviderCatalogReadRepository::new(pool.clone())
+            .create_provider(&provider, None)
+            .await
+            .expect("provider should be created");
+
+        let row = sqlx::query(
+            r#"
+SELECT provider_type, billing_type, keep_priority_on_conversion, enable_format_conversion
+FROM providers
+WHERE id = 'provider-lite'
+"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("retained provider columns should load");
+        assert_eq!(row.get::<String, _>("provider_type"), "custom");
+        assert_eq!(row.get::<String, _>("billing_type"), "pay_as_you_go");
+        assert_eq!(row.get::<i64, _>("keep_priority_on_conversion"), 0);
+        assert_eq!(row.get::<i64, _>("enable_format_conversion"), 0);
+    }
 }
