@@ -156,7 +156,7 @@ import { formatCurrency, formatTokens } from '@/utils/format'
 import { getDateRangeFromPeriod } from '@/features/usage/composables'
 import type { DateRangeParams } from '@/features/usage/types'
 
-const timeRange = ref<DateRangeParams>(getDateRangeFromPeriod('last7days'))
+const timeRange = ref<DateRangeParams>(getDateRangeFromPeriod('today'))
 const metric = ref<'requests' | 'tokens' | 'cost'>('requests')
 
 const users = ref<User[]>([])
