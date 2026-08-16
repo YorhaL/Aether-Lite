@@ -1,5 +1,9 @@
 use std::sync::Arc;
 
+use crate::repository::admission::{
+    AdmissionPolicyReadRepository, AdmissionPolicyWriteRepository,
+    PostgresAdmissionPolicyRepository,
+};
 use crate::repository::announcements::{
     AnnouncementReadRepository, AnnouncementWriteRepository, SqlxAnnouncementReadRepository,
 };
@@ -84,6 +88,14 @@ impl PostgresBackend {
 
     pub fn pool_clone(&self) -> PostgresPool {
         self.pool.clone()
+    }
+
+    pub fn admission_policy_read_repository(&self) -> Arc<dyn AdmissionPolicyReadRepository> {
+        Arc::new(PostgresAdmissionPolicyRepository::new(self.pool_clone()))
+    }
+
+    pub fn admission_policy_write_repository(&self) -> Arc<dyn AdmissionPolicyWriteRepository> {
+        Arc::new(PostgresAdmissionPolicyRepository::new(self.pool_clone()))
     }
 
     pub fn auth_api_key_read_repository(&self) -> Arc<dyn AuthApiKeyReadRepository> {

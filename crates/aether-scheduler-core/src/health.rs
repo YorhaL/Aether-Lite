@@ -124,6 +124,18 @@ pub fn count_recent_active_requests_for_api_key(
         .count()
 }
 
+pub fn count_recent_active_requests_for_user(
+    recent_candidates: &[StoredRequestCandidate],
+    user_id: &str,
+    now_unix_secs: u64,
+) -> usize {
+    recent_candidates
+        .iter()
+        .filter(|candidate| candidate.user_id.as_deref() == Some(user_id))
+        .filter(|candidate| is_recently_active(candidate, now_unix_secs))
+        .count()
+}
+
 pub fn effective_provider_key_rpm_limit(
     key: &StoredProviderCatalogKey,
     now_unix_secs: u64,

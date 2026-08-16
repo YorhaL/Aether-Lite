@@ -5,6 +5,7 @@ use std::sync::Arc;
 use super::PostgresBackend;
 #[cfg(feature = "sqlite")]
 use super::SqliteBackend;
+use crate::repository::admission::AdmissionPolicyReadRepository;
 use crate::repository::announcements::AnnouncementReadRepository;
 use crate::repository::audit::AuditLogReadRepository;
 use crate::repository::auth::AuthApiKeyReadRepository;
@@ -26,6 +27,7 @@ use crate::repository::wallet::WalletReadRepository;
 
 #[derive(Clone, Default)]
 pub struct DataReadRepositories {
+    admission_policies: Option<Arc<dyn AdmissionPolicyReadRepository>>,
     announcements: Option<Arc<dyn AnnouncementReadRepository>>,
     audit_logs: Option<Arc<dyn AuditLogReadRepository>>,
     auth_api_keys: Option<Arc<dyn AuthApiKeyReadRepository>>,
@@ -49,6 +51,7 @@ pub struct DataReadRepositories {
 impl fmt::Debug for DataReadRepositories {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DataReadRepositories")
+            .field("has_admission_policies", &self.admission_policies.is_some())
             .field("has_auth_api_keys", &self.auth_api_keys.is_some())
             .field("has_announcements", &self.announcements.is_some())
             .field("has_audit_logs", &self.audit_logs.is_some())
@@ -96,6 +99,10 @@ impl DataReadRepositories {
 
     #[cfg(feature = "postgres")]
     fn install_postgres(&mut self, backend: &PostgresBackend) {
+        if self.admission_policies.is_none() {
+            self.admission_policies =
+                Some(PostgresBackend::admission_policy_read_repository(backend));
+        }
         if self.announcements.is_none() {
             self.announcements = Some(PostgresBackend::announcement_read_repository(backend));
         }
@@ -160,6 +167,10 @@ impl DataReadRepositories {
 
     #[cfg(feature = "sqlite")]
     fn install_sqlite(&mut self, backend: &SqliteBackend) {
+        if self.admission_policies.is_none() {
+            self.admission_policies =
+                Some(SqliteBackend::admission_policy_read_repository(backend));
+        }
         if self.announcements.is_none() {
             self.announcements = Some(SqliteBackend::announcement_read_repository(backend));
         }
@@ -227,6 +238,10 @@ impl DataReadRepositories {
             #[cfg(feature = "sqlite")]
             None,
         )
+    }
+
+    pub fn admission_policies(&self) -> Option<Arc<dyn AdmissionPolicyReadRepository>> {
+        self.admission_policies.clone()
     }
 
     pub fn auth_api_keys(&self) -> Option<Arc<dyn AuthApiKeyReadRepository>> {
@@ -304,7 +319,8 @@ impl DataReadRepositories {
     }
 
     pub fn has_any(&self) -> bool {
-        self.auth_api_keys.is_some()
+        self.admission_policies.is_some()
+            || self.auth_api_keys.is_some()
             || self.announcements.is_some()
             || self.audit_logs.is_some()
             || self.auth_modules.is_some()

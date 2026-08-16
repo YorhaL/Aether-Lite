@@ -64,8 +64,6 @@ const SCHEDULER_AFFECTING_SYSTEM_CONFIG_KEYS: &[&str] =
     &["provider_priority_mode", "scheduling_mode"];
 const AUTH_AFFECTING_SYSTEM_CONFIG_KEYS: &[&str] =
     &[crate::constants::DEFAULT_USER_GROUP_CONFIG_KEY];
-const FRONTDOOR_RPM_AFFECTING_SYSTEM_CONFIG_KEYS: &[&str] = &["rate_limit_per_minute"];
-const FRONTDOOR_DAILY_USAGE_AFFECTING_SYSTEM_CONFIG_KEYS: &[&str] = &["daily_usage_limit_usd"];
 const CHAT_PII_REDACTION_SYSTEM_CONFIG_PREFIX: &str = "module.chat_pii_redaction.";
 const METRIC_SNAPSHOT_REFRESH_TIMEOUT: Duration = Duration::from_secs(4);
 const METRIC_SNAPSHOT_PREWARM_TIMEOUT: Duration = Duration::from_secs(12);
@@ -107,16 +105,6 @@ fn system_config_key_affects_scheduler(key: &str) -> bool {
 fn system_config_key_affects_auth(key: &str) -> bool {
     let key = key.trim();
     AUTH_AFFECTING_SYSTEM_CONFIG_KEYS.contains(&key)
-}
-
-fn system_config_key_affects_frontdoor_rpm(key: &str) -> bool {
-    let key = key.trim();
-    FRONTDOOR_RPM_AFFECTING_SYSTEM_CONFIG_KEYS.contains(&key)
-}
-
-fn system_config_key_affects_frontdoor_daily_usage(key: &str) -> bool {
-    let key = key.trim();
-    FRONTDOOR_DAILY_USAGE_AFFECTING_SYSTEM_CONFIG_KEYS.contains(&key)
 }
 
 fn system_config_key_affects_chat_pii_redaction(key: &str) -> bool {
@@ -230,12 +218,6 @@ impl AppState {
         self.candidate_row_page_cache.clear();
         self.candidate_resolved_page_cache.clear();
         self.system_config_cache.clear();
-        self.frontdoor_limiters
-            .user_rpm
-            .clear_system_default_cache();
-        self.frontdoor_limiters
-            .daily_usage
-            .clear_system_default_cache();
         let data = Arc::new(
             (*data)
                 .clone()
@@ -806,16 +788,6 @@ impl AppState {
         if deleted && system_config_key_affects_auth(key) {
             self.invalidate_auth_context_cache();
         }
-        if deleted && system_config_key_affects_frontdoor_rpm(key) {
-            self.frontdoor_limiters
-                .user_rpm
-                .clear_system_default_cache();
-        }
-        if deleted && system_config_key_affects_frontdoor_daily_usage(key) {
-            self.frontdoor_limiters
-                .daily_usage
-                .clear_system_default_cache();
-        }
         if deleted && system_config_key_affects_chat_pii_redaction(key) {
             crate::privacy::clear_chat_pii_redaction_runtime_config_cache(
                 &self.chat_pii_redaction_runtime_config_cache,
@@ -890,16 +862,6 @@ impl AppState {
         if system_config_key_affects_auth(key) {
             self.invalidate_auth_context_cache();
         }
-        if system_config_key_affects_frontdoor_rpm(key) {
-            self.frontdoor_limiters
-                .user_rpm
-                .clear_system_default_cache();
-        }
-        if system_config_key_affects_frontdoor_daily_usage(key) {
-            self.frontdoor_limiters
-                .daily_usage
-                .clear_system_default_cache();
-        }
         if system_config_key_affects_chat_pii_redaction(key) {
             crate::privacy::clear_chat_pii_redaction_runtime_config_cache(
                 &self.chat_pii_redaction_runtime_config_cache,
@@ -934,6 +896,13 @@ impl AppState {
         ) {
             self.system_config_cache.clear();
             self.invalidate_provider_routing_caches();
+        }
+        if matches!(
+            target,
+            aether_data::repository::system::AdminSystemPurgeTarget::Config
+                | aether_data::repository::system::AdminSystemPurgeTarget::Users
+        ) {
+            self.invalidate_auth_context_cache();
         }
         Ok(summary)
     }

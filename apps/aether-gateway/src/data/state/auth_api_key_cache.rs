@@ -479,8 +479,6 @@ mod tests {
             true,
             false,
             false,
-            Some(60),
-            Some(5),
             Some(200),
             Some(serde_json::json!(["openai"])),
             Some(serde_json::json!(["openai:chat"])),

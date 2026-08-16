@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use futures_util::{stream::TryStream, TryStreamExt};
-use sqlx::{postgres::PgRow, PgPool, Postgres, Row, Transaction};
+use sqlx::{postgres::PgRow, PgPool, Row};
 
 use aether_data_contracts::repository::auth::{
     AuthApiKeyExportSummary, AuthApiKeyLookupKey, AuthApiKeyReadRepository,
@@ -21,7 +21,6 @@ SELECT
   users.auth_source::text AS user_auth_source,
   users.is_active AS user_is_active,
   users.is_deleted AS user_is_deleted,
-  users.rate_limit AS user_rate_limit,
   users.allowed_providers AS user_allowed_providers,
   users.allowed_api_formats AS user_allowed_api_formats,
   users.allowed_models AS user_allowed_models,
@@ -30,10 +29,6 @@ SELECT
   api_keys.is_active AS api_key_is_active,
   api_keys.is_locked AS api_key_is_locked,
   api_keys.is_standalone AS api_key_is_standalone,
-  api_keys.rate_limit AS api_key_rate_limit,
-  (SELECT daily_usage_limit_usd FROM aether_lite.api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS api_key_daily_usage_limit_usd,
-  api_keys.concurrent_limit AS api_key_concurrent_limit,
   CAST(EXTRACT(EPOCH FROM api_keys.expires_at) AS BIGINT) AS api_key_expires_at_unix_secs,
   api_keys.allowed_providers AS api_key_allowed_providers,
   api_keys.allowed_api_formats AS api_key_allowed_api_formats,
@@ -54,7 +49,6 @@ SELECT
   users.auth_source::text AS user_auth_source,
   users.is_active AS user_is_active,
   users.is_deleted AS user_is_deleted,
-  users.rate_limit AS user_rate_limit,
   users.allowed_providers AS user_allowed_providers,
   users.allowed_api_formats AS user_allowed_api_formats,
   users.allowed_models AS user_allowed_models,
@@ -63,10 +57,6 @@ SELECT
   api_keys.is_active AS api_key_is_active,
   api_keys.is_locked AS api_key_is_locked,
   api_keys.is_standalone AS api_key_is_standalone,
-  api_keys.rate_limit AS api_key_rate_limit,
-  (SELECT daily_usage_limit_usd FROM aether_lite.api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS api_key_daily_usage_limit_usd,
-  api_keys.concurrent_limit AS api_key_concurrent_limit,
   CAST(EXTRACT(EPOCH FROM api_keys.expires_at) AS BIGINT) AS api_key_expires_at_unix_secs,
   api_keys.allowed_providers AS api_key_allowed_providers,
   api_keys.allowed_api_formats AS api_key_allowed_api_formats,
@@ -87,7 +77,6 @@ SELECT
   users.auth_source::text AS user_auth_source,
   users.is_active AS user_is_active,
   users.is_deleted AS user_is_deleted,
-  users.rate_limit AS user_rate_limit,
   users.allowed_providers AS user_allowed_providers,
   users.allowed_api_formats AS user_allowed_api_formats,
   users.allowed_models AS user_allowed_models,
@@ -96,10 +85,6 @@ SELECT
   api_keys.is_active AS api_key_is_active,
   api_keys.is_locked AS api_key_is_locked,
   api_keys.is_standalone AS api_key_is_standalone,
-  api_keys.rate_limit AS api_key_rate_limit,
-  (SELECT daily_usage_limit_usd FROM aether_lite.api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS api_key_daily_usage_limit_usd,
-  api_keys.concurrent_limit AS api_key_concurrent_limit,
   CAST(EXTRACT(EPOCH FROM api_keys.expires_at) AS BIGINT) AS api_key_expires_at_unix_secs,
   api_keys.allowed_providers AS api_key_allowed_providers,
   api_keys.allowed_api_formats AS api_key_allowed_api_formats,
@@ -120,7 +105,6 @@ SELECT
   users.auth_source::text AS user_auth_source,
   users.is_active AS user_is_active,
   users.is_deleted AS user_is_deleted,
-  users.rate_limit AS user_rate_limit,
   users.allowed_providers AS user_allowed_providers,
   users.allowed_api_formats AS user_allowed_api_formats,
   users.allowed_models AS user_allowed_models,
@@ -129,10 +113,6 @@ SELECT
   api_keys.is_active AS api_key_is_active,
   api_keys.is_locked AS api_key_is_locked,
   api_keys.is_standalone AS api_key_is_standalone,
-  api_keys.rate_limit AS api_key_rate_limit,
-  (SELECT daily_usage_limit_usd FROM aether_lite.api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS api_key_daily_usage_limit_usd,
-  api_keys.concurrent_limit AS api_key_concurrent_limit,
   CAST(EXTRACT(EPOCH FROM api_keys.expires_at) AS BIGINT) AS api_key_expires_at_unix_secs,
   api_keys.allowed_providers AS api_key_allowed_providers,
   api_keys.allowed_api_formats AS api_key_allowed_api_formats,
@@ -155,10 +135,9 @@ SELECT
   api_keys.allowed_api_formats,
   api_keys.allowed_models,
   api_keys.ip_rules,
-  api_keys.rate_limit,
-  (SELECT daily_usage_limit_usd FROM aether_lite.api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS daily_usage_limit_usd,
-  api_keys.concurrent_limit,
+  NULL::INTEGER AS rate_limit,
+  NULL::DOUBLE PRECISION AS daily_usage_limit_usd,
+  NULL::INTEGER AS concurrent_limit,
   api_keys.force_capabilities,
   api_keys.feature_settings,
   api_keys.is_active,
@@ -188,10 +167,9 @@ SELECT
   api_keys.allowed_api_formats,
   api_keys.allowed_models,
   api_keys.ip_rules,
-  api_keys.rate_limit,
-  (SELECT daily_usage_limit_usd FROM aether_lite.api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS daily_usage_limit_usd,
-  api_keys.concurrent_limit,
+  NULL::INTEGER AS rate_limit,
+  NULL::DOUBLE PRECISION AS daily_usage_limit_usd,
+  NULL::INTEGER AS concurrent_limit,
   api_keys.force_capabilities,
   api_keys.feature_settings,
   api_keys.is_active,
@@ -220,10 +198,9 @@ SELECT
   api_keys.allowed_api_formats,
   api_keys.allowed_models,
   api_keys.ip_rules,
-  api_keys.rate_limit,
-  (SELECT daily_usage_limit_usd FROM aether_lite.api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS daily_usage_limit_usd,
-  api_keys.concurrent_limit,
+  NULL::INTEGER AS rate_limit,
+  NULL::DOUBLE PRECISION AS daily_usage_limit_usd,
+  NULL::INTEGER AS concurrent_limit,
   api_keys.force_capabilities,
   api_keys.feature_settings,
   api_keys.is_active,
@@ -252,10 +229,9 @@ SELECT
   api_keys.allowed_api_formats,
   api_keys.allowed_models,
   api_keys.ip_rules,
-  api_keys.rate_limit,
-  (SELECT daily_usage_limit_usd FROM aether_lite.api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS daily_usage_limit_usd,
-  api_keys.concurrent_limit,
+  NULL::INTEGER AS rate_limit,
+  NULL::DOUBLE PRECISION AS daily_usage_limit_usd,
+  NULL::INTEGER AS concurrent_limit,
   api_keys.force_capabilities,
   api_keys.feature_settings,
   api_keys.is_active,
@@ -284,10 +260,9 @@ SELECT
   api_keys.allowed_api_formats,
   api_keys.allowed_models,
   api_keys.ip_rules,
-  api_keys.rate_limit,
-  (SELECT daily_usage_limit_usd FROM aether_lite.api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS daily_usage_limit_usd,
-  api_keys.concurrent_limit,
+  NULL::INTEGER AS rate_limit,
+  NULL::DOUBLE PRECISION AS daily_usage_limit_usd,
+  NULL::INTEGER AS concurrent_limit,
   api_keys.force_capabilities,
   api_keys.feature_settings,
   api_keys.is_active,
@@ -360,10 +335,9 @@ SELECT
   api_keys.allowed_api_formats,
   api_keys.allowed_models,
   api_keys.ip_rules,
-  api_keys.rate_limit,
-  (SELECT daily_usage_limit_usd FROM aether_lite.api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS daily_usage_limit_usd,
-  api_keys.concurrent_limit,
+  NULL::INTEGER AS rate_limit,
+  NULL::DOUBLE PRECISION AS daily_usage_limit_usd,
+  NULL::INTEGER AS concurrent_limit,
   api_keys.force_capabilities,
   api_keys.feature_settings,
   api_keys.is_active,
@@ -399,8 +373,6 @@ INSERT INTO api_keys (
   allowed_api_formats,
   allowed_models,
   ip_rules,
-  rate_limit,
-  concurrent_limit,
   force_capabilities,
   feature_settings,
   is_active,
@@ -425,17 +397,15 @@ VALUES (
   $8,
   $9,
   $10,
+  NULL,
   $11,
   $12,
-  NULL,
   $13,
+  FALSE,
+  FALSE,
   $14,
   $15,
-  FALSE,
-  FALSE,
   $16,
-  $17,
-  $18,
   NOW(),
   NOW()
 )
@@ -449,8 +419,9 @@ RETURNING
   allowed_api_formats,
   allowed_models,
   ip_rules,
-  rate_limit,
-  concurrent_limit,
+  NULL::INTEGER AS rate_limit,
+  NULL::DOUBLE PRECISION AS daily_usage_limit_usd,
+  NULL::INTEGER AS concurrent_limit,
   force_capabilities,
   feature_settings,
   is_active,
@@ -476,10 +447,6 @@ INSERT INTO api_keys (
   allowed_api_formats,
   allowed_models,
   ip_rules,
-  rate_limit,
-  (SELECT daily_usage_limit_usd FROM aether_lite.api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS daily_usage_limit_usd,
-  concurrent_limit,
   force_capabilities,
   feature_settings,
   is_active,
@@ -504,17 +471,15 @@ VALUES (
   $8,
   $9,
   $10,
+  NULL,
   $11,
   $12,
-  NULL,
   $13,
-  $14,
-  $15,
   FALSE,
   TRUE,
+  $14,
+  $15,
   $16,
-  $17,
-  $18,
   NOW(),
   NOW()
 )
@@ -528,10 +493,9 @@ RETURNING
   allowed_api_formats,
   allowed_models,
   ip_rules,
-  rate_limit,
-  (SELECT daily_usage_limit_usd FROM aether_lite.api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS daily_usage_limit_usd,
-  concurrent_limit,
+  NULL::INTEGER AS rate_limit,
+  NULL::DOUBLE PRECISION AS daily_usage_limit_usd,
+  NULL::INTEGER AS concurrent_limit,
   force_capabilities,
   feature_settings,
   is_active,
@@ -550,9 +514,7 @@ const UPDATE_USER_API_KEY_BASIC_SQL: &str = r#"
 UPDATE api_keys
 SET
   name = COALESCE($3, name),
-  rate_limit = COALESCE($4, rate_limit),
-  concurrent_limit = COALESCE($5, concurrent_limit),
-  ip_rules = CASE WHEN $6 THEN $7::jsonb ELSE ip_rules END,
+  ip_rules = CASE WHEN $4 THEN $5::jsonb ELSE ip_rules END,
   updated_at = NOW()
 WHERE user_id = $1
   AND id = $2
@@ -567,10 +529,9 @@ RETURNING
   allowed_api_formats,
   allowed_models,
   ip_rules,
-  rate_limit,
-  (SELECT daily_usage_limit_usd FROM aether_lite.api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS daily_usage_limit_usd,
-  concurrent_limit,
+  NULL::INTEGER AS rate_limit,
+  NULL::DOUBLE PRECISION AS daily_usage_limit_usd,
+  NULL::INTEGER AS concurrent_limit,
   force_capabilities,
   feature_settings,
   is_active,
@@ -589,14 +550,12 @@ const UPDATE_STANDALONE_API_KEY_BASIC_SQL: &str = r#"
 UPDATE api_keys
 SET
   name = COALESCE($2, name),
-  rate_limit = CASE WHEN $3 THEN $4 ELSE rate_limit END,
-  concurrent_limit = CASE WHEN $5 THEN $6 ELSE concurrent_limit END,
-  allowed_providers = CASE WHEN $7 THEN $8::json ELSE allowed_providers END,
-  allowed_api_formats = CASE WHEN $9 THEN $10::json ELSE allowed_api_formats END,
-  allowed_models = CASE WHEN $11 THEN $12::json ELSE allowed_models END,
-  ip_rules = CASE WHEN $13 THEN $14::jsonb ELSE ip_rules END,
-  expires_at = CASE WHEN $15 THEN $16::timestamptz ELSE expires_at END,
-  auto_delete_on_expiry = CASE WHEN $17 THEN $18 ELSE auto_delete_on_expiry END,
+  allowed_providers = CASE WHEN $3 THEN $4::json ELSE allowed_providers END,
+  allowed_api_formats = CASE WHEN $5 THEN $6::json ELSE allowed_api_formats END,
+  allowed_models = CASE WHEN $7 THEN $8::json ELSE allowed_models END,
+  ip_rules = CASE WHEN $9 THEN $10::jsonb ELSE ip_rules END,
+  expires_at = CASE WHEN $11 THEN $12::timestamptz ELSE expires_at END,
+  auto_delete_on_expiry = CASE WHEN $13 THEN $14 ELSE auto_delete_on_expiry END,
   updated_at = NOW()
 WHERE id = $1
   AND is_standalone = TRUE
@@ -610,10 +569,9 @@ RETURNING
   allowed_api_formats,
   allowed_models,
   ip_rules,
-  rate_limit,
-  (SELECT daily_usage_limit_usd FROM aether_lite.api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS daily_usage_limit_usd,
-  concurrent_limit,
+  NULL::INTEGER AS rate_limit,
+  NULL::DOUBLE PRECISION AS daily_usage_limit_usd,
+  NULL::INTEGER AS concurrent_limit,
   force_capabilities,
   feature_settings,
   is_active,
@@ -646,10 +604,9 @@ RETURNING
   allowed_api_formats,
   allowed_models,
   ip_rules,
-  rate_limit,
-  (SELECT daily_usage_limit_usd FROM aether_lite.api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS daily_usage_limit_usd,
-  concurrent_limit,
+  NULL::INTEGER AS rate_limit,
+  NULL::DOUBLE PRECISION AS daily_usage_limit_usd,
+  NULL::INTEGER AS concurrent_limit,
   force_capabilities,
   feature_settings,
   is_active,
@@ -681,10 +638,9 @@ RETURNING
   allowed_api_formats,
   allowed_models,
   ip_rules,
-  rate_limit,
-  (SELECT daily_usage_limit_usd FROM aether_lite.api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS daily_usage_limit_usd,
-  concurrent_limit,
+  NULL::INTEGER AS rate_limit,
+  NULL::DOUBLE PRECISION AS daily_usage_limit_usd,
+  NULL::INTEGER AS concurrent_limit,
   force_capabilities,
   feature_settings,
   is_active,
@@ -717,10 +673,9 @@ RETURNING
   allowed_api_formats,
   allowed_models,
   ip_rules,
-  rate_limit,
-  (SELECT daily_usage_limit_usd FROM aether_lite.api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS daily_usage_limit_usd,
-  concurrent_limit,
+  NULL::INTEGER AS rate_limit,
+  NULL::DOUBLE PRECISION AS daily_usage_limit_usd,
+  NULL::INTEGER AS concurrent_limit,
   force_capabilities,
   feature_settings,
   is_active,
@@ -763,10 +718,9 @@ RETURNING
   allowed_api_formats,
   allowed_models,
   ip_rules,
-  rate_limit,
-  (SELECT daily_usage_limit_usd FROM aether_lite.api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS daily_usage_limit_usd,
-  concurrent_limit,
+  NULL::INTEGER AS rate_limit,
+  NULL::DOUBLE PRECISION AS daily_usage_limit_usd,
+  NULL::INTEGER AS concurrent_limit,
   force_capabilities,
   feature_settings,
   is_active,
@@ -798,10 +752,9 @@ RETURNING
   allowed_providers,
   allowed_api_formats,
   allowed_models,
-  rate_limit,
-  (SELECT daily_usage_limit_usd FROM aether_lite.api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS daily_usage_limit_usd,
-  concurrent_limit,
+  NULL::INTEGER AS rate_limit,
+  NULL::DOUBLE PRECISION AS daily_usage_limit_usd,
+  NULL::INTEGER AS concurrent_limit,
   force_capabilities,
   feature_settings,
   is_active,
@@ -1201,7 +1154,6 @@ impl AuthApiKeyWriteRepository for SqlxAuthApiKeySnapshotReadRepository {
         record: CreateUserApiKeyRecord,
     ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
         let api_key_id = record.api_key_id.clone();
-        let daily_usage_limit_usd = record.daily_usage_limit_usd;
         let allowed_providers = record
             .allowed_providers
             .map(serde_json::to_value)
@@ -1241,8 +1193,6 @@ impl AuthApiKeyWriteRepository for SqlxAuthApiKeySnapshotReadRepository {
             .bind(allowed_api_formats)
             .bind(allowed_models)
             .bind(ip_rules)
-            .bind(record.rate_limit)
-            .bind(record.concurrent_limit)
             .bind(record.force_capabilities)
             .bind(record.is_active)
             .bind(expires_at)
@@ -1253,10 +1203,6 @@ impl AuthApiKeyWriteRepository for SqlxAuthApiKeySnapshotReadRepository {
             .fetch_optional(&mut *tx)
             .await
             .map_postgres_err()?;
-        if row.is_some() {
-            set_postgres_api_key_daily_usage_limit(&mut tx, &api_key_id, daily_usage_limit_usd)
-                .await?;
-        }
         tx.commit().await.map_err(postgres_error)?;
         if row.is_none() {
             return Ok(None);
@@ -1269,7 +1215,6 @@ impl AuthApiKeyWriteRepository for SqlxAuthApiKeySnapshotReadRepository {
         record: CreateStandaloneApiKeyRecord,
     ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
         let api_key_id = record.api_key_id.clone();
-        let daily_usage_limit_usd = record.daily_usage_limit_usd;
         let allowed_providers = record
             .allowed_providers
             .map(serde_json::to_value)
@@ -1309,8 +1254,6 @@ impl AuthApiKeyWriteRepository for SqlxAuthApiKeySnapshotReadRepository {
             .bind(allowed_api_formats)
             .bind(allowed_models)
             .bind(ip_rules)
-            .bind(record.rate_limit)
-            .bind(record.concurrent_limit)
             .bind(record.force_capabilities)
             .bind(record.is_active)
             .bind(expires_at)
@@ -1321,10 +1264,6 @@ impl AuthApiKeyWriteRepository for SqlxAuthApiKeySnapshotReadRepository {
             .fetch_optional(&mut *tx)
             .await
             .map_postgres_err()?;
-        if row.is_some() {
-            set_postgres_api_key_daily_usage_limit(&mut tx, &api_key_id, daily_usage_limit_usd)
-                .await?;
-        }
         tx.commit().await.map_err(postgres_error)?;
         if row.is_none() {
             return Ok(None);
@@ -1337,8 +1276,6 @@ impl AuthApiKeyWriteRepository for SqlxAuthApiKeySnapshotReadRepository {
         record: UpdateUserApiKeyBasicRecord,
     ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
         let api_key_id = record.api_key_id.clone();
-        let daily_usage_limit_present = record.daily_usage_limit_present;
-        let daily_usage_limit_usd = record.daily_usage_limit_usd;
         let ip_rules = record
             .ip_rules
             .clone()
@@ -1351,17 +1288,11 @@ impl AuthApiKeyWriteRepository for SqlxAuthApiKeySnapshotReadRepository {
             .bind(record.user_id)
             .bind(record.api_key_id)
             .bind(record.name)
-            .bind(record.rate_limit)
-            .bind(record.concurrent_limit)
             .bind(record.ip_rules.is_some())
             .bind(ip_rules)
             .fetch_optional(&mut *tx)
             .await
             .map_postgres_err()?;
-        if row.is_some() && daily_usage_limit_present {
-            set_postgres_api_key_daily_usage_limit(&mut tx, &api_key_id, daily_usage_limit_usd)
-                .await?;
-        }
         tx.commit().await.map_err(postgres_error)?;
         if row.is_none() {
             return Ok(None);
@@ -1374,8 +1305,6 @@ impl AuthApiKeyWriteRepository for SqlxAuthApiKeySnapshotReadRepository {
         record: UpdateStandaloneApiKeyBasicRecord,
     ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
         let api_key_id = record.api_key_id.clone();
-        let daily_usage_limit_present = record.daily_usage_limit_present;
-        let daily_usage_limit_usd = record.daily_usage_limit_usd;
         let allowed_providers = record
             .allowed_providers
             .clone()
@@ -1416,10 +1345,6 @@ impl AuthApiKeyWriteRepository for SqlxAuthApiKeySnapshotReadRepository {
         let row = sqlx::query(UPDATE_STANDALONE_API_KEY_BASIC_SQL)
             .bind(record.api_key_id)
             .bind(record.name)
-            .bind(record.rate_limit_present)
-            .bind(record.rate_limit)
-            .bind(record.concurrent_limit_present)
-            .bind(record.concurrent_limit)
             .bind(record.allowed_providers.is_some())
             .bind(allowed_providers)
             .bind(record.allowed_api_formats.is_some())
@@ -1435,10 +1360,6 @@ impl AuthApiKeyWriteRepository for SqlxAuthApiKeySnapshotReadRepository {
             .fetch_optional(&mut *tx)
             .await
             .map_postgres_err()?;
-        if row.is_some() && daily_usage_limit_present {
-            set_postgres_api_key_daily_usage_limit(&mut tx, &api_key_id, daily_usage_limit_usd)
-                .await?;
-        }
         tx.commit().await.map_err(postgres_error)?;
         if row.is_none() {
             return Ok(None);
@@ -1587,13 +1508,6 @@ impl AuthApiKeyWriteRepository for SqlxAuthApiKeySnapshotReadRepository {
             .execute(&mut *tx)
             .await
             .map_postgres_err()?;
-        if result.rows_affected() > 0 {
-            sqlx::query("DELETE FROM aether_lite.api_key_daily_usage_limits WHERE api_key_id = $1")
-                .bind(api_key_id)
-                .execute(&mut *tx)
-                .await
-                .map_postgres_err()?;
-        }
         tx.commit().await.map_err(postgres_error)?;
         Ok(result.rows_affected() > 0)
     }
@@ -1632,45 +1546,9 @@ impl AuthApiKeyWriteRepository for SqlxAuthApiKeySnapshotReadRepository {
             .execute(&mut *tx)
             .await
             .map_postgres_err()?;
-        if result.rows_affected() > 0 {
-            sqlx::query("DELETE FROM aether_lite.api_key_daily_usage_limits WHERE api_key_id = $1")
-                .bind(api_key_id)
-                .execute(&mut *tx)
-                .await
-                .map_postgres_err()?;
-        }
         tx.commit().await.map_err(postgres_error)?;
         Ok(result.rows_affected() > 0)
     }
-}
-
-async fn set_postgres_api_key_daily_usage_limit(
-    tx: &mut Transaction<'_, Postgres>,
-    api_key_id: &str,
-    daily_usage_limit_usd: Option<f64>,
-) -> Result<(), DataLayerError> {
-    if let Some(limit) = daily_usage_limit_usd {
-        sqlx::query(
-            r#"
-INSERT INTO aether_lite.api_key_daily_usage_limits (api_key_id, daily_usage_limit_usd)
-VALUES ($1, $2)
-ON CONFLICT (api_key_id) DO UPDATE
-SET daily_usage_limit_usd = EXCLUDED.daily_usage_limit_usd
-"#,
-        )
-        .bind(api_key_id)
-        .bind(limit)
-        .execute(&mut **tx)
-        .await
-        .map_postgres_err()?;
-    } else {
-        sqlx::query("DELETE FROM aether_lite.api_key_daily_usage_limits WHERE api_key_id = $1")
-            .bind(api_key_id)
-            .execute(&mut **tx)
-            .await
-            .map_postgres_err()?;
-    }
-    Ok(())
 }
 
 fn row_get<T>(row: &sqlx::postgres::PgRow, column: &str) -> Result<T, DataLayerError>
@@ -1699,17 +1577,13 @@ fn map_auth_api_key_snapshot_row(
         row_get(row, "api_key_is_active")?,
         row_get(row, "api_key_is_locked")?,
         row_get(row, "api_key_is_standalone")?,
-        row_get(row, "api_key_rate_limit")?,
-        row_get(row, "api_key_concurrent_limit")?,
         row_get(row, "api_key_expires_at_unix_secs")?,
         row_get(row, "api_key_allowed_providers")?,
         row_get(row, "api_key_allowed_api_formats")?,
         row_get(row, "api_key_allowed_models")?,
     )?
     .with_api_key_ip_rules(row_get(row, "api_key_ip_rules")?)?;
-    Ok(snapshot
-        .with_user_rate_limit(row_get(row, "user_rate_limit")?)
-        .with_daily_usage_limits(None, row_get(row, "api_key_daily_usage_limit_usd")?))
+    Ok(snapshot)
 }
 
 fn map_auth_api_key_export_row(
@@ -1764,40 +1638,38 @@ mod tests {
         assert!(CREATE_USER_API_KEY_SQL
             .contains("expires_at,\n  auto_delete_on_expiry,\n  is_locked,\n  is_standalone,"));
         assert!(
-            CREATE_USER_API_KEY_SQL.contains("$13,\n  $14,\n  $15,\n  FALSE,\n  FALSE,\n  $16,")
+            CREATE_USER_API_KEY_SQL.contains("$11,\n  $12,\n  $13,\n  FALSE,\n  FALSE,\n  $14,")
         );
         assert!(CREATE_STANDALONE_API_KEY_SQL
             .contains("expires_at,\n  auto_delete_on_expiry,\n  is_locked,\n  is_standalone,"));
         assert!(CREATE_STANDALONE_API_KEY_SQL
-            .contains("$13,\n  $14,\n  $15,\n  FALSE,\n  TRUE,\n  $16,"));
+            .contains("$11,\n  $12,\n  $13,\n  FALSE,\n  TRUE,\n  $14,"));
     }
 
     #[test]
     fn update_standalone_api_key_basic_sql_casts_json_case_values() {
+        assert!(!UPDATE_STANDALONE_API_KEY_BASIC_SQL.contains("concurrent_limit ="));
         assert!(UPDATE_STANDALONE_API_KEY_BASIC_SQL
-            .contains("concurrent_limit = CASE WHEN $5 THEN $6 ELSE concurrent_limit END"));
-        assert!(UPDATE_STANDALONE_API_KEY_BASIC_SQL
-            .contains("allowed_providers = CASE WHEN $7 THEN $8::json ELSE allowed_providers END"));
+            .contains("allowed_providers = CASE WHEN $3 THEN $4::json ELSE allowed_providers END"));
         assert!(UPDATE_STANDALONE_API_KEY_BASIC_SQL.contains(
-            "allowed_api_formats = CASE WHEN $9 THEN $10::json ELSE allowed_api_formats END"
+            "allowed_api_formats = CASE WHEN $5 THEN $6::json ELSE allowed_api_formats END"
         ));
         assert!(UPDATE_STANDALONE_API_KEY_BASIC_SQL
-            .contains("allowed_models = CASE WHEN $11 THEN $12::json ELSE allowed_models END"));
+            .contains("allowed_models = CASE WHEN $7 THEN $8::json ELSE allowed_models END"));
         assert!(UPDATE_STANDALONE_API_KEY_BASIC_SQL
-            .contains("ip_rules = CASE WHEN $13 THEN $14::jsonb ELSE ip_rules END"));
+            .contains("ip_rules = CASE WHEN $9 THEN $10::jsonb ELSE ip_rules END"));
+        assert!(!UPDATE_STANDALONE_API_KEY_BASIC_SQL.contains("rate_limit ="));
         assert!(UPDATE_STANDALONE_API_KEY_BASIC_SQL
-            .contains("rate_limit = CASE WHEN $3 THEN $4 ELSE rate_limit END"));
-        assert!(UPDATE_STANDALONE_API_KEY_BASIC_SQL
-            .contains("expires_at = CASE WHEN $15 THEN $16::timestamptz ELSE expires_at END"));
+            .contains("expires_at = CASE WHEN $11 THEN $12::timestamptz ELSE expires_at END"));
         assert!(UPDATE_STANDALONE_API_KEY_BASIC_SQL.contains(
-            "auto_delete_on_expiry = CASE WHEN $17 THEN $18 ELSE auto_delete_on_expiry END"
+            "auto_delete_on_expiry = CASE WHEN $13 THEN $14 ELSE auto_delete_on_expiry END"
         ));
     }
 
     #[test]
     fn update_user_api_key_basic_sql_casts_ip_rules_as_jsonb() {
         assert!(UPDATE_USER_API_KEY_BASIC_SQL
-            .contains("ip_rules = CASE WHEN $6 THEN $7::jsonb ELSE ip_rules END"));
+            .contains("ip_rules = CASE WHEN $4 THEN $5::jsonb ELSE ip_rules END"));
     }
 
     #[tokio::test]

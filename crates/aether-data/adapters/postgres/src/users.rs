@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use futures_util::TryStreamExt;
-use sqlx::{PgPool, Postgres, QueryBuilder, Row, Transaction};
+use sqlx::{PgPool, Postgres, QueryBuilder, Row};
 
 use aether_data_contracts::repository::users::{
     normalize_user_group_name, LdapAuthUserProvisioningOutcome, StoredUserAuthRecord,
@@ -55,8 +55,8 @@ SELECT
   allowed_api_formats_mode,
   allowed_models,
   allowed_models_mode,
-  rate_limit,
-  rate_limit_mode,
+  NULL::INTEGER AS rate_limit,
+  'inherit'::text AS rate_limit_mode,
   model_capability_settings,
   feature_settings,
   is_active
@@ -81,8 +81,8 @@ SELECT
   allowed_api_formats_mode,
   allowed_models,
   allowed_models_mode,
-  rate_limit,
-  rate_limit_mode,
+  NULL::INTEGER AS rate_limit,
+  'inherit'::text AS rate_limit_mode,
   model_capability_settings,
   feature_settings,
   is_active
@@ -106,8 +106,8 @@ SELECT
   allowed_api_formats_mode,
   allowed_models,
   allowed_models_mode,
-  rate_limit,
-  rate_limit_mode,
+  NULL::INTEGER AS rate_limit,
+  'inherit'::text AS rate_limit_mode,
   model_capability_settings,
   feature_settings,
   is_active
@@ -156,8 +156,8 @@ SELECT
   allowed_api_formats_mode,
   allowed_models,
   allowed_models_mode,
-  rate_limit,
-  rate_limit_mode,
+  NULL::INTEGER AS rate_limit,
+  'inherit'::text AS rate_limit_mode,
   model_capability_settings,
   feature_settings,
   is_active
@@ -608,14 +608,10 @@ SELECT
   allowed_api_formats_mode,
   allowed_models,
   allowed_models_mode,
-  rate_limit,
-  rate_limit_mode,
-  (SELECT daily_usage_limit_usd
-   FROM aether_lite.user_group_daily_usage_limits AS lite_limits
-   WHERE lite_limits.user_group_id = user_groups.id) AS daily_usage_limit_usd,
-  COALESCE((SELECT daily_usage_limit_mode
-            FROM aether_lite.user_group_daily_usage_limits AS lite_limits
-            WHERE lite_limits.user_group_id = user_groups.id), 'inherit') AS daily_usage_limit_mode,
+  NULL::INTEGER AS rate_limit,
+  'inherit'::text AS rate_limit_mode,
+  NULL::DOUBLE PRECISION AS daily_usage_limit_usd,
+  'inherit'::text AS daily_usage_limit_mode,
   created_at,
   updated_at
 FROM user_groups
@@ -746,8 +742,6 @@ impl SqlxUserReadRepository {
         let id = uuid::Uuid::new_v4().to_string();
         let name = normalize_user_group_name(&record.name);
         let normalized_name = name.to_ascii_lowercase();
-        let daily_usage_limit_usd = record.daily_usage_limit_usd;
-        let daily_usage_limit_mode = record.daily_usage_limit_mode.clone();
         let mut tx = self.pool.begin().await.map_postgres_err()?;
         let result = sqlx::query(
             r#"
@@ -755,10 +749,9 @@ INSERT INTO user_groups (
   id, name, normalized_name, description, priority,
   allowed_providers, allowed_providers_mode,
   allowed_api_formats, allowed_api_formats_mode,
-  allowed_models, allowed_models_mode,
-  rate_limit, rate_limit_mode
+  allowed_models, allowed_models_mode
 )
-VALUES ($1, $2, $3, $4, $5, $6::json, $7, $8::json, $9, $10::json, $11, $12, $13)
+VALUES ($1, $2, $3, $4, $5, $6::json, $7, $8::json, $9, $10::json, $11)
 "#,
         )
         .bind(&id)
@@ -772,19 +765,10 @@ VALUES ($1, $2, $3, $4, $5, $6::json, $7, $8::json, $9, $10::json, $11, $12, $13
         .bind(record.allowed_api_formats_mode)
         .bind(record.allowed_models.map(serde_json::Value::from))
         .bind(record.allowed_models_mode)
-        .bind(record.rate_limit)
-        .bind(record.rate_limit_mode)
         .execute(&mut *tx)
         .await;
         match result {
             Ok(_) => {
-                upsert_postgres_user_group_daily_usage_limit(
-                    &mut tx,
-                    &id,
-                    daily_usage_limit_usd,
-                    &daily_usage_limit_mode,
-                )
-                .await?;
                 tx.commit().await.map_postgres_err()?;
                 self.find_user_group_by_id(&id).await
             }
@@ -802,8 +786,6 @@ VALUES ($1, $2, $3, $4, $5, $6::json, $7, $8::json, $9, $10::json, $11, $12, $13
     ) -> Result<Option<StoredUserGroup>, DataLayerError> {
         let name = normalize_user_group_name(&record.name);
         let normalized_name = name.to_ascii_lowercase();
-        let daily_usage_limit_usd = record.daily_usage_limit_usd;
-        let daily_usage_limit_mode = record.daily_usage_limit_mode.clone();
         let mut tx = self.pool.begin().await.map_postgres_err()?;
         let result = sqlx::query(
             r#"
@@ -818,8 +800,6 @@ SET name = $2,
     allowed_api_formats_mode = $9,
     allowed_models = $10::json,
     allowed_models_mode = $11,
-    rate_limit = $12,
-    rate_limit_mode = $13,
     updated_at = now()
 WHERE id = $1
 "#,
@@ -835,20 +815,11 @@ WHERE id = $1
         .bind(record.allowed_api_formats_mode)
         .bind(record.allowed_models.map(serde_json::Value::from))
         .bind(record.allowed_models_mode)
-        .bind(record.rate_limit)
-        .bind(record.rate_limit_mode)
         .execute(&mut *tx)
         .await;
         match result {
             Ok(result) if result.rows_affected() == 0 => Ok(None),
             Ok(_) => {
-                upsert_postgres_user_group_daily_usage_limit(
-                    &mut tx,
-                    group_id,
-                    daily_usage_limit_usd,
-                    &daily_usage_limit_mode,
-                )
-                .await?;
                 tx.commit().await.map_postgres_err()?;
                 self.find_user_group_by_id(group_id).await
             }
@@ -866,15 +837,6 @@ WHERE id = $1
             .execute(&mut *tx)
             .await
             .map_postgres_err()?;
-        if result.rows_affected() > 0 {
-            sqlx::query(
-                "DELETE FROM aether_lite.user_group_daily_usage_limits WHERE user_group_id = $1",
-            )
-            .bind(group_id)
-            .execute(&mut *tx)
-            .await
-            .map_postgres_err()?;
-        }
         tx.commit().await.map_postgres_err()?;
         Ok(result.rows_affected() > 0)
     }
@@ -1287,12 +1249,12 @@ WHERE user_group_members.user_id IN (
             r#"
 INSERT INTO users (
   id, email, email_verified, username, password_hash, role, auth_source,
-  allowed_providers_mode, allowed_api_formats_mode, allowed_models_mode, rate_limit_mode,
+  allowed_providers_mode, allowed_api_formats_mode, allowed_models_mode,
   is_active, is_deleted, created_at, updated_at, last_login_at
 )
 VALUES (
   $1, $2, TRUE, $3, NULL, 'user'::userrole, 'oauth'::authsource,
-  'inherit', 'inherit', 'inherit', 'inherit',
+  'inherit', 'inherit', 'inherit',
   TRUE, FALSE, $4, $4, $4
 )
 "#,
@@ -1597,8 +1559,8 @@ WHERE id = $1
         allowed_api_formats: Option<Vec<String>>,
         allowed_models_present: bool,
         allowed_models: Option<Vec<String>>,
-        rate_limit_present: bool,
-        rate_limit: Option<i32>,
+        _rate_limit_present: bool,
+        _rate_limit: Option<i32>,
         is_active: Option<bool>,
     ) -> Result<Option<StoredUserAuthRecord>, DataLayerError> {
         let allowed_providers_mode = if allowed_providers
@@ -1624,11 +1586,6 @@ WHERE id = $1
             "specific"
         } else {
             "unrestricted"
-        };
-        let rate_limit_mode = if rate_limit.is_some() {
-            "custom"
-        } else {
-            "system"
         };
         let result = sqlx::query(
             r#"
@@ -1661,16 +1618,8 @@ SET role = CASE
         WHEN $10::BOOLEAN THEN $12
         ELSE allowed_models_mode
     END,
-    rate_limit = CASE
-        WHEN $13::BOOLEAN THEN $14
-        ELSE rate_limit
-    END,
-    rate_limit_mode = CASE
-        WHEN $13::BOOLEAN THEN $15
-        ELSE rate_limit_mode
-    END,
     is_active = CASE
-        WHEN $16::BOOLEAN AND $17 IS NOT NULL THEN $17
+        WHEN $13::BOOLEAN AND $14 IS NOT NULL THEN $14
         ELSE is_active
     END,
     updated_at = NOW()
@@ -1689,9 +1638,6 @@ WHERE id = $1
         .bind(allowed_models_present)
         .bind(allowed_models.map(serde_json::Value::from))
         .bind(allowed_models_mode)
-        .bind(rate_limit_present)
-        .bind(rate_limit)
-        .bind(rate_limit_mode)
         .bind(is_active.is_some())
         .bind(is_active)
         .execute(&self.pool)
@@ -1709,7 +1655,7 @@ WHERE id = $1
         allowed_providers_mode: Option<String>,
         allowed_api_formats_mode: Option<String>,
         allowed_models_mode: Option<String>,
-        rate_limit_mode: Option<String>,
+        _rate_limit_mode: Option<String>,
     ) -> Result<Option<StoredUserAuthRecord>, DataLayerError> {
         let result = sqlx::query(
             r#"
@@ -1726,10 +1672,6 @@ SET allowed_providers_mode = CASE
         WHEN $6::BOOLEAN THEN $7
         ELSE allowed_models_mode
     END,
-    rate_limit_mode = CASE
-        WHEN $8::BOOLEAN THEN $9
-        ELSE rate_limit_mode
-    END,
     updated_at = NOW()
 WHERE id = $1
 "#,
@@ -1741,8 +1683,6 @@ WHERE id = $1
         .bind(allowed_api_formats_mode)
         .bind(allowed_models_mode.is_some())
         .bind(allowed_models_mode)
-        .bind(rate_limit_mode.is_some())
-        .bind(rate_limit_mode)
         .execute(&self.pool)
         .await
         .map_postgres_err()?;
@@ -1814,12 +1754,12 @@ WHERE id = $1
             r#"
 INSERT INTO users (
   id, email, email_verified, username, password_hash, role, auth_source,
-  allowed_providers_mode, allowed_api_formats_mode, allowed_models_mode, rate_limit_mode,
+  allowed_providers_mode, allowed_api_formats_mode, allowed_models_mode,
   is_active, is_deleted, created_at, updated_at
 )
 VALUES (
   $1, $2, $3, $4, $5, 'user'::userrole, 'local'::authsource,
-  'inherit', 'inherit', 'inherit', 'inherit',
+  'inherit', 'inherit', 'inherit',
   TRUE, FALSE, NOW(), NOW()
 )
 "#,
@@ -1846,7 +1786,7 @@ VALUES (
         allowed_providers: Option<Vec<String>>,
         allowed_api_formats: Option<Vec<String>>,
         allowed_models: Option<Vec<String>>,
-        rate_limit: Option<i32>,
+        _rate_limit: Option<i32>,
     ) -> Result<Option<StoredUserAuthRecord>, DataLayerError> {
         let user_id = uuid::Uuid::new_v4().to_string();
         let allowed_providers_mode = if allowed_providers
@@ -1873,11 +1813,6 @@ VALUES (
         } else {
             "unrestricted"
         };
-        let rate_limit_mode = if rate_limit.is_some() {
-            "custom"
-        } else {
-            "system"
-        };
         sqlx::query(
             r#"
 INSERT INTO users (
@@ -1885,12 +1820,11 @@ INSERT INTO users (
   allowed_providers, allowed_providers_mode,
   allowed_api_formats, allowed_api_formats_mode,
   allowed_models, allowed_models_mode,
-  rate_limit, rate_limit_mode,
   is_active, is_deleted, created_at, updated_at
 )
 VALUES (
   $1, $2, $3, $4, $5, $6::userrole, 'local'::authsource,
-  $7::json, $8, $9::json, $10, $11::json, $12, $13, $14,
+  $7::json, $8, $9::json, $10, $11::json, $12,
   TRUE, FALSE, NOW(), NOW()
 )
 "#,
@@ -1907,8 +1841,6 @@ VALUES (
         .bind(allowed_api_formats_mode)
         .bind(allowed_models.map(serde_json::Value::from))
         .bind(allowed_models_mode)
-        .bind(rate_limit)
-        .bind(rate_limit_mode)
         .execute(&self.pool)
         .await
         .map_postgres_err()?;
@@ -2308,34 +2240,6 @@ fn map_user_auth_row(row: &sqlx::postgres::PgRow) -> Result<StoredUserAuthRecord
             row.try_get("allowed_models_mode").map_postgres_err()?,
         )
     })
-}
-
-async fn upsert_postgres_user_group_daily_usage_limit(
-    tx: &mut Transaction<'_, Postgres>,
-    group_id: &str,
-    daily_usage_limit_usd: Option<f64>,
-    daily_usage_limit_mode: &str,
-) -> Result<(), DataLayerError> {
-    sqlx::query(
-        r#"
-INSERT INTO aether_lite.user_group_daily_usage_limits (
-    user_group_id,
-    daily_usage_limit_usd,
-    daily_usage_limit_mode
-)
-VALUES ($1, $2, $3)
-ON CONFLICT (user_group_id) DO UPDATE
-SET daily_usage_limit_usd = EXCLUDED.daily_usage_limit_usd,
-    daily_usage_limit_mode = EXCLUDED.daily_usage_limit_mode
-"#,
-    )
-    .bind(group_id)
-    .bind(daily_usage_limit_usd)
-    .bind(daily_usage_limit_mode)
-    .execute(&mut **tx)
-    .await
-    .map_postgres_err()?;
-    Ok(())
 }
 
 fn map_user_group_row(row: &sqlx::postgres::PgRow) -> Result<StoredUserGroup, DataLayerError> {

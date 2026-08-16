@@ -1,5 +1,6 @@
 //! PostgreSQL repositories, pool/transaction primitives, leases, and migrations.
 
+mod admission;
 mod announcements;
 mod audit;
 mod auth;
@@ -26,6 +27,7 @@ mod users;
 mod video_tasks;
 mod wallet;
 
+pub use admission::PostgresAdmissionPolicyRepository;
 pub use aether_data_contracts::{DataLayerError, PostgresPoolConfig};
 pub use announcements::SqlxAnnouncementReadRepository;
 pub use audit::PostgresAuditLogReadRepository;

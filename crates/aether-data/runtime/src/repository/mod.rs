@@ -5,6 +5,7 @@
 //! from the adapter crates to preserve existing import paths; concrete SQL does
 //! not belong in this facade.
 
+pub mod admission;
 pub mod announcements;
 pub mod audit;
 pub mod auth;

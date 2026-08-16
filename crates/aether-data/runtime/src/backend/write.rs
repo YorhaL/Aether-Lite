@@ -5,6 +5,7 @@ use std::sync::Arc;
 use super::PostgresBackend;
 #[cfg(feature = "sqlite")]
 use super::SqliteBackend;
+use crate::repository::admission::AdmissionPolicyWriteRepository;
 use crate::repository::announcements::AnnouncementWriteRepository;
 use crate::repository::auth::AuthApiKeyWriteRepository;
 use crate::repository::auth_modules::AuthModuleWriteRepository;
@@ -23,6 +24,7 @@ use crate::repository::wallet::WalletWriteRepository;
 
 #[derive(Clone, Default)]
 pub struct DataWriteRepositories {
+    admission_policies: Option<Arc<dyn AdmissionPolicyWriteRepository>>,
     announcements: Option<Arc<dyn AnnouncementWriteRepository>>,
     auth_api_keys: Option<Arc<dyn AuthApiKeyWriteRepository>>,
     auth_modules: Option<Arc<dyn AuthModuleWriteRepository>>,
@@ -43,6 +45,7 @@ pub struct DataWriteRepositories {
 impl fmt::Debug for DataWriteRepositories {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DataWriteRepositories")
+            .field("has_admission_policies", &self.admission_policies.is_some())
             .field("has_announcements", &self.announcements.is_some())
             .field("has_auth_api_keys", &self.auth_api_keys.is_some())
             .field("has_auth_modules", &self.auth_modules.is_some())
@@ -84,6 +87,10 @@ impl DataWriteRepositories {
 
     #[cfg(feature = "postgres")]
     fn install_postgres(&mut self, backend: &PostgresBackend) {
+        if self.admission_policies.is_none() {
+            self.admission_policies =
+                Some(PostgresBackend::admission_policy_write_repository(backend));
+        }
         if self.announcements.is_none() {
             self.announcements = Some(PostgresBackend::announcement_write_repository(backend));
         }
@@ -139,6 +146,10 @@ impl DataWriteRepositories {
 
     #[cfg(feature = "sqlite")]
     fn install_sqlite(&mut self, backend: &SqliteBackend) {
+        if self.admission_policies.is_none() {
+            self.admission_policies =
+                Some(SqliteBackend::admission_policy_write_repository(backend));
+        }
         if self.announcements.is_none() {
             self.announcements = Some(SqliteBackend::announcement_write_repository(backend));
         }
@@ -196,6 +207,10 @@ impl DataWriteRepositories {
             #[cfg(feature = "sqlite")]
             None,
         )
+    }
+
+    pub fn admission_policies(&self) -> Option<Arc<dyn AdmissionPolicyWriteRepository>> {
+        self.admission_policies.clone()
     }
 
     pub fn announcements(&self) -> Option<Arc<dyn AnnouncementWriteRepository>> {
@@ -259,7 +274,8 @@ impl DataWriteRepositories {
     }
 
     pub fn has_any(&self) -> bool {
-        self.announcements.is_some()
+        self.admission_policies.is_some()
+            || self.announcements.is_some()
             || self.auth_api_keys.is_some()
             || self.auth_modules.is_some()
             || self.background_tasks.is_some()

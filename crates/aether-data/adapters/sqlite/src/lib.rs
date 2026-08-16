@@ -1,5 +1,6 @@
 //! SQLite repositories, pool primitives, and migrations.
 
+mod admission;
 mod announcements;
 mod audit;
 mod auth;
@@ -23,6 +24,7 @@ mod users;
 mod video_tasks;
 mod wallet;
 
+pub use admission::SqliteAdmissionPolicyRepository;
 pub use aether_data_contracts::{DataLayerError, DatabaseDriver, SqlDatabaseConfig, SqlPoolConfig};
 pub use announcements::SqliteAnnouncementRepository;
 pub use audit::SqliteAuditLogReadRepository;

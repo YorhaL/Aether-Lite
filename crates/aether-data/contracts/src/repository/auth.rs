@@ -9,8 +9,6 @@ pub struct StoredAuthApiKeySnapshot {
     pub user_auth_source: String,
     pub user_is_active: bool,
     pub user_is_deleted: bool,
-    pub user_rate_limit: Option<i32>,
-    pub user_daily_usage_limit_usd: Option<f64>,
     pub user_allowed_providers: Option<Vec<String>>,
     pub user_allowed_api_formats: Option<Vec<String>>,
     pub user_allowed_models: Option<Vec<String>>,
@@ -19,9 +17,6 @@ pub struct StoredAuthApiKeySnapshot {
     pub api_key_is_active: bool,
     pub api_key_is_locked: bool,
     pub api_key_is_standalone: bool,
-    pub api_key_rate_limit: Option<i32>,
-    pub api_key_daily_usage_limit_usd: Option<f64>,
-    pub api_key_concurrent_limit: Option<i32>,
     pub api_key_expires_at_unix_secs: Option<u64>,
     pub api_key_allowed_providers: Option<Vec<String>>,
     pub api_key_allowed_api_formats: Option<Vec<String>>,
@@ -47,8 +42,6 @@ impl StoredAuthApiKeySnapshot {
         api_key_is_active: bool,
         api_key_is_locked: bool,
         api_key_is_standalone: bool,
-        api_key_rate_limit: Option<i32>,
-        api_key_concurrent_limit: Option<i32>,
         api_key_expires_at_unix_secs: Option<i64>,
         api_key_allowed_providers: Option<serde_json::Value>,
         api_key_allowed_api_formats: Option<serde_json::Value>,
@@ -62,8 +55,6 @@ impl StoredAuthApiKeySnapshot {
             user_auth_source,
             user_is_active,
             user_is_deleted,
-            user_rate_limit: None,
-            user_daily_usage_limit_usd: None,
             user_allowed_providers: parse_string_list(
                 user_allowed_providers,
                 "users.allowed_providers",
@@ -78,9 +69,6 @@ impl StoredAuthApiKeySnapshot {
             api_key_is_active,
             api_key_is_locked,
             api_key_is_standalone,
-            api_key_rate_limit,
-            api_key_daily_usage_limit_usd: None,
-            api_key_concurrent_limit,
             api_key_expires_at_unix_secs: api_key_expires_at_unix_secs
                 .map(|value| {
                     u64::try_from(value).map_err(|_| {
@@ -131,21 +119,6 @@ impl StoredAuthApiKeySnapshot {
         }
         true
     }
-
-    pub fn with_user_rate_limit(mut self, user_rate_limit: Option<i32>) -> Self {
-        self.user_rate_limit = user_rate_limit;
-        self
-    }
-
-    pub fn with_daily_usage_limits(
-        mut self,
-        user_daily_usage_limit_usd: Option<f64>,
-        api_key_daily_usage_limit_usd: Option<f64>,
-    ) -> Self {
-        self.user_daily_usage_limit_usd = user_daily_usage_limit_usd;
-        self.api_key_daily_usage_limit_usd = api_key_daily_usage_limit_usd;
-        self
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -157,8 +130,6 @@ pub struct ResolvedAuthApiKeySnapshot {
     pub user_auth_source: String,
     pub user_is_active: bool,
     pub user_is_deleted: bool,
-    pub user_rate_limit: Option<i32>,
-    pub user_daily_usage_limit_usd: Option<f64>,
     pub user_allowed_providers: Option<Vec<String>>,
     pub user_allowed_api_formats: Option<Vec<String>>,
     pub user_allowed_models: Option<Vec<String>>,
@@ -167,14 +138,12 @@ pub struct ResolvedAuthApiKeySnapshot {
     pub api_key_is_active: bool,
     pub api_key_is_locked: bool,
     pub api_key_is_standalone: bool,
-    pub api_key_rate_limit: Option<i32>,
-    pub api_key_daily_usage_limit_usd: Option<f64>,
-    pub api_key_concurrent_limit: Option<i32>,
     pub api_key_expires_at_unix_secs: Option<u64>,
     pub api_key_allowed_providers: Option<Vec<String>>,
     pub api_key_allowed_api_formats: Option<Vec<String>>,
     pub api_key_allowed_models: Option<Vec<String>>,
     pub api_key_ip_rules: Option<Vec<String>>,
+    pub admission_policy: crate::repository::admission::ResolvedAdmissionPolicy,
     pub currently_usable: bool,
 }
 
@@ -189,8 +158,6 @@ impl ResolvedAuthApiKeySnapshot {
             user_auth_source: snapshot.user_auth_source,
             user_is_active: snapshot.user_is_active,
             user_is_deleted: snapshot.user_is_deleted,
-            user_rate_limit: snapshot.user_rate_limit,
-            user_daily_usage_limit_usd: snapshot.user_daily_usage_limit_usd,
             user_allowed_providers: snapshot.user_allowed_providers,
             user_allowed_api_formats: snapshot.user_allowed_api_formats,
             user_allowed_models: snapshot.user_allowed_models,
@@ -199,14 +166,12 @@ impl ResolvedAuthApiKeySnapshot {
             api_key_is_active: snapshot.api_key_is_active,
             api_key_is_locked: snapshot.api_key_is_locked,
             api_key_is_standalone: snapshot.api_key_is_standalone,
-            api_key_rate_limit: snapshot.api_key_rate_limit,
-            api_key_daily_usage_limit_usd: snapshot.api_key_daily_usage_limit_usd,
-            api_key_concurrent_limit: snapshot.api_key_concurrent_limit,
             api_key_expires_at_unix_secs: snapshot.api_key_expires_at_unix_secs,
             api_key_allowed_providers: snapshot.api_key_allowed_providers,
             api_key_allowed_api_formats: snapshot.api_key_allowed_api_formats,
             api_key_allowed_models: snapshot.api_key_allowed_models,
             api_key_ip_rules: snapshot.api_key_ip_rules,
+            admission_policy: Default::default(),
             currently_usable,
         };
         resolved.constrain_non_standalone_api_key_policy_to_user_policy();
@@ -248,15 +213,18 @@ impl ResolvedAuthApiKeySnapshot {
         allowed_providers: Option<Vec<String>>,
         allowed_api_formats: Option<Vec<String>>,
         allowed_models: Option<Vec<String>>,
-        rate_limit: Option<i32>,
-        daily_usage_limit_usd: Option<f64>,
     ) {
         self.user_allowed_providers = allowed_providers;
         self.user_allowed_api_formats = allowed_api_formats;
         self.user_allowed_models = allowed_models;
-        self.user_rate_limit = rate_limit;
-        self.user_daily_usage_limit_usd = daily_usage_limit_usd;
         self.constrain_non_standalone_api_key_policy_to_user_policy();
+    }
+
+    pub fn apply_admission_policy(
+        &mut self,
+        policy: crate::repository::admission::ResolvedAdmissionPolicy,
+    ) {
+        self.admission_policy = policy;
     }
 
     fn constrain_non_standalone_api_key_policy_to_user_policy(&mut self) {
@@ -918,8 +886,6 @@ mod tests {
             true,
             false,
             false,
-            Some(60),
-            Some(5),
             None,
             None,
             None,
@@ -946,8 +912,6 @@ mod tests {
             true,
             false,
             false,
-            Some(60),
-            Some(5),
             None,
             None,
             None,
@@ -979,8 +943,6 @@ mod tests {
             true,
             false,
             false,
-            Some(60),
-            Some(5),
             None,
             None,
             None,
@@ -1012,8 +974,6 @@ mod tests {
             true,
             false,
             false,
-            Some(60),
-            Some(5),
             Some(100),
             None,
             None,
@@ -1042,8 +1002,6 @@ mod tests {
             true,
             false,
             false,
-            Some(60),
-            Some(5),
             Some(200),
             Some(serde_json::json!(["anthropic", "openai"])),
             Some(serde_json::json!(["claude:messages"])),
@@ -1080,8 +1038,6 @@ mod tests {
             true,
             false,
             false,
-            Some(60),
-            Some(5),
             Some(200),
             Some(serde_json::json!(["openai", "anthropic"])),
             Some(serde_json::json!(["openai:chat", "claude:messages"])),
@@ -1094,8 +1050,6 @@ mod tests {
             Some(vec!["openai".to_string(), "gemini".to_string()]),
             Some(vec!["openai:chat".to_string()]),
             Some(vec!["gpt-5".to_string()]),
-            Some(60),
-            Some(12.5),
         );
 
         assert_eq!(
@@ -1107,7 +1061,6 @@ mod tests {
             Some(&["openai:chat".to_string()][..])
         );
         assert_eq!(resolved.effective_allowed_models(), Some(&[][..]));
-        assert_eq!(resolved.user_daily_usage_limit_usd, Some(12.5));
     }
 
     #[test]
@@ -1128,8 +1081,6 @@ mod tests {
             true,
             false,
             true,
-            None,
-            None,
             None,
             None,
             None,
@@ -1163,8 +1114,6 @@ mod tests {
             true,
             false,
             true,
-            None,
-            None,
             None,
             Some(serde_json::json!(["anthropic"])),
             Some(serde_json::json!(["claude:messages"])),
@@ -1206,8 +1155,6 @@ mod tests {
             true,
             false,
             false,
-            Some(60),
-            None,
             None,
             None,
             None,
@@ -1250,8 +1197,6 @@ mod tests {
             true,
             false,
             false,
-            Some(60),
-            None,
             None,
             Some(serde_json::json!([])),
             Some(serde_json::json!([])),
@@ -1284,8 +1229,6 @@ mod tests {
             true,
             false,
             true,
-            None,
-            None,
             None,
             Some(serde_json::json!([])),
             Some(serde_json::json!([])),
@@ -1432,8 +1375,6 @@ mod tests {
             true,
             false,
             false,
-            Some(60),
-            Some(5),
             Some(200),
             Some(serde_json::json!(["openai"])),
             Some(serde_json::json!(["openai:chat"])),

@@ -48,13 +48,8 @@ pub(crate) struct GatewayControlAuthContext {
     pub(crate) balance_remaining: Option<f64>,
     pub(crate) access_allowed: bool,
     #[serde(skip)]
-    pub(crate) user_rate_limit: Option<i32>,
-    #[serde(skip)]
-    pub(crate) api_key_rate_limit: Option<i32>,
-    #[serde(skip)]
-    pub(crate) user_daily_usage_limit_usd: Option<f64>,
-    #[serde(skip)]
-    pub(crate) api_key_daily_usage_limit_usd: Option<f64>,
+    pub(crate) admission_policy:
+        aether_data_contracts::repository::admission::ResolvedAdmissionPolicy,
     #[serde(skip)]
     pub(crate) api_key_is_standalone: bool,
     #[serde(skip)]
@@ -894,10 +889,7 @@ pub(super) async fn resolve_data_backed_auth_context(
                     api_key_name: None,
                     balance_remaining: None,
                     access_allowed: false,
-                    user_rate_limit: None,
-                    api_key_rate_limit: None,
-                    user_daily_usage_limit_usd: None,
-                    api_key_daily_usage_limit_usd: None,
+                    admission_policy: Default::default(),
                     api_key_is_standalone: false,
                     admin_bypass_limits: false,
                     ip_bypass_limits: false,
@@ -956,10 +948,7 @@ async fn resolve_trusted_auth_context(
             api_key_name: None,
             balance_remaining: trusted_headers.balance_remaining,
             access_allowed: false,
-            user_rate_limit: None,
-            api_key_rate_limit: None,
-            user_daily_usage_limit_usd: None,
-            api_key_daily_usage_limit_usd: None,
+            admission_policy: Default::default(),
             api_key_is_standalone: false,
             admin_bypass_limits: false,
             ip_bypass_limits: false,
@@ -1056,10 +1045,7 @@ async fn build_data_backed_auth_context(
         api_key_id: snapshot.api_key_id,
         balance_remaining: wallet_remaining.or(balance_remaining),
         access_allowed: key_access_allowed && local_rejection.is_none(),
-        user_rate_limit: snapshot.user_rate_limit,
-        api_key_rate_limit: snapshot.api_key_rate_limit,
-        user_daily_usage_limit_usd: snapshot.user_daily_usage_limit_usd,
-        api_key_daily_usage_limit_usd: snapshot.api_key_daily_usage_limit_usd,
+        admission_policy: snapshot.admission_policy,
         api_key_is_standalone: snapshot.api_key_is_standalone,
         admin_bypass_limits: snapshot.user_role.eq_ignore_ascii_case("admin")
             && !snapshot.api_key_is_standalone,

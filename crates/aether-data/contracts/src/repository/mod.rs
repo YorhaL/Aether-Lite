@@ -1,3 +1,4 @@
+pub mod admission;
 pub mod announcements;
 pub mod audit;
 pub mod auth;

@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use sqlx::{sqlite::SqliteRow, QueryBuilder, Row, Sqlite, Transaction};
+use sqlx::{sqlite::SqliteRow, QueryBuilder, Row, Sqlite};
 
 use aether_data_contracts::repository::auth::{
     AuthApiKeyExportSummary, AuthApiKeyLookupKey, AuthApiKeyReadRepository,
@@ -21,7 +21,6 @@ SELECT
   users.auth_source AS user_auth_source,
   users.is_active AS user_is_active,
   users.is_deleted AS user_is_deleted,
-  users.rate_limit AS user_rate_limit,
   users.allowed_providers AS user_allowed_providers,
   users.allowed_api_formats AS user_allowed_api_formats,
   users.allowed_models AS user_allowed_models,
@@ -30,10 +29,6 @@ SELECT
   api_keys.is_active AS api_key_is_active,
   api_keys.is_locked AS api_key_is_locked,
   api_keys.is_standalone AS api_key_is_standalone,
-  api_keys.rate_limit AS api_key_rate_limit,
-  (SELECT daily_usage_limit_usd FROM lite_api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS api_key_daily_usage_limit_usd,
-  api_keys.concurrent_limit AS api_key_concurrent_limit,
   api_keys.expires_at AS api_key_expires_at_unix_secs,
   api_keys.allowed_providers AS api_key_allowed_providers,
   api_keys.allowed_api_formats AS api_key_allowed_api_formats,
@@ -54,10 +49,9 @@ SELECT
   api_keys.allowed_api_formats,
   api_keys.allowed_models,
   api_keys.ip_rules,
-  api_keys.rate_limit,
-  (SELECT daily_usage_limit_usd FROM lite_api_key_daily_usage_limits AS lite_limits
-   WHERE lite_limits.api_key_id = api_keys.id) AS daily_usage_limit_usd,
-  api_keys.concurrent_limit,
+  NULL AS rate_limit,
+  NULL AS daily_usage_limit_usd,
+  NULL AS concurrent_limit,
   api_keys.force_capabilities,
   api_keys.feature_settings,
   api_keys.is_active,
@@ -120,12 +114,12 @@ impl SqliteAuthApiKeyReadRepository {
             r#"
 INSERT INTO api_keys (
   id, user_id, key_hash, key_encrypted, name, allowed_providers,
-  allowed_api_formats, allowed_models, ip_rules, rate_limit, concurrent_limit,
+  allowed_api_formats, allowed_models, ip_rules,
   force_capabilities, feature_settings, is_active, expires_at, auto_delete_on_expiry,
   total_requests, total_tokens, total_cost_usd, is_standalone,
   created_at, updated_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 "#,
         )
         .bind(&record.api_key_id)
@@ -149,8 +143,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             record.ip_rules.as_ref(),
             "api_keys.ip_rules",
         )?)
-        .bind(record.rate_limit)
-        .bind(record.concurrent_limit)
         .bind(optional_json_to_string(
             &record.force_capabilities,
             "api_keys.force_capabilities",
@@ -173,12 +165,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         .execute(&mut *tx)
         .await
         .map_sql_err()?;
-        set_sqlite_api_key_daily_usage_limit(
-            &mut tx,
-            &record.api_key_id,
-            record.daily_usage_limit_usd,
-        )
-        .await?;
         tx.commit().await.map_sql_err()?;
         self.reload_export_by_id(&record.api_key_id).await
     }
@@ -194,9 +180,6 @@ struct CreateApiKeyInsertRecord {
     allowed_api_formats: Option<Vec<String>>,
     allowed_models: Option<Vec<String>>,
     ip_rules: Option<Vec<String>>,
-    rate_limit: Option<i32>,
-    daily_usage_limit_usd: Option<f64>,
-    concurrent_limit: Option<i32>,
     force_capabilities: Option<serde_json::Value>,
     is_active: bool,
     expires_at_unix_secs: Option<u64>,
@@ -438,9 +421,6 @@ WHERE id = ?
             allowed_api_formats: record.allowed_api_formats,
             allowed_models: record.allowed_models,
             ip_rules: record.ip_rules,
-            rate_limit: Some(record.rate_limit),
-            daily_usage_limit_usd: record.daily_usage_limit_usd,
-            concurrent_limit: record.concurrent_limit,
             force_capabilities: record.force_capabilities,
             is_active: record.is_active,
             expires_at_unix_secs: record.expires_at_unix_secs,
@@ -467,9 +447,6 @@ WHERE id = ?
             allowed_api_formats: record.allowed_api_formats,
             allowed_models: record.allowed_models,
             ip_rules: record.ip_rules,
-            rate_limit: record.rate_limit,
-            daily_usage_limit_usd: record.daily_usage_limit_usd,
-            concurrent_limit: record.concurrent_limit,
             force_capabilities: record.force_capabilities,
             is_active: record.is_active,
             expires_at_unix_secs: record.expires_at_unix_secs,
@@ -492,8 +469,6 @@ WHERE id = ?
             r#"
 UPDATE api_keys
 SET name = COALESCE(?, name),
-    rate_limit = COALESCE(?, rate_limit),
-    concurrent_limit = COALESCE(?, concurrent_limit),
     ip_rules = CASE WHEN ? THEN ? ELSE ip_rules END,
     updated_at = ?
 WHERE id = ?
@@ -502,8 +477,6 @@ WHERE id = ?
 "#,
         )
         .bind(record.name.as_deref())
-        .bind(record.rate_limit)
-        .bind(record.concurrent_limit)
         .bind(record.ip_rules.is_some())
         .bind(json_string_from_nested_string_list(
             &record.ip_rules,
@@ -515,14 +488,6 @@ WHERE id = ?
         .execute(&mut *tx)
         .await
         .map_sql_err()?;
-        if result.rows_affected() > 0 && record.daily_usage_limit_present {
-            set_sqlite_api_key_daily_usage_limit(
-                &mut tx,
-                &record.api_key_id,
-                record.daily_usage_limit_usd,
-            )
-            .await?;
-        }
         tx.commit().await.map_sql_err()?;
         if result.rows_affected() == 0 {
             return Ok(None);
@@ -540,8 +505,6 @@ WHERE id = ?
             r#"
 UPDATE api_keys
 SET name = COALESCE(?, name),
-    rate_limit = CASE WHEN ? THEN ? ELSE rate_limit END,
-    concurrent_limit = CASE WHEN ? THEN ? ELSE concurrent_limit END,
     allowed_providers = CASE WHEN ? THEN ? ELSE allowed_providers END,
     allowed_api_formats = CASE WHEN ? THEN ? ELSE allowed_api_formats END,
     allowed_models = CASE WHEN ? THEN ? ELSE allowed_models END,
@@ -554,10 +517,6 @@ WHERE id = ?
 "#,
         )
         .bind(record.name.as_deref())
-        .bind(record.rate_limit_present)
-        .bind(record.rate_limit)
-        .bind(record.concurrent_limit_present)
-        .bind(record.concurrent_limit)
         .bind(record.allowed_providers.is_some())
         .bind(json_string_from_nested_string_list(
             &record.allowed_providers,
@@ -590,14 +549,6 @@ WHERE id = ?
         .execute(&mut *tx)
         .await
         .map_sql_err()?;
-        if result.rows_affected() > 0 && record.daily_usage_limit_present {
-            set_sqlite_api_key_daily_usage_limit(
-                &mut tx,
-                &record.api_key_id,
-                record.daily_usage_limit_usd,
-            )
-            .await?;
-        }
         tx.commit().await.map_sql_err()?;
         if result.rows_affected() == 0 {
             return Ok(None);
@@ -844,45 +795,9 @@ impl SqliteAuthApiKeyReadRepository {
             .await
             .map_sql_err()?
             .rows_affected();
-        if rows_affected > 0 {
-            sqlx::query("DELETE FROM lite_api_key_daily_usage_limits WHERE api_key_id = ?")
-                .bind(api_key_id)
-                .execute(&mut *tx)
-                .await
-                .map_sql_err()?;
-        }
         tx.commit().await.map_sql_err()?;
         Ok(rows_affected > 0)
     }
-}
-
-async fn set_sqlite_api_key_daily_usage_limit(
-    tx: &mut Transaction<'_, Sqlite>,
-    api_key_id: &str,
-    daily_usage_limit_usd: Option<f64>,
-) -> Result<(), DataLayerError> {
-    if let Some(limit) = daily_usage_limit_usd {
-        sqlx::query(
-            r#"
-INSERT INTO lite_api_key_daily_usage_limits (api_key_id, daily_usage_limit_usd)
-VALUES (?, ?)
-ON CONFLICT(api_key_id) DO UPDATE
-SET daily_usage_limit_usd = excluded.daily_usage_limit_usd
-"#,
-        )
-        .bind(api_key_id)
-        .bind(limit)
-        .execute(&mut **tx)
-        .await
-        .map_sql_err()?;
-    } else {
-        sqlx::query("DELETE FROM lite_api_key_daily_usage_limits WHERE api_key_id = ?")
-            .bind(api_key_id)
-            .execute(&mut **tx)
-            .await
-            .map_sql_err()?;
-    }
-    Ok(())
 }
 
 fn push_in_clause<'args>(
@@ -1035,8 +950,6 @@ fn map_auth_api_key_snapshot_row(
         row.try_get("api_key_is_active").map_sql_err()?,
         row.try_get("api_key_is_locked").map_sql_err()?,
         row.try_get("api_key_is_standalone").map_sql_err()?,
-        row.try_get("api_key_rate_limit").map_sql_err()?,
-        row.try_get("api_key_concurrent_limit").map_sql_err()?,
         row.try_get("api_key_expires_at_unix_secs").map_sql_err()?,
         optional_json_from_string(
             row.try_get("api_key_allowed_providers").map_sql_err()?,
@@ -1055,12 +968,7 @@ fn map_auth_api_key_snapshot_row(
         row.try_get("api_key_ip_rules").map_sql_err()?,
         "api_keys.ip_rules",
     )?)?;
-    Ok(snapshot
-        .with_user_rate_limit(row.try_get("user_rate_limit").map_sql_err()?)
-        .with_daily_usage_limits(
-            None,
-            row.try_get("api_key_daily_usage_limit_usd").map_sql_err()?,
-        ))
+    Ok(snapshot)
 }
 
 fn map_auth_api_key_export_row(
@@ -1142,7 +1050,6 @@ mod tests {
         run_migrations(&pool)
             .await
             .expect("sqlite migrations should run");
-        run_lite_migrations(&pool).await;
         seed_auth_api_key_rows(&pool).await;
 
         let repository = SqliteAuthApiKeyReadRepository::new(pool);
@@ -1206,7 +1113,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn sqlite_repository_writes_auth_api_key_contract_views() {
+    async fn sqlite_repository_writes_auth_api_keys_without_core_admission_fields() {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
@@ -1215,7 +1122,6 @@ mod tests {
         run_migrations(&pool)
             .await
             .expect("sqlite migrations should run");
-        run_lite_migrations(&pool).await;
         seed_auth_user(&pool).await;
 
         let repository = SqliteAuthApiKeyReadRepository::new(pool);
@@ -1246,7 +1152,9 @@ mod tests {
             .expect("user key should reload");
         assert_eq!(user_key.allowed_models, Some(vec!["gpt-4.1".to_string()]));
         assert_eq!(user_key.total_tokens, 42);
-        assert_eq!(user_key.daily_usage_limit_usd, Some(12.5));
+        assert_eq!(user_key.rate_limit, None);
+        assert_eq!(user_key.daily_usage_limit_usd, None);
+        assert_eq!(user_key.concurrent_limit, None);
 
         let updated_user_key = repository
             .update_user_api_key_basic(UpdateUserApiKeyBasicRecord {
@@ -1263,8 +1171,8 @@ mod tests {
             .expect("user key should update")
             .expect("user key should reload");
         assert_eq!(updated_user_key.name, Some("Updated User".to_string()));
-        assert_eq!(updated_user_key.daily_usage_limit_usd, Some(8.0));
-        assert_eq!(updated_user_key.concurrent_limit, Some(6));
+        assert_eq!(updated_user_key.daily_usage_limit_usd, None);
+        assert_eq!(updated_user_key.concurrent_limit, None);
 
         let cleared_user_key = repository
             .update_user_api_key_basic(UpdateUserApiKeyBasicRecord {
@@ -1278,7 +1186,7 @@ mod tests {
                 ip_rules: None,
             })
             .await
-            .expect("user key daily limit should clear")
+            .expect("user key policy field update should succeed")
             .expect("user key should reload");
         assert_eq!(cleared_user_key.daily_usage_limit_usd, None);
 
@@ -1390,7 +1298,7 @@ mod tests {
             .expect("standalone key should update")
             .expect("standalone key should reload");
         assert_eq!(standalone.name, Some("Updated Standalone".to_string()));
-        assert_eq!(standalone.daily_usage_limit_usd, Some(4.0));
+        assert_eq!(standalone.daily_usage_limit_usd, None);
         assert_eq!(standalone.allowed_providers, None);
         assert_eq!(
             standalone.allowed_api_formats,
@@ -1414,21 +1322,6 @@ mod tests {
             .delete_user_api_key("user-1", "key-created-user")
             .await
             .expect("user key should delete"));
-        let remaining_lite_limits: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM lite_api_key_daily_usage_limits")
-                .fetch_one(&repository.pool)
-                .await
-                .expect("Lite API key limits should be inspectable");
-        assert_eq!(remaining_lite_limits, 0);
-    }
-
-    async fn run_lite_migrations(pool: &sqlx::SqlitePool) {
-        sqlx::raw_sql(include_str!(
-            "../../../runtime/migrations/lite/sqlite/20260803000000_daily_usage_limits.sql"
-        ))
-        .execute(pool)
-        .await
-        .expect("Lite SQLite migrations should run");
     }
 
     async fn seed_auth_api_key_rows(pool: &sqlx::SqlitePool) {

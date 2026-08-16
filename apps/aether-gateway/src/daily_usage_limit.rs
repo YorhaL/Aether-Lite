@@ -3,7 +3,6 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use aether_cache::ExpiringMap;
 use aether_data_contracts::repository::usage::StoredRequestUsageAudit;
 use aether_data_contracts::repository::usage::UsageDailyActualCostRollupQuery;
 use aether_runtime_state::{
@@ -18,8 +17,6 @@ use crate::control::GatewayControlDecision;
 use crate::stage_metrics::observe_gateway_stage_ms;
 use crate::{AppState, GatewayError};
 
-const SYSTEM_DAILY_USAGE_LIMIT_CONFIG_KEY: &str = "daily_usage_limit_usd";
-const SYSTEM_CONFIG_CACHE_TTL: Duration = Duration::from_secs(15);
 const LIMIT_EPSILON_USD: f64 = 0.000_000_01;
 const USD_UNITS_PER_DOLLAR: f64 = 100_000_000.0;
 const COUNTER_EXPIRY_GRACE_SECONDS: u64 = 60;
@@ -71,11 +68,8 @@ pub(crate) struct DailyUsageLimitedResponse;
 
 #[derive(Debug, Clone)]
 pub(crate) struct FrontdoorDailyUsageLimiter {
-    system_default_cache: Arc<ExpiringMap<String, f64>>,
     recovery_inflight: Arc<AtomicBool>,
     runtime_failures: Arc<AtomicU64>,
-    #[cfg(test)]
-    system_default_override: Arc<std::sync::Mutex<Option<f64>>>,
 }
 
 impl Default for FrontdoorDailyUsageLimiter {
@@ -87,16 +81,9 @@ impl Default for FrontdoorDailyUsageLimiter {
 impl FrontdoorDailyUsageLimiter {
     pub(crate) fn new() -> Self {
         Self {
-            system_default_cache: Arc::new(ExpiringMap::default()),
             recovery_inflight: Arc::new(AtomicBool::new(false)),
             runtime_failures: Arc::new(AtomicU64::new(0)),
-            #[cfg(test)]
-            system_default_override: Arc::new(std::sync::Mutex::new(None)),
         }
-    }
-
-    pub(crate) fn clear_system_default_cache(&self) {
-        self.system_default_cache.clear();
     }
 
     pub(crate) fn runtime_failure_count(&self) -> u64 {
@@ -178,27 +165,10 @@ impl FrontdoorDailyUsageLimiter {
             return Ok(None);
         }
 
-        let needs_system_default = if auth.api_key_is_standalone {
-            auth.api_key_daily_usage_limit_usd.is_none()
-        } else {
-            auth.user_daily_usage_limit_usd.is_none()
-        };
-        let system_limit = if needs_system_default {
-            let config_started_at = Instant::now();
-            let result = self.resolve_system_default_limit(state).await;
-            observe_gateway_stage_ms(
-                "daily_usage_limit_system_default",
-                config_started_at.elapsed().as_millis() as u64,
-            );
-            result?
-        } else {
-            0.0
-        };
         let (user_limit, key_limit) = resolve_scope_limits(
             auth.api_key_is_standalone,
-            auth.user_daily_usage_limit_usd,
-            auth.api_key_daily_usage_limit_usd,
-            system_limit,
+            auth.admission_policy.principal.daily_usage_limit_usd(),
+            auth.admission_policy.api_key.daily_usage_limit_usd(),
         );
         if user_limit.is_none() && key_limit.is_none() {
             return Ok(None);
@@ -288,41 +258,6 @@ impl FrontdoorDailyUsageLimiter {
             }
             limiter.recovery_inflight.store(false, Ordering::Release);
         });
-    }
-
-    async fn resolve_system_default_limit(&self, state: &AppState) -> Result<f64, GatewayError> {
-        #[cfg(test)]
-        if let Ok(guard) = self.system_default_override.lock() {
-            if let Some(limit) = *guard {
-                return Ok(limit);
-            }
-        }
-        if let Some(limit) = self
-            .system_default_cache
-            .get_fresh(SYSTEM_DAILY_USAGE_LIMIT_CONFIG_KEY, SYSTEM_CONFIG_CACHE_TTL)
-        {
-            return Ok(limit);
-        }
-        let limit = parse_system_limit(
-            state
-                .read_system_config_json_value(SYSTEM_DAILY_USAGE_LIMIT_CONFIG_KEY)
-                .await?,
-        )?;
-        self.system_default_cache.insert(
-            SYSTEM_DAILY_USAGE_LIMIT_CONFIG_KEY.to_string(),
-            limit,
-            SYSTEM_CONFIG_CACHE_TTL,
-            8,
-        );
-        Ok(limit)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn with_system_default_limit_for_tests(self, limit: f64) -> Self {
-        if let Ok(mut guard) = self.system_default_override.lock() {
-            *guard = Some(limit.max(0.0));
-        }
-        self
     }
 }
 
@@ -527,44 +462,23 @@ fn non_empty(value: &str) -> Option<&str> {
     (!value.is_empty()).then_some(value)
 }
 
-pub(crate) fn parse_system_limit(value: Option<serde_json::Value>) -> Result<f64, GatewayError> {
-    let limit = match value {
-        None | Some(serde_json::Value::Null) => 0.0,
-        Some(serde_json::Value::Number(value)) => value.as_f64().ok_or_else(|| {
-            GatewayError::Internal("invalid system config daily_usage_limit_usd".to_string())
-        })?,
-        Some(serde_json::Value::String(value)) => value.parse::<f64>().map_err(|_| {
-            GatewayError::Internal("invalid system config daily_usage_limit_usd".to_string())
-        })?,
-        Some(_) => {
-            return Err(GatewayError::Internal(
-                "invalid system config daily_usage_limit_usd".to_string(),
-            ))
-        }
-    };
-    if !limit.is_finite() || limit < 0.0 {
-        return Err(GatewayError::Internal(
-            "invalid system config daily_usage_limit_usd".to_string(),
-        ));
-    }
-    Ok(limit)
-}
-
 fn positive_limit(value: f64) -> Option<f64> {
     (value.is_finite() && value > 0.0).then_some(value)
 }
 
 fn resolve_scope_limits(
     is_standalone: bool,
-    user_limit: Option<f64>,
+    principal_limit: Option<f64>,
     key_limit: Option<f64>,
-    system_limit: f64,
 ) -> (Option<f64>, Option<f64>) {
     if is_standalone {
-        (None, positive_limit(key_limit.unwrap_or(system_limit)))
+        (
+            None,
+            positive_limit(key_limit.or(principal_limit).unwrap_or_default()),
+        )
     } else {
         (
-            positive_limit(user_limit.unwrap_or(system_limit)),
+            positive_limit(principal_limit.unwrap_or_default()),
             key_limit.and_then(positive_limit),
         )
     }

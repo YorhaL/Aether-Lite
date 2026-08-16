@@ -107,40 +107,75 @@ impl GatewayDataState {
     pub(crate) async fn list_user_groups(
         &self,
     ) -> Result<Vec<aether_data::repository::users::StoredUserGroup>, DataLayerError> {
-        match &self.user_reader {
+        let groups = match &self.user_reader {
             Some(repository) => repository.list_user_groups().await,
             None => Ok(Vec::new()),
-        }
+        }?;
+        self.enrich_user_groups(groups).await
     }
 
     pub(crate) async fn find_user_group_by_id(
         &self,
         group_id: &str,
     ) -> Result<Option<aether_data::repository::users::StoredUserGroup>, DataLayerError> {
-        match &self.user_reader {
+        let group = match &self.user_reader {
             Some(repository) => repository.find_user_group_by_id(group_id).await,
             None => Ok(None),
-        }
+        }?;
+        Ok(self
+            .enrich_user_groups(group.into_iter().collect())
+            .await?
+            .into_iter()
+            .next())
     }
 
     pub(crate) async fn list_user_groups_by_ids(
         &self,
         group_ids: &[String],
     ) -> Result<Vec<aether_data::repository::users::StoredUserGroup>, DataLayerError> {
-        match &self.user_reader {
+        let groups = match &self.user_reader {
             Some(repository) => repository.list_user_groups_by_ids(group_ids).await,
             None => Ok(Vec::new()),
-        }
+        }?;
+        self.enrich_user_groups(groups).await
     }
 
     pub(crate) async fn create_user_group(
         &self,
         record: aether_data::repository::users::UpsertUserGroupRecord,
     ) -> Result<Option<aether_data::repository::users::StoredUserGroup>, DataLayerError> {
-        match &self.user_reader {
+        let request_limit = (record.rate_limit_mode == "custom")
+            .then_some(record.rate_limit.unwrap_or(0).max(0) as u32);
+        let daily_limit = (record.daily_usage_limit_mode == "custom")
+            .then_some(record.daily_usage_limit_usd.unwrap_or(0.0).max(0.0));
+        let created = match &self.user_reader {
             Some(repository) => repository.create_user_group(record).await,
             None => Ok(None),
+        }?;
+        let Some(created) = created else {
+            return Ok(None);
+        };
+        let document = aether_data::repository::admission::AdmissionPolicyDocument::default()
+            .with_requests_per_minute(request_limit)
+            .with_daily_usage_limit_usd(daily_limit);
+        if let Err(error) = self
+            .store_scoped_admission_document(
+                aether_data::repository::admission::AdmissionScopeKind::UserGroup,
+                &created.id,
+                &document,
+            )
+            .await
+        {
+            if let Some(repository) = &self.user_reader {
+                let _ = repository.delete_user_group(&created.id).await;
+            }
+            return Err(error);
         }
+        Ok(self
+            .enrich_user_groups(vec![created])
+            .await?
+            .into_iter()
+            .next())
     }
 
     pub(crate) async fn update_user_group(
@@ -148,17 +183,48 @@ impl GatewayDataState {
         group_id: &str,
         record: aether_data::repository::users::UpsertUserGroupRecord,
     ) -> Result<Option<aether_data::repository::users::StoredUserGroup>, DataLayerError> {
-        match &self.user_reader {
+        let request_limit = (record.rate_limit_mode == "custom")
+            .then_some(record.rate_limit.unwrap_or(0).max(0) as u32);
+        let daily_limit = (record.daily_usage_limit_mode == "custom")
+            .then_some(record.daily_usage_limit_usd.unwrap_or(0.0).max(0.0));
+        let updated = match &self.user_reader {
             Some(repository) => repository.update_user_group(group_id, record).await,
             None => Ok(None),
-        }
+        }?;
+        let Some(updated) = updated else {
+            return Ok(None);
+        };
+        let document = aether_data::repository::admission::AdmissionPolicyDocument::default()
+            .with_requests_per_minute(request_limit)
+            .with_daily_usage_limit_usd(daily_limit);
+        self.store_scoped_admission_document(
+            aether_data::repository::admission::AdmissionScopeKind::UserGroup,
+            group_id,
+            &document,
+        )
+        .await?;
+        Ok(self
+            .enrich_user_groups(vec![updated])
+            .await?
+            .into_iter()
+            .next())
     }
 
     pub(crate) async fn delete_user_group(&self, group_id: &str) -> Result<bool, DataLayerError> {
-        match &self.user_reader {
+        let deleted = match &self.user_reader {
             Some(repository) => repository.delete_user_group(group_id).await,
             None => Ok(false),
+        }?;
+        if deleted {
+            self.delete_admission_policy(
+                &aether_data::repository::admission::AdmissionPolicyScope {
+                    kind: aether_data::repository::admission::AdmissionScopeKind::UserGroup,
+                    subject_id: group_id.to_string(),
+                },
+            )
+            .await?;
         }
+        Ok(deleted)
     }
 
     pub(crate) async fn list_user_group_members(
@@ -190,10 +256,11 @@ impl GatewayDataState {
         &self,
         user_id: &str,
     ) -> Result<Vec<aether_data::repository::users::StoredUserGroup>, DataLayerError> {
-        match &self.user_reader {
+        let groups = match &self.user_reader {
             Some(repository) => repository.list_user_groups_for_user(user_id).await,
             None => Ok(Vec::new()),
-        }
+        }?;
+        self.enrich_user_groups(groups).await
     }
 
     pub(crate) async fn list_user_group_memberships_by_user_ids(
@@ -216,14 +283,15 @@ impl GatewayDataState {
         user_id: &str,
         group_ids: &[String],
     ) -> Result<Vec<aether_data::repository::users::StoredUserGroup>, DataLayerError> {
-        match &self.user_reader {
+        let groups = match &self.user_reader {
             Some(repository) => {
                 repository
                     .replace_user_groups_for_user(user_id, group_ids)
                     .await
             }
             None => Ok(Vec::new()),
-        }
+        }?;
+        self.enrich_user_groups(groups).await
     }
 
     pub(crate) async fn add_user_to_group(
@@ -538,7 +606,7 @@ impl GatewayDataState {
         let Some(repository) = self.user_reader.as_ref() else {
             return Ok(None);
         };
-        repository
+        let user = repository
             .create_local_auth_user_with_settings(
                 email,
                 email_verified,
@@ -548,9 +616,28 @@ impl GatewayDataState {
                 allowed_providers,
                 allowed_api_formats,
                 allowed_models,
-                rate_limit,
+                None,
             )
-            .await
+            .await?;
+        let Some(user) = user else {
+            return Ok(None);
+        };
+        if let Some(rate_limit) = rate_limit {
+            let document = aether_data::repository::admission::AdmissionPolicyDocument::default()
+                .with_requests_per_minute(Some(rate_limit.max(0) as u32));
+            if let Err(error) = self
+                .store_scoped_admission_document(
+                    aether_data::repository::admission::AdmissionScopeKind::User,
+                    &user.id,
+                    &document,
+                )
+                .await
+            {
+                let _ = repository.delete_local_auth_user(&user.id).await;
+                return Err(error);
+            }
+        }
+        Ok(Some(user))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -571,7 +658,7 @@ impl GatewayDataState {
         let Some(repository) = self.user_reader.as_ref() else {
             return Ok(None);
         };
-        repository
+        let updated = repository
             .update_local_auth_user_admin_fields(
                 user_id,
                 role,
@@ -581,11 +668,28 @@ impl GatewayDataState {
                 allowed_api_formats,
                 allowed_models_present,
                 allowed_models,
-                rate_limit_present,
-                rate_limit,
+                false,
+                None,
                 is_active,
             )
-            .await
+            .await?;
+        if updated.is_some() && rate_limit_present {
+            let mut document = self
+                .scoped_admission_document(
+                    aether_data::repository::admission::AdmissionScopeKind::User,
+                    user_id,
+                )
+                .await?;
+            document =
+                document.with_requests_per_minute(rate_limit.map(|value| value.max(0) as u32));
+            self.store_scoped_admission_document(
+                aether_data::repository::admission::AdmissionScopeKind::User,
+                user_id,
+                &document,
+            )
+            .await?;
+        }
+        Ok(updated)
     }
 
     pub(crate) async fn update_local_auth_user_policy_modes(
@@ -599,15 +703,35 @@ impl GatewayDataState {
         let Some(repository) = self.user_reader.as_ref() else {
             return Ok(None);
         };
-        repository
+        let updated = repository
             .update_local_auth_user_policy_modes(
                 user_id,
                 allowed_providers_mode,
                 allowed_api_formats_mode,
                 allowed_models_mode,
-                rate_limit_mode,
+                None,
             )
-            .await
+            .await?;
+        if updated.is_some()
+            && rate_limit_mode
+                .as_deref()
+                .is_some_and(|mode| mode != "custom")
+        {
+            let document = self
+                .scoped_admission_document(
+                    aether_data::repository::admission::AdmissionScopeKind::User,
+                    user_id,
+                )
+                .await?
+                .with_requests_per_minute(None);
+            self.store_scoped_admission_document(
+                aether_data::repository::admission::AdmissionScopeKind::User,
+                user_id,
+                &document,
+            )
+            .await?;
+        }
+        Ok(updated)
     }
 
     pub(crate) async fn touch_auth_user_last_login(
@@ -796,7 +920,26 @@ impl GatewayDataState {
         let Some(repository) = self.user_reader.as_ref() else {
             return Ok(false);
         };
-        repository.delete_local_auth_user(user_id).await
+        let api_keys = self
+            .list_auth_api_key_export_records_by_user_ids(&[user_id.to_string()])
+            .await?;
+        let deleted = repository.delete_local_auth_user(user_id).await?;
+        if deleted {
+            let scopes =
+                std::iter::once(aether_data::repository::admission::AdmissionPolicyScope {
+                    kind: aether_data::repository::admission::AdmissionScopeKind::User,
+                    subject_id: user_id.to_string(),
+                })
+                .chain(api_keys.into_iter().map(|api_key| {
+                    aether_data::repository::admission::AdmissionPolicyScope {
+                        kind: aether_data::repository::admission::AdmissionScopeKind::ApiKey,
+                        subject_id: api_key.api_key_id,
+                    }
+                }))
+                .collect::<Vec<_>>();
+            self.delete_admission_policies(&scopes).await?;
+        }
+        Ok(deleted)
     }
 
     pub(crate) async fn register_local_auth_user(
@@ -1173,20 +1316,22 @@ impl GatewayDataState {
         &self,
         user_ids: &[String],
     ) -> Result<Vec<StoredAuthApiKeyExportRecord>, DataLayerError> {
-        match &self.auth_api_key_reader {
+        let records = match &self.auth_api_key_reader {
             Some(repository) => repository.list_export_api_keys_by_user_ids(user_ids).await,
             None => Ok(Vec::new()),
-        }
+        }?;
+        self.enrich_api_key_export_records(records).await
     }
 
     pub(crate) async fn list_auth_api_key_export_records_by_ids(
         &self,
         api_key_ids: &[String],
     ) -> Result<Vec<StoredAuthApiKeyExportRecord>, DataLayerError> {
-        match &self.auth_api_key_reader {
+        let records = match &self.auth_api_key_reader {
             Some(repository) => repository.list_export_api_keys_by_ids(api_key_ids).await,
             None => Ok(Vec::new()),
-        }
+        }?;
+        self.enrich_api_key_export_records(records).await
     }
 
     pub(crate) async fn read_auth_api_key_feature_settings(
@@ -1214,24 +1359,26 @@ impl GatewayDataState {
         &self,
         name_search: &str,
     ) -> Result<Vec<StoredAuthApiKeyExportRecord>, DataLayerError> {
-        match &self.auth_api_key_reader {
+        let records = match &self.auth_api_key_reader {
             Some(repository) => {
                 repository
                     .list_export_api_keys_by_name_search(name_search)
                     .await
             }
             None => Ok(Vec::new()),
-        }
+        }?;
+        self.enrich_api_key_export_records(records).await
     }
 
     pub(crate) async fn list_auth_api_key_export_standalone_records_page(
         &self,
         query: &aether_data::repository::auth::StandaloneApiKeyExportListQuery,
     ) -> Result<Vec<StoredAuthApiKeyExportRecord>, DataLayerError> {
-        match &self.auth_api_key_reader {
+        let records = match &self.auth_api_key_reader {
             Some(repository) => repository.list_export_standalone_api_keys_page(query).await,
             None => Ok(Vec::new()),
-        }
+        }?;
+        self.enrich_api_key_export_records(records).await
     }
 
     pub(crate) async fn count_auth_api_key_export_standalone_records(
@@ -1276,10 +1423,11 @@ impl GatewayDataState {
     pub(crate) async fn list_auth_api_key_export_standalone_records(
         &self,
     ) -> Result<Vec<StoredAuthApiKeyExportRecord>, DataLayerError> {
-        match &self.auth_api_key_reader {
+        let records = match &self.auth_api_key_reader {
             Some(repository) => repository.list_export_standalone_api_keys().await,
             None => Ok(Vec::new()),
-        }
+        }?;
+        self.enrich_api_key_export_records(records).await
     }
 
     pub(crate) async fn summarize_auth_api_key_export_standalone_records(
@@ -1300,12 +1448,16 @@ impl GatewayDataState {
         &self,
         api_key_id: &str,
     ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
-        match &self.auth_api_key_reader {
+        let record = match &self.auth_api_key_reader {
             Some(repository) => {
                 repository
                     .find_export_standalone_api_key_by_id(api_key_id)
                     .await
             }
+            None => Ok(None),
+        }?;
+        match record {
+            Some(record) => self.enrich_api_key_export_record(record).await.map(Some),
             None => Ok(None),
         }
     }
@@ -1314,40 +1466,139 @@ impl GatewayDataState {
         &self,
         record: aether_data::repository::auth::CreateUserApiKeyRecord,
     ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
-        match &self.auth_api_key_writer {
+        let scope_id = record.api_key_id.clone();
+        let user_id = record.user_id.clone();
+        let document = aether_data::repository::admission::AdmissionPolicyDocument::default()
+            .with_requests_per_minute(Some(record.rate_limit.max(0) as u32))
+            .with_concurrent_requests(record.concurrent_limit.map(|value| value.max(0) as u32))
+            .with_daily_usage_limit_usd(record.daily_usage_limit_usd);
+        let created = match &self.auth_api_key_writer {
             Some(repository) => repository.create_user_api_key(record).await,
             None => Ok(None),
+        }?;
+        let Some(created) = created else {
+            return Ok(None);
+        };
+        if let Err(error) = self
+            .store_scoped_admission_document(
+                aether_data::repository::admission::AdmissionScopeKind::ApiKey,
+                &scope_id,
+                &document,
+            )
+            .await
+        {
+            if let Some(repository) = &self.auth_api_key_writer {
+                let _ = repository.delete_user_api_key(&user_id, &scope_id).await;
+            }
+            return Err(error);
         }
+        self.enrich_api_key_export_record(created).await.map(Some)
     }
 
     pub(crate) async fn create_standalone_api_key(
         &self,
         record: aether_data::repository::auth::CreateStandaloneApiKeyRecord,
     ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
-        match &self.auth_api_key_writer {
+        let scope_id = record.api_key_id.clone();
+        let document = aether_data::repository::admission::AdmissionPolicyDocument::default()
+            .with_requests_per_minute(record.rate_limit.map(|value| value.max(0) as u32))
+            .with_concurrent_requests(record.concurrent_limit.map(|value| value.max(0) as u32))
+            .with_daily_usage_limit_usd(record.daily_usage_limit_usd);
+        let created = match &self.auth_api_key_writer {
             Some(repository) => repository.create_standalone_api_key(record).await,
             None => Ok(None),
+        }?;
+        let Some(created) = created else {
+            return Ok(None);
+        };
+        if let Err(error) = self
+            .store_scoped_admission_document(
+                aether_data::repository::admission::AdmissionScopeKind::ApiKey,
+                &scope_id,
+                &document,
+            )
+            .await
+        {
+            if let Some(repository) = &self.auth_api_key_writer {
+                let _ = repository.delete_standalone_api_key(&scope_id).await;
+            }
+            return Err(error);
         }
+        self.enrich_api_key_export_record(created).await.map(Some)
     }
 
     pub(crate) async fn update_user_api_key_basic(
         &self,
         record: aether_data::repository::auth::UpdateUserApiKeyBasicRecord,
     ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
-        match &self.auth_api_key_writer {
+        let mut document = self
+            .scoped_admission_document(
+                aether_data::repository::admission::AdmissionScopeKind::ApiKey,
+                &record.api_key_id,
+            )
+            .await?;
+        if let Some(rate_limit) = record.rate_limit {
+            document = document.with_requests_per_minute(Some(rate_limit.max(0) as u32));
+        }
+        if let Some(concurrent_limit) = record.concurrent_limit {
+            document = document.with_concurrent_requests(Some(concurrent_limit.max(0) as u32));
+        }
+        if record.daily_usage_limit_present {
+            document = document.with_daily_usage_limit_usd(record.daily_usage_limit_usd);
+        }
+        let api_key_id = record.api_key_id.clone();
+        let updated = match &self.auth_api_key_writer {
             Some(repository) => repository.update_user_api_key_basic(record).await,
             None => Ok(None),
-        }
+        }?;
+        let Some(updated) = updated else {
+            return Ok(None);
+        };
+        self.store_scoped_admission_document(
+            aether_data::repository::admission::AdmissionScopeKind::ApiKey,
+            &api_key_id,
+            &document,
+        )
+        .await?;
+        self.enrich_api_key_export_record(updated).await.map(Some)
     }
 
     pub(crate) async fn update_standalone_api_key_basic(
         &self,
         record: aether_data::repository::auth::UpdateStandaloneApiKeyBasicRecord,
     ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
-        match &self.auth_api_key_writer {
+        let mut document = self
+            .scoped_admission_document(
+                aether_data::repository::admission::AdmissionScopeKind::ApiKey,
+                &record.api_key_id,
+            )
+            .await?;
+        if record.rate_limit_present {
+            document = document
+                .with_requests_per_minute(record.rate_limit.map(|value| value.max(0) as u32));
+        }
+        if record.concurrent_limit_present {
+            document = document
+                .with_concurrent_requests(record.concurrent_limit.map(|value| value.max(0) as u32));
+        }
+        if record.daily_usage_limit_present {
+            document = document.with_daily_usage_limit_usd(record.daily_usage_limit_usd);
+        }
+        let api_key_id = record.api_key_id.clone();
+        let updated = match &self.auth_api_key_writer {
             Some(repository) => repository.update_standalone_api_key_basic(record).await,
             None => Ok(None),
-        }
+        }?;
+        let Some(updated) = updated else {
+            return Ok(None);
+        };
+        self.store_scoped_admission_document(
+            aether_data::repository::admission::AdmissionScopeKind::ApiKey,
+            &api_key_id,
+            &document,
+        )
+        .await?;
+        self.enrich_api_key_export_record(updated).await.map(Some)
     }
 
     pub(crate) async fn set_user_api_key_active(
@@ -1356,14 +1607,15 @@ impl GatewayDataState {
         api_key_id: &str,
         is_active: bool,
     ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
-        match &self.auth_api_key_writer {
+        let record = match &self.auth_api_key_writer {
             Some(repository) => {
                 repository
                     .set_user_api_key_active(user_id, api_key_id, is_active)
                     .await
             }
             None => Ok(None),
-        }
+        }?;
+        self.enrich_optional_api_key_export_record(record).await
     }
 
     pub(crate) async fn set_standalone_api_key_active(
@@ -1371,14 +1623,15 @@ impl GatewayDataState {
         api_key_id: &str,
         is_active: bool,
     ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
-        match &self.auth_api_key_writer {
+        let record = match &self.auth_api_key_writer {
             Some(repository) => {
                 repository
                     .set_standalone_api_key_active(api_key_id, is_active)
                     .await
             }
             None => Ok(None),
-        }
+        }?;
+        self.enrich_optional_api_key_export_record(record).await
     }
 
     pub(crate) async fn set_user_api_key_locked(
@@ -1403,14 +1656,15 @@ impl GatewayDataState {
         api_key_id: &str,
         allowed_providers: Option<Vec<String>>,
     ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
-        match &self.auth_api_key_writer {
+        let record = match &self.auth_api_key_writer {
             Some(repository) => {
                 repository
                     .set_user_api_key_allowed_providers(user_id, api_key_id, allowed_providers)
                     .await
             }
             None => Ok(None),
-        }
+        }?;
+        self.enrich_optional_api_key_export_record(record).await
     }
 
     pub(crate) async fn set_user_api_key_force_capabilities(
@@ -1419,14 +1673,15 @@ impl GatewayDataState {
         api_key_id: &str,
         force_capabilities: Option<serde_json::Value>,
     ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
-        match &self.auth_api_key_writer {
+        let record = match &self.auth_api_key_writer {
             Some(repository) => {
                 repository
                     .set_user_api_key_force_capabilities(user_id, api_key_id, force_capabilities)
                     .await
             }
             None => Ok(None),
-        }
+        }?;
+        self.enrich_optional_api_key_export_record(record).await
     }
 
     pub(crate) async fn set_user_api_key_feature_settings(
@@ -1435,14 +1690,15 @@ impl GatewayDataState {
         api_key_id: &str,
         feature_settings: Option<serde_json::Value>,
     ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
-        match &self.auth_api_key_writer {
+        let record = match &self.auth_api_key_writer {
             Some(repository) => {
                 repository
                     .set_user_api_key_feature_settings(user_id, api_key_id, feature_settings)
                     .await
             }
             None => Ok(None),
-        }
+        }?;
+        self.enrich_optional_api_key_export_record(record).await
     }
 
     pub(crate) async fn set_api_key_usage_totals(
@@ -1452,7 +1708,7 @@ impl GatewayDataState {
         total_tokens: u64,
         total_cost_usd: f64,
     ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
-        match &self.auth_api_key_writer {
+        let record = match &self.auth_api_key_writer {
             Some(repository) => {
                 repository
                     .set_api_key_usage_totals(
@@ -1464,7 +1720,8 @@ impl GatewayDataState {
                     .await
             }
             None => Ok(None),
-        }
+        }?;
+        self.enrich_optional_api_key_export_record(record).await
     }
 
     pub(crate) async fn set_standalone_api_key_feature_settings(
@@ -1472,14 +1729,15 @@ impl GatewayDataState {
         api_key_id: &str,
         feature_settings: Option<serde_json::Value>,
     ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
-        match &self.auth_api_key_writer {
+        let record = match &self.auth_api_key_writer {
             Some(repository) => {
                 repository
                     .set_standalone_api_key_feature_settings(api_key_id, feature_settings)
                     .await
             }
             None => Ok(None),
-        }
+        }?;
+        self.enrich_optional_api_key_export_record(record).await
     }
 
     pub(crate) async fn delete_user_api_key(
@@ -1487,20 +1745,40 @@ impl GatewayDataState {
         user_id: &str,
         api_key_id: &str,
     ) -> Result<bool, DataLayerError> {
-        match &self.auth_api_key_writer {
+        let deleted = match &self.auth_api_key_writer {
             Some(repository) => repository.delete_user_api_key(user_id, api_key_id).await,
             None => Ok(false),
+        }?;
+        if deleted {
+            self.delete_admission_policy(
+                &aether_data::repository::admission::AdmissionPolicyScope {
+                    kind: aether_data::repository::admission::AdmissionScopeKind::ApiKey,
+                    subject_id: api_key_id.to_string(),
+                },
+            )
+            .await?;
         }
+        Ok(deleted)
     }
 
     pub(crate) async fn delete_standalone_api_key(
         &self,
         api_key_id: &str,
     ) -> Result<bool, DataLayerError> {
-        match &self.auth_api_key_writer {
+        let deleted = match &self.auth_api_key_writer {
             Some(repository) => repository.delete_standalone_api_key(api_key_id).await,
             None => Ok(false),
+        }?;
+        if deleted {
+            self.delete_admission_policy(
+                &aether_data::repository::admission::AdmissionPolicyScope {
+                    kind: aether_data::repository::admission::AdmissionScopeKind::ApiKey,
+                    subject_id: api_key_id.to_string(),
+                },
+            )
+            .await?;
         }
+        Ok(deleted)
     }
 
     pub(crate) async fn read_auth_api_key_snapshot(
@@ -1545,45 +1823,44 @@ impl GatewayDataState {
         let Some(mut snapshot) = snapshot else {
             return Ok(None);
         };
-        let Some(repository) = self.user_reader.as_ref() else {
-            return Ok(Some(GatewayAuthApiKeySnapshot::from_stored(
-                snapshot,
-                now_unix_secs,
-            )));
+        let groups = if let Some(repository) = self.user_reader.as_ref() {
+            if let Some(user) = crate::request_diagnostics::observe_db_operation(
+                "auth_user_policy",
+                self.database_pool_summary(),
+                repository.find_user_auth_by_id(&snapshot.user_id),
+            )
+            .await?
+            {
+                snapshot.user_role = user.role;
+            }
+            self.effective_user_groups_for_user(&snapshot.user_id)
+                .await?
+        } else {
+            Vec::new()
         };
-        let Some(user) = crate::request_diagnostics::observe_db_operation(
-            "auth_user_policy",
-            self.database_pool_summary(),
-            repository.find_user_auth_by_id(&snapshot.user_id),
-        )
-        .await?
-        else {
-            return Ok(Some(GatewayAuthApiKeySnapshot::from_stored(
-                snapshot,
-                now_unix_secs,
-            )));
-        };
-        snapshot.user_role = user.role;
-        let groups = self
-            .effective_user_groups_for_user(&snapshot.user_id)
-            .await?;
 
         let GatewayUserEffectiveListPolicies {
             allowed_providers,
             allowed_api_formats,
             allowed_models,
         } = resolve_group_effective_list_policies(&groups);
-        let user_rate_limit = resolve_group_effective_rate_limit_policy(&groups);
-        let user_daily_usage_limit_usd = resolve_group_effective_daily_usage_limit_policy(&groups);
         snapshot.user_allowed_providers = allowed_providers;
         snapshot.user_allowed_api_formats = allowed_api_formats;
         snapshot.user_allowed_models = allowed_models;
-        snapshot.user_rate_limit = user_rate_limit;
-        snapshot.user_daily_usage_limit_usd = user_daily_usage_limit_usd;
-        Ok(Some(GatewayAuthApiKeySnapshot::from_stored(
-            snapshot,
-            now_unix_secs,
-        )))
+        let admission_policy = self
+            .resolve_admission_policy(
+                &snapshot.user_id,
+                &snapshot.api_key_id,
+                &groups
+                    .iter()
+                    .map(|group| group.id.clone())
+                    .collect::<Vec<_>>(),
+                snapshot.api_key_is_standalone,
+            )
+            .await?;
+        let mut resolved = GatewayAuthApiKeySnapshot::from_stored(snapshot, now_unix_secs);
+        resolved.apply_admission_policy(admission_policy);
+        Ok(Some(resolved))
     }
 
     pub(crate) async fn resolve_user_effective_list_policies(
@@ -1786,67 +2063,6 @@ fn list_restriction_from_mode(mode: &str, values: Option<Vec<String>>) -> Option
     }
 }
 
-fn resolve_effective_rate_limit_policy(
-    user_rate_limit: Option<i32>,
-    user_mode: &str,
-    groups: &[aether_data::repository::users::StoredUserGroup],
-) -> Option<i32> {
-    let group_policy = groups.iter().fold(None, |effective, group| {
-        union_rate_limit_policies(
-            effective,
-            rate_limit_restriction_from_mode(&group.rate_limit_mode, group.rate_limit),
-        )
-    });
-    let user_policy = rate_limit_restriction_from_mode(user_mode, user_rate_limit);
-    rate_limit_policy_value(intersect_rate_limit_policies(group_policy, user_policy))
-}
-
-pub(crate) fn resolve_group_effective_rate_limit_policy(
-    groups: &[aether_data::repository::users::StoredUserGroup],
-) -> Option<i32> {
-    resolve_effective_rate_limit_policy(None, "system", groups)
-}
-
-pub(crate) fn resolve_group_effective_daily_usage_limit_policy(
-    groups: &[aether_data::repository::users::StoredUserGroup],
-) -> Option<f64> {
-    let mut limit: Option<f64> = None;
-    for group in groups
-        .iter()
-        .filter(|group| group.daily_usage_limit_mode == "custom")
-    {
-        let value = group.daily_usage_limit_usd.unwrap_or(0.0).max(0.0);
-        if value == 0.0 {
-            return Some(0.0);
-        }
-        limit = Some(limit.map_or(value, |current| current.max(value)));
-    }
-    limit
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum RateLimitRestriction {
-    Unlimited,
-    Limited(i32),
-}
-
-fn rate_limit_restriction_from_mode(
-    mode: &str,
-    rate_limit: Option<i32>,
-) -> Option<RateLimitRestriction> {
-    match mode {
-        "custom" => {
-            let rate_limit = rate_limit.unwrap_or(0).max(0);
-            if rate_limit == 0 {
-                Some(RateLimitRestriction::Unlimited)
-            } else {
-                Some(RateLimitRestriction::Limited(rate_limit))
-            }
-        }
-        _ => None,
-    }
-}
-
 fn intersect_list_policies(
     left: Option<Vec<String>>,
     right: Option<Vec<String>>,
@@ -1878,49 +2094,5 @@ fn intersect_api_format_list_policies(
         (Some(left_values), Some(right_values)) => Some(
             crate::ai_serving::intersect_api_format_allowed_lists(&left_values, &right_values),
         ),
-    }
-}
-
-fn intersect_rate_limit_policies(
-    left: Option<RateLimitRestriction>,
-    right: Option<RateLimitRestriction>,
-) -> Option<RateLimitRestriction> {
-    match (left, right) {
-        (None, None) => None,
-        (Some(value), None) | (None, Some(value)) => Some(value),
-        (Some(RateLimitRestriction::Unlimited), Some(RateLimitRestriction::Unlimited)) => {
-            Some(RateLimitRestriction::Unlimited)
-        }
-        (Some(RateLimitRestriction::Limited(value)), Some(RateLimitRestriction::Unlimited))
-        | (Some(RateLimitRestriction::Unlimited), Some(RateLimitRestriction::Limited(value))) => {
-            Some(RateLimitRestriction::Limited(value))
-        }
-        (Some(RateLimitRestriction::Limited(left)), Some(RateLimitRestriction::Limited(right))) => {
-            Some(RateLimitRestriction::Limited(left.min(right)))
-        }
-    }
-}
-
-fn union_rate_limit_policies(
-    left: Option<RateLimitRestriction>,
-    right: Option<RateLimitRestriction>,
-) -> Option<RateLimitRestriction> {
-    match (left, right) {
-        (None, None) => None,
-        (Some(value), None) | (None, Some(value)) => Some(value),
-        (Some(RateLimitRestriction::Unlimited), _) | (_, Some(RateLimitRestriction::Unlimited)) => {
-            Some(RateLimitRestriction::Unlimited)
-        }
-        (Some(RateLimitRestriction::Limited(left)), Some(RateLimitRestriction::Limited(right))) => {
-            Some(RateLimitRestriction::Limited(left.max(right)))
-        }
-    }
-}
-
-fn rate_limit_policy_value(policy: Option<RateLimitRestriction>) -> Option<i32> {
-    match policy {
-        None => None,
-        Some(RateLimitRestriction::Unlimited) => Some(0),
-        Some(RateLimitRestriction::Limited(value)) => Some(value),
     }
 }

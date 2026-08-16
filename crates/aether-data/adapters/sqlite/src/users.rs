@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
-use sqlx::{sqlite::SqliteRow, QueryBuilder, Row, Sqlite, Transaction};
+use sqlx::{sqlite::SqliteRow, QueryBuilder, Row, Sqlite};
 
 use aether_data_contracts::repository::users::{
     normalize_user_group_name, LdapAuthUserProvisioningOutcome, StoredUserAuthRecord,
@@ -40,8 +40,8 @@ SELECT
   allowed_api_formats_mode,
   allowed_models,
   allowed_models_mode,
-  rate_limit,
-  rate_limit_mode,
+  NULL AS rate_limit,
+  'inherit' AS rate_limit_mode,
   model_capability_settings,
   feature_settings,
   is_active
@@ -157,14 +157,10 @@ SELECT
   allowed_api_formats_mode,
   allowed_models,
   allowed_models_mode,
-  rate_limit,
-  rate_limit_mode,
-  (SELECT daily_usage_limit_usd
-   FROM lite_user_group_daily_usage_limits AS lite_limits
-   WHERE lite_limits.user_group_id = user_groups.id) AS daily_usage_limit_usd,
-  COALESCE((SELECT daily_usage_limit_mode
-            FROM lite_user_group_daily_usage_limits AS lite_limits
-            WHERE lite_limits.user_group_id = user_groups.id), 'inherit') AS daily_usage_limit_mode,
+  NULL AS rate_limit,
+  'inherit' AS rate_limit_mode,
+  NULL AS daily_usage_limit_usd,
+  'inherit' AS daily_usage_limit_mode,
   created_at,
   updated_at
 FROM user_groups
@@ -479,8 +475,6 @@ WHERE is_deleted = 0
         let id = uuid::Uuid::new_v4().to_string();
         let name = normalize_user_group_name(&record.name);
         let normalized_name = name.to_ascii_lowercase();
-        let daily_usage_limit_usd = record.daily_usage_limit_usd;
-        let daily_usage_limit_mode = record.daily_usage_limit_mode.clone();
         let mut tx = self.pool.begin().await.map_sql_err()?;
         let result = sqlx::query(
             r#"
@@ -488,10 +482,9 @@ INSERT INTO user_groups (
   id, name, normalized_name, description, priority,
   allowed_providers, allowed_providers_mode,
   allowed_api_formats, allowed_api_formats_mode,
-  allowed_models, allowed_models_mode,
-  rate_limit, rate_limit_mode, created_at, updated_at
+  allowed_models, allowed_models_mode, created_at, updated_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 "#,
         )
         .bind(&id)
@@ -509,21 +502,12 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         .bind(record.allowed_api_formats_mode)
         .bind(json_string_from_option_vec(record.allowed_models.as_ref()))
         .bind(record.allowed_models_mode)
-        .bind(record.rate_limit)
-        .bind(record.rate_limit_mode)
         .bind(now)
         .bind(now)
         .execute(&mut *tx)
         .await;
         match result {
             Ok(_) => {
-                upsert_sqlite_user_group_daily_usage_limit(
-                    &mut tx,
-                    &id,
-                    daily_usage_limit_usd,
-                    &daily_usage_limit_mode,
-                )
-                .await?;
                 tx.commit().await.map_sql_err()?;
                 self.find_user_group_by_id(&id).await
             }
@@ -542,8 +526,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         let now = current_unix_secs();
         let name = normalize_user_group_name(&record.name);
         let normalized_name = name.to_ascii_lowercase();
-        let daily_usage_limit_usd = record.daily_usage_limit_usd;
-        let daily_usage_limit_mode = record.daily_usage_limit_mode.clone();
         let mut tx = self.pool.begin().await.map_sql_err()?;
         let result = sqlx::query(
             r#"
@@ -558,8 +540,6 @@ SET name = ?,
     allowed_api_formats_mode = ?,
     allowed_models = ?,
     allowed_models_mode = ?,
-    rate_limit = ?,
-    rate_limit_mode = ?,
     updated_at = ?
 WHERE id = ?
 "#,
@@ -578,8 +558,6 @@ WHERE id = ?
         .bind(record.allowed_api_formats_mode)
         .bind(json_string_from_option_vec(record.allowed_models.as_ref()))
         .bind(record.allowed_models_mode)
-        .bind(record.rate_limit)
-        .bind(record.rate_limit_mode)
         .bind(now)
         .bind(group_id)
         .execute(&mut *tx)
@@ -587,13 +565,6 @@ WHERE id = ?
         match result {
             Ok(result) if result.rows_affected() == 0 => Ok(None),
             Ok(_) => {
-                upsert_sqlite_user_group_daily_usage_limit(
-                    &mut tx,
-                    group_id,
-                    daily_usage_limit_usd,
-                    &daily_usage_limit_mode,
-                )
-                .await?;
                 tx.commit().await.map_sql_err()?;
                 self.find_user_group_by_id(group_id).await
             }
@@ -611,13 +582,6 @@ WHERE id = ?
             .execute(&mut *tx)
             .await
             .map_sql_err()?;
-        if result.rows_affected() > 0 {
-            sqlx::query("DELETE FROM lite_user_group_daily_usage_limits WHERE user_group_id = ?")
-                .bind(group_id)
-                .execute(&mut *tx)
-                .await
-                .map_sql_err()?;
-        }
         tx.commit().await.map_sql_err()?;
         Ok(result.rows_affected() > 0)
     }
@@ -907,10 +871,10 @@ WHERE provider_type = ?
             r#"
 INSERT INTO users (
   id, email, email_verified, username, password_hash, role, auth_source,
-  allowed_providers_mode, allowed_api_formats_mode, allowed_models_mode, rate_limit_mode,
+  allowed_providers_mode, allowed_api_formats_mode, allowed_models_mode,
   is_active, is_deleted, created_at, updated_at, last_login_at
 )
-VALUES (?, ?, 1, ?, NULL, 'user', 'oauth', 'inherit', 'inherit', 'inherit', 'inherit', 1, 0, ?, ?, ?)
+VALUES (?, ?, 1, ?, NULL, 'user', 'oauth', 'inherit', 'inherit', 'inherit', 1, 0, ?, ?, ?)
 "#,
         )
         .bind(&user_id)
@@ -1126,8 +1090,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         allowed_api_formats: Option<Vec<String>>,
         allowed_models_present: bool,
         allowed_models: Option<Vec<String>>,
-        rate_limit_present: bool,
-        rate_limit: Option<i32>,
+        _rate_limit_present: bool,
+        _rate_limit: Option<i32>,
         is_active: Option<bool>,
     ) -> Result<Option<StoredUserAuthRecord>, DataLayerError> {
         let allowed_providers_mode = if allowed_providers
@@ -1154,11 +1118,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         } else {
             "unrestricted"
         };
-        let rate_limit_mode = if rate_limit.is_some() {
-            "custom"
-        } else {
-            "system"
-        };
         let result = sqlx::query(
             r#"
 UPDATE users
@@ -1169,8 +1128,6 @@ SET role = CASE WHEN ? THEN COALESCE(?, role) ELSE role END,
     allowed_api_formats_mode = CASE WHEN ? THEN ? ELSE allowed_api_formats_mode END,
     allowed_models = CASE WHEN ? THEN ? ELSE allowed_models END,
     allowed_models_mode = CASE WHEN ? THEN ? ELSE allowed_models_mode END,
-    rate_limit = CASE WHEN ? THEN ? ELSE rate_limit END,
-    rate_limit_mode = CASE WHEN ? THEN ? ELSE rate_limit_mode END,
     is_active = CASE WHEN ? THEN ? ELSE is_active END,
     updated_at = ?
 WHERE id = ?
@@ -1199,10 +1156,6 @@ WHERE id = ?
         )?)
         .bind(allowed_models_present)
         .bind(allowed_models_mode)
-        .bind(rate_limit_present)
-        .bind(rate_limit)
-        .bind(rate_limit_present)
-        .bind(rate_limit_mode)
         .bind(is_active.is_some())
         .bind(is_active)
         .bind(chrono::Utc::now().timestamp())
@@ -1222,7 +1175,7 @@ WHERE id = ?
         allowed_providers_mode: Option<String>,
         allowed_api_formats_mode: Option<String>,
         allowed_models_mode: Option<String>,
-        rate_limit_mode: Option<String>,
+        _rate_limit_mode: Option<String>,
     ) -> Result<Option<StoredUserAuthRecord>, DataLayerError> {
         let result = sqlx::query(
             r#"
@@ -1230,7 +1183,6 @@ UPDATE users
 SET allowed_providers_mode = CASE WHEN ? THEN ? ELSE allowed_providers_mode END,
     allowed_api_formats_mode = CASE WHEN ? THEN ? ELSE allowed_api_formats_mode END,
     allowed_models_mode = CASE WHEN ? THEN ? ELSE allowed_models_mode END,
-    rate_limit_mode = CASE WHEN ? THEN ? ELSE rate_limit_mode END,
     updated_at = ?
 WHERE id = ?
 "#,
@@ -1241,8 +1193,6 @@ WHERE id = ?
         .bind(allowed_api_formats_mode)
         .bind(allowed_models_mode.is_some())
         .bind(allowed_models_mode)
-        .bind(rate_limit_mode.is_some())
-        .bind(rate_limit_mode)
         .bind(chrono::Utc::now().timestamp())
         .bind(user_id)
         .execute(&self.pool)
@@ -1314,10 +1264,10 @@ WHERE id = ?
             r#"
 INSERT INTO users (
   id, email, email_verified, username, password_hash, role, auth_source,
-  allowed_providers_mode, allowed_api_formats_mode, allowed_models_mode, rate_limit_mode,
+  allowed_providers_mode, allowed_api_formats_mode, allowed_models_mode,
   is_active, is_deleted, created_at, updated_at
 )
-VALUES (?, ?, ?, ?, ?, 'user', 'local', 'inherit', 'inherit', 'inherit', 'inherit', 1, 0, ?, ?)
+VALUES (?, ?, ?, ?, ?, 'user', 'local', 'inherit', 'inherit', 'inherit', 1, 0, ?, ?)
 "#,
         )
         .bind(&user_id)
@@ -1343,7 +1293,7 @@ VALUES (?, ?, ?, ?, ?, 'user', 'local', 'inherit', 'inherit', 'inherit', 'inheri
         allowed_providers: Option<Vec<String>>,
         allowed_api_formats: Option<Vec<String>>,
         allowed_models: Option<Vec<String>>,
-        rate_limit: Option<i32>,
+        _rate_limit: Option<i32>,
     ) -> Result<Option<StoredUserAuthRecord>, DataLayerError> {
         let user_id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().timestamp();
@@ -1371,11 +1321,6 @@ VALUES (?, ?, ?, ?, ?, 'user', 'local', 'inherit', 'inherit', 'inherit', 'inheri
         } else {
             "unrestricted"
         };
-        let rate_limit_mode = if rate_limit.is_some() {
-            "custom"
-        } else {
-            "system"
-        };
         sqlx::query(
             r#"
 INSERT INTO users (
@@ -1383,10 +1328,9 @@ INSERT INTO users (
   allowed_providers, allowed_providers_mode,
   allowed_api_formats, allowed_api_formats_mode,
   allowed_models, allowed_models_mode,
-  rate_limit, rate_limit_mode,
   is_active, is_deleted, created_at, updated_at
 )
-VALUES (?, ?, ?, ?, ?, ?, 'local', ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, 'local', ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)
 "#,
         )
         .bind(&user_id)
@@ -1410,8 +1354,6 @@ VALUES (?, ?, ?, ?, ?, ?, 'local', ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?)
             "users.allowed_models",
         )?)
         .bind(allowed_models_mode)
-        .bind(rate_limit)
-        .bind(rate_limit_mode)
         .bind(now)
         .bind(now)
         .execute(&self.pool)
@@ -2054,34 +1996,6 @@ fn map_user_auth_row(row: &SqliteRow) -> Result<StoredUserAuthRecord, DataLayerE
     })
 }
 
-async fn upsert_sqlite_user_group_daily_usage_limit(
-    tx: &mut Transaction<'_, Sqlite>,
-    group_id: &str,
-    daily_usage_limit_usd: Option<f64>,
-    daily_usage_limit_mode: &str,
-) -> Result<(), DataLayerError> {
-    sqlx::query(
-        r#"
-INSERT INTO lite_user_group_daily_usage_limits (
-    user_group_id,
-    daily_usage_limit_usd,
-    daily_usage_limit_mode
-)
-VALUES (?, ?, ?)
-ON CONFLICT(user_group_id) DO UPDATE
-SET daily_usage_limit_usd = excluded.daily_usage_limit_usd,
-    daily_usage_limit_mode = excluded.daily_usage_limit_mode
-"#,
-    )
-    .bind(group_id)
-    .bind(daily_usage_limit_usd)
-    .bind(daily_usage_limit_mode)
-    .execute(&mut **tx)
-    .await
-    .map_sql_err()?;
-    Ok(())
-}
-
 fn map_user_group_row(row: &SqliteRow) -> Result<StoredUserGroup, DataLayerError> {
     StoredUserGroup::new(
         row.try_get("id").map_sql_err()?,
@@ -2218,7 +2132,6 @@ mod tests {
         run_migrations(&pool)
             .await
             .expect("sqlite migrations should run");
-        run_lite_migrations(&pool).await;
         sqlx::query(
             r#"
 INSERT INTO users (
@@ -2565,7 +2478,6 @@ INSERT INTO users (
         run_migrations(&pool)
             .await
             .expect("sqlite migrations should run");
-        run_lite_migrations(&pool).await;
         sqlx::query(
             r#"
 INSERT INTO oauth_providers (
@@ -2664,7 +2576,7 @@ INSERT INTO oauth_providers (
     }
 
     #[tokio::test]
-    async fn sqlite_repository_stores_user_group_daily_limits_in_lite_extension_table() {
+    async fn sqlite_repository_does_not_write_core_user_group_admission_fields() {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
@@ -2673,7 +2585,6 @@ INSERT INTO oauth_providers (
         run_migrations(&pool)
             .await
             .expect("sqlite migrations should run");
-        run_lite_migrations(&pool).await;
 
         let repository = SqliteUserReadRepository::new(pool);
         let created = repository
@@ -2695,8 +2606,10 @@ INSERT INTO oauth_providers (
             .await
             .expect("group should create")
             .expect("group should reload");
-        assert_eq!(created.daily_usage_limit_usd, Some(12.5));
-        assert_eq!(created.daily_usage_limit_mode, "custom");
+        assert_eq!(created.rate_limit, None);
+        assert_eq!(created.rate_limit_mode, "inherit");
+        assert_eq!(created.daily_usage_limit_usd, None);
+        assert_eq!(created.daily_usage_limit_mode, "inherit");
 
         let updated = repository
             .update_user_group(
@@ -2727,22 +2640,5 @@ INSERT INTO oauth_providers (
             .delete_user_group(&created.id)
             .await
             .expect("group should delete"));
-        let extension_rows: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM lite_user_group_daily_usage_limits WHERE user_group_id = ?",
-        )
-        .bind(&created.id)
-        .fetch_one(&repository.pool)
-        .await
-        .expect("Lite group limit should be inspectable");
-        assert_eq!(extension_rows, 0);
-    }
-
-    async fn run_lite_migrations(pool: &sqlx::SqlitePool) {
-        sqlx::raw_sql(include_str!(
-            "../../../runtime/migrations/lite/sqlite/20260803000000_daily_usage_limits.sql"
-        ))
-        .execute(pool)
-        .await
-        .expect("Lite SQLite migrations should run");
     }
 }

@@ -958,30 +958,65 @@ impl GatewayDataState {
         &self,
         target: aether_data::repository::system::AdminSystemPurgeTarget,
     ) -> Result<aether_data::repository::system::AdminSystemPurgeSummary, DataLayerError> {
+        let admission_scopes = match target {
+            aether_data::repository::system::AdminSystemPurgeTarget::Config => {
+                vec![aether_data::repository::admission::AdmissionPolicyScope::system()]
+            }
+            aether_data::repository::system::AdminSystemPurgeTarget::Users => {
+                let users = self.list_non_admin_export_users().await?;
+                let user_ids = users.iter().map(|user| user.id.clone()).collect::<Vec<_>>();
+                let api_keys = self
+                    .list_auth_api_key_export_records_by_user_ids(&user_ids)
+                    .await?;
+                users
+                    .into_iter()
+                    .map(
+                        |user| aether_data::repository::admission::AdmissionPolicyScope {
+                            kind: aether_data::repository::admission::AdmissionScopeKind::User,
+                            subject_id: user.id,
+                        },
+                    )
+                    .chain(api_keys.into_iter().map(|api_key| {
+                        aether_data::repository::admission::AdmissionPolicyScope {
+                            kind: aether_data::repository::admission::AdmissionScopeKind::ApiKey,
+                            subject_id: api_key.api_key_id,
+                        }
+                    }))
+                    .collect()
+            }
+            _ => Vec::new(),
+        };
         let purges_config = matches!(
             &target,
             aether_data::repository::system::AdminSystemPurgeTarget::Config
         );
         if purges_config {
             if let Some(values) = &self.system_config_values {
-                let mut values = values.write().expect("system config values lock");
-                let deleted = values.len() as u64;
-                values.clear();
+                let deleted = {
+                    let mut values = values.write().expect("system config values lock");
+                    let deleted = values.len() as u64;
+                    values.clear();
+                    deleted
+                };
                 self.system_config_value_cache.clear();
                 let mut summary =
                     aether_data::repository::system::AdminSystemPurgeSummary::default();
                 summary.add("system_configs", deleted);
+                let policy_count = self.delete_admission_policies(&admission_scopes).await?;
+                summary.add("admission_policies", policy_count);
                 return Ok(summary);
             }
         }
-        let result = match self.backends.as_ref() {
+        let mut result = match self.backends.as_ref() {
             Some(backends) => backends.purge_admin_system_data(target).await,
             None => Ok(aether_data::repository::system::AdminSystemPurgeSummary::default()),
-        };
-        if purges_config && result.is_ok() {
+        }?;
+        let policy_count = self.delete_admission_policies(&admission_scopes).await?;
+        result.add("admission_policies", policy_count);
+        if purges_config {
             self.system_config_value_cache.clear();
         }
-        result
+        Ok(result)
     }
 
     pub(crate) async fn export_admin_system_usage_aggregates(

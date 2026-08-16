@@ -1803,7 +1803,10 @@ async fn admin_created_user_keys_inherit_owner_group_policy() {
         resolved.effective_allowed_models(),
         Some(&["claude-sonnet-4-5".to_string()][..])
     );
-    assert_eq!(resolved.user_rate_limit, Some(30));
+    assert_eq!(
+        resolved.admission_policy.principal.requests_per_minute(),
+        Some(30)
+    );
 
     inspection_state
         .update_user_group(
@@ -1848,7 +1851,10 @@ async fn admin_created_user_keys_inherit_owner_group_policy() {
         updated.effective_allowed_models(),
         Some(&["gemini-2.5-pro".to_string()][..])
     );
-    assert_eq!(updated.user_rate_limit, Some(15));
+    assert_eq!(
+        updated.admission_policy.principal.requests_per_minute(),
+        Some(15)
+    );
 
     let target_features = inspection_state
         .read_user_feature_settings("target-user")
@@ -1903,7 +1909,10 @@ async fn admin_created_user_keys_inherit_owner_group_policy() {
         resolved.effective_allowed_models(),
         Some(&["gpt-5.4".to_string()][..])
     );
-    assert_eq!(resolved.user_rate_limit, Some(100));
+    assert_eq!(
+        resolved.admission_policy.principal.requests_per_minute(),
+        Some(100)
+    );
 
     gateway_handle.abort();
 }

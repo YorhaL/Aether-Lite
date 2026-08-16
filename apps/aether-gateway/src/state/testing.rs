@@ -136,24 +136,6 @@ impl AppState {
         self
     }
 
-    pub(crate) fn with_frontdoor_system_default_rpm_for_tests(mut self, limit: u32) -> Self {
-        Arc::make_mut(&mut self.frontdoor_limiters).user_rpm = Arc::new(
-            (*self.frontdoor_limiters.user_rpm)
-                .clone()
-                .with_system_default_limit_for_tests(limit),
-        );
-        self
-    }
-
-    pub(crate) fn with_frontdoor_system_daily_usage_limit_for_tests(mut self, limit: f64) -> Self {
-        Arc::make_mut(&mut self.frontdoor_limiters).daily_usage = Arc::new(
-            (*self.frontdoor_limiters.daily_usage)
-                .clone()
-                .with_system_default_limit_for_tests(limit),
-        );
-        self
-    }
-
     pub(crate) fn with_usage_data_reader_for_tests(
         mut self,
         repository: Arc<dyn UsageReadRepository>,

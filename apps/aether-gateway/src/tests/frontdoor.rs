@@ -6,7 +6,7 @@ use aether_data::repository::announcements::{
     InMemoryAnnouncementReadRepository, StoredAnnouncement,
 };
 use aether_data::repository::auth::{
-    InMemoryAuthApiKeySnapshotRepository, StoredAuthApiKeySnapshot,
+    InMemoryAuthApiKeySnapshotRepository,
 };
 use aether_data::repository::auth_modules::{
     InMemoryAuthModuleReadRepository, StoredLdapModuleConfig, StoredOAuthProviderModuleConfig,
@@ -60,88 +60,6 @@ fn hash_api_key(value: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(value.as_bytes());
     format!("{:x}", hasher.finalize())
-}
-
-fn explicit_user_limit_snapshot(api_key_id: &str, user_id: &str) -> StoredAuthApiKeySnapshot {
-    StoredAuthApiKeySnapshot::new(
-        user_id.to_string(),
-        "alice".to_string(),
-        Some("alice@example.com".to_string()),
-        "user".to_string(),
-        "local".to_string(),
-        true,
-        false,
-        Some(serde_json::json!(["openai"])),
-        Some(serde_json::json!(["openai:chat"])),
-        Some(serde_json::json!(["gpt-5"])),
-        api_key_id.to_string(),
-        Some("default".to_string()),
-        true,
-        false,
-        false,
-        Some(10),
-        Some(5),
-        Some(4_102_444_800),
-        Some(serde_json::json!(["openai"])),
-        Some(serde_json::json!(["openai:chat"])),
-        Some(serde_json::json!(["gpt-5"])),
-    )
-    .expect("snapshot should build")
-    .with_user_rate_limit(Some(1))
-}
-
-fn system_default_user_limit_snapshot(api_key_id: &str, user_id: &str) -> StoredAuthApiKeySnapshot {
-    StoredAuthApiKeySnapshot::new(
-        user_id.to_string(),
-        "alice".to_string(),
-        Some("alice@example.com".to_string()),
-        "user".to_string(),
-        "local".to_string(),
-        true,
-        false,
-        Some(serde_json::json!(["openai"])),
-        Some(serde_json::json!(["openai:chat"])),
-        Some(serde_json::json!(["gpt-5"])),
-        api_key_id.to_string(),
-        Some("default".to_string()),
-        true,
-        false,
-        false,
-        Some(10),
-        Some(5),
-        Some(4_102_444_800),
-        Some(serde_json::json!(["openai"])),
-        Some(serde_json::json!(["openai:chat"])),
-        Some(serde_json::json!(["gpt-5"])),
-    )
-    .expect("snapshot should build")
-}
-
-fn unrestricted_models_snapshot(api_key_id: &str, user_id: &str) -> StoredAuthApiKeySnapshot {
-    StoredAuthApiKeySnapshot::new(
-        user_id.to_string(),
-        "alice".to_string(),
-        Some("alice@example.com".to_string()),
-        "user".to_string(),
-        "local".to_string(),
-        true,
-        false,
-        None,
-        None,
-        None,
-        api_key_id.to_string(),
-        Some("default".to_string()),
-        true,
-        false,
-        false,
-        Some(10),
-        Some(5),
-        Some(4_102_444_800),
-        None,
-        None,
-        None,
-    )
-    .expect("snapshot should build")
 }
 
 fn sample_provider(id: &str, name: &str, priority: i32) -> StoredProviderCatalogProvider {

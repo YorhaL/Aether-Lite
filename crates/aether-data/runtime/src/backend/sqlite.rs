@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+use crate::repository::admission::{
+    AdmissionPolicyReadRepository, AdmissionPolicyWriteRepository, SqliteAdmissionPolicyRepository,
+};
 use crate::repository::announcements::{
     AnnouncementReadRepository, AnnouncementWriteRepository, SqliteAnnouncementRepository,
 };
@@ -82,6 +85,14 @@ impl SqliteBackend {
 
     pub fn pool_clone(&self) -> SqlitePool {
         self.pool.clone()
+    }
+
+    pub fn admission_policy_read_repository(&self) -> Arc<dyn AdmissionPolicyReadRepository> {
+        Arc::new(SqliteAdmissionPolicyRepository::new(self.pool_clone()))
+    }
+
+    pub fn admission_policy_write_repository(&self) -> Arc<dyn AdmissionPolicyWriteRepository> {
+        Arc::new(SqliteAdmissionPolicyRepository::new(self.pool_clone()))
     }
 
     pub fn auth_api_key_read_repository(&self) -> Arc<dyn AuthApiKeyReadRepository> {

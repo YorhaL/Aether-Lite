@@ -1372,20 +1372,22 @@ impl GatewayDataState {
     pub(crate) async fn list_export_users(
         &self,
     ) -> Result<Vec<StoredUserExportRow>, DataLayerError> {
-        match &self.user_reader {
+        let rows = match &self.user_reader {
             Some(repository) => repository.list_export_users().await,
             None => Ok(Vec::new()),
-        }
+        }?;
+        self.enrich_user_export_rows(rows).await
     }
 
     pub(crate) async fn list_export_users_page(
         &self,
         query: &aether_data::repository::users::UserExportListQuery,
     ) -> Result<Vec<StoredUserExportRow>, DataLayerError> {
-        match &self.user_reader {
+        let rows = match &self.user_reader {
             Some(repository) => repository.list_export_users_page(query).await,
             None => Ok(Vec::new()),
-        }
+        }?;
+        self.enrich_user_export_rows(rows).await
     }
 
     pub(crate) async fn count_export_users(
@@ -1411,10 +1413,15 @@ impl GatewayDataState {
         &self,
         user_id: &str,
     ) -> Result<Option<StoredUserExportRow>, DataLayerError> {
-        match &self.user_reader {
+        let row = match &self.user_reader {
             Some(repository) => repository.find_export_user_by_id(user_id).await,
             None => Ok(None),
-        }
+        }?;
+        Ok(self
+            .enrich_user_export_rows(row.into_iter().collect())
+            .await?
+            .into_iter()
+            .next())
     }
 
     pub(crate) async fn read_user_feature_settings(
@@ -1434,10 +1441,11 @@ impl GatewayDataState {
     pub(crate) async fn list_non_admin_export_users(
         &self,
     ) -> Result<Vec<StoredUserExportRow>, DataLayerError> {
-        match &self.user_reader {
+        let rows = match &self.user_reader {
             Some(repository) => repository.list_non_admin_export_users().await,
             None => Ok(Vec::new()),
-        }
+        }?;
+        self.enrich_user_export_rows(rows).await
     }
 
     pub(crate) async fn list_user_auth_by_ids(

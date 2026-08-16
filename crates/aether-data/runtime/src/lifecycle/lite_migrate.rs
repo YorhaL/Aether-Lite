@@ -44,15 +44,15 @@ struct AppliedLiteMigration {
 #[cfg(feature = "postgres")]
 const POSTGRES_MIGRATIONS: &[LiteMigration] = &[LiteMigration {
     version: 20260803000000,
-    description: "daily usage limits",
-    sql: include_str!("../../migrations/lite/postgres/20260803000000_daily_usage_limits.sql"),
+    description: "admission policies",
+    sql: include_str!("../../migrations/lite/postgres/20260803000000_admission_policies.sql"),
 }];
 
 #[cfg(feature = "sqlite")]
 const SQLITE_MIGRATIONS: &[LiteMigration] = &[LiteMigration {
     version: 20260803000000,
-    description: "daily usage limits",
-    sql: include_str!("../../migrations/lite/sqlite/20260803000000_daily_usage_limits.sql"),
+    description: "admission policies",
+    sql: include_str!("../../migrations/lite/sqlite/20260803000000_admission_policies.sql"),
 }];
 
 fn validate_applied(
@@ -330,12 +330,12 @@ mod tests {
             .is_empty());
 
         let table_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name LIKE 'lite_%_daily_usage_limits'",
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name LIKE 'lite_admission_%'",
         )
         .fetch_one(&pool)
         .await
         .expect("Lite tables");
-        assert_eq!(table_count, 2);
+        assert_eq!(table_count, 1);
 
         sqlx::query("UPDATE _aether_lite_migrations SET checksum = X'00'")
             .execute(&pool)

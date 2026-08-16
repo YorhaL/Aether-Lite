@@ -511,7 +511,7 @@ pub(super) async fn maybe_build_local_admin_core_system_response(
     {
         let entries = state.list_system_config_entries().await?;
         return Ok(Some(
-            Json(build_admin_system_configs_payload(&entries)).into_response(),
+            Json(build_admin_system_configs_payload(state, &entries).await?).into_response(),
         ));
     }
 

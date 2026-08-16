@@ -344,8 +344,6 @@ mod tests {
             true,
             false,
             false,
-            Some(60),
-            Some(5),
             None,
             None,
             None,

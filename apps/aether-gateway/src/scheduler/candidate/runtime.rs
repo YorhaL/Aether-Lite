@@ -5,7 +5,8 @@ use aether_data_contracts::repository::provider_catalog::StoredProviderCatalogKe
 use aether_scheduler_core::{
     auth_api_key_concurrency_limit_reached, build_provider_concurrent_limit_map,
     candidate_is_selectable_with_runtime_state, candidate_runtime_skip_reason_with_state,
-    effective_provider_key_rpm_limit, CandidateRuntimeSelectabilityInput,
+    count_recent_active_requests_for_user, effective_provider_key_rpm_limit,
+    CandidateRuntimeSelectabilityInput,
 };
 
 use crate::data::auth::GatewayAuthApiKeySnapshot;
@@ -55,10 +56,7 @@ fn runtime_snapshot_requires_recent_candidates(
     provider_key_rpm_states: &BTreeMap<String, StoredProviderCatalogKey>,
     now_unix_secs: u64,
 ) -> bool {
-    if auth_snapshot
-        .and_then(|snapshot| snapshot.api_key_concurrent_limit)
-        .is_some_and(|limit| limit > 0)
-    {
+    if auth_snapshot.is_some_and(auth_snapshot_has_concurrency_limit) {
         return true;
     }
 
@@ -77,25 +75,59 @@ pub(super) fn auth_snapshot_concurrency_limit_reached(
     snapshot: &CandidateRuntimeSelectionSnapshot,
     now_unix_secs: u64,
 ) -> bool {
-    auth_snapshot
-        .and_then(|snapshot| {
-            usize::try_from(snapshot.api_key_concurrent_limit?)
-                .ok()
-                .and_then(|limit| {
-                    if limit == 0 {
-                        return None;
-                    }
-                    Some((snapshot.api_key_id.as_str(), limit))
-                })
-        })
-        .is_some_and(|(api_key_id, limit)| {
-            auth_api_key_concurrency_limit_reached(
+    let Some(auth) = auth_snapshot else {
+        return false;
+    };
+    let principal_limit = auth
+        .admission_policy
+        .principal
+        .concurrent_requests()
+        .unwrap_or_default();
+    let key_limit = auth.admission_policy.api_key.concurrent_requests();
+
+    if auth.api_key_is_standalone {
+        let limit = key_limit.unwrap_or(principal_limit) as usize;
+        return limit > 0
+            && auth_api_key_concurrency_limit_reached(
                 &snapshot.recent_candidates,
                 now_unix_secs,
-                api_key_id,
+                auth.api_key_id.as_str(),
                 limit,
-            )
-        })
+            );
+    }
+
+    if principal_limit > 0
+        && count_recent_active_requests_for_user(
+            &snapshot.recent_candidates,
+            auth.user_id.as_str(),
+            now_unix_secs,
+        ) >= principal_limit as usize
+    {
+        return true;
+    }
+
+    key_limit.filter(|limit| *limit > 0).is_some_and(|limit| {
+        auth_api_key_concurrency_limit_reached(
+            &snapshot.recent_candidates,
+            now_unix_secs,
+            auth.api_key_id.as_str(),
+            limit as usize,
+        )
+    })
+}
+
+fn auth_snapshot_has_concurrency_limit(snapshot: &GatewayAuthApiKeySnapshot) -> bool {
+    let principal = snapshot
+        .admission_policy
+        .principal
+        .concurrent_requests()
+        .unwrap_or_default();
+    let key = snapshot.admission_policy.api_key.concurrent_requests();
+    if snapshot.api_key_is_standalone {
+        key.unwrap_or(principal) > 0
+    } else {
+        principal > 0 || key.is_some_and(|limit| limit > 0)
+    }
 }
 
 pub(super) fn is_candidate_selectable(

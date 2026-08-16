@@ -31,6 +31,19 @@ Lite 扩展迁移不得复用 `_sqlx_migrations`。迁移执行器应使用独�
 
 这些边界保证主版本的新迁移可以继续合入 Lite，并把冲突限制在明确的扩展层。
 
+## 客户端流控数据
+
+Lite 的客户端准入与流控策略完全属于 Lite 扩展数据。当前的系统、用户组、用户和 API Key 级 RPM、并发请求数、每日用量额度，以及未来增加的更复杂流控规则，都存放在版本化的 Admission Policy 文档中：
+
+- PostgreSQL 使用 `aether_lite.admission_policies`。
+- SQLite 使用 `lite_admission_policies`。
+- 规则按 `system`、`user_group`、`user`、`api_key` 作用域绑定；系统策略、用户组授权、用户覆盖和 API Key 限制由统一解析器组合。
+- Provider 和 Provider Key 的 RPM、并发限制属于上游容量保护，不属于客户端 Admission Policy，继续由 Provider 调度域管理。
+
+主版本核心表中已有的用户、用户组和 API Key 限流列只作为 schema 兼容结构保留。Lite 不读取、不写入、不迁移这些值，也不在 Lite 策略缺失时回退到这些列。首次切换到 Lite 后应重新设置流控策略；切回主版本时，主版本仍可读取其原有核心列值，不受 Lite 策略影响。
+
+Admission Policy 文档使用显式版本号演进。新增规则优先扩展文档契约和执行器，避免为每一种流控算法修改核心 schema。规则不存在表示继承上层策略；显式值 `0` 表示无限制并可覆盖上层限制。多个用户组按授权语义合并：无限制优先，否则采用较高额度。
+
 ## PostgreSQL
 
 - Lite 扩展对象使用独立的 `aether_lite` schema。
@@ -44,6 +57,7 @@ Lite 扩展迁移不得复用 `_sqlx_migrations`。迁移执行器应使用独�
 - 只有在 Lite 数据与核心数据必须处于同一 SQLite 事务时，才允许把 `lite_*` 表放入核心数据库文件。
 - 同一数据库文件中的 Lite 迁移仍必须由独立迁移执行器和 `_aether_lite_migrations` 记录管理，不能写入 `_sqlx_migrations`。
 - sidecar 文件的路径、权限和生命周期必须随部署显式配置，不能临时拼接或隐式创建在不可备份的位置。
+- 当前 Admission Policy 表与核心表位于同一 SQLite 数据库文件，但由 Lite 独立迁移记录管理；这是为了让现有部署保持单文件备份语义，不代表这些表属于核心 schema。
 
 ## 发布、备份与恢复
 

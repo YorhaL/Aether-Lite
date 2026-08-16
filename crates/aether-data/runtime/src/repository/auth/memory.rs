@@ -68,8 +68,8 @@ impl InMemoryAuthApiKeySnapshotRepository {
                         .api_key_allowed_models
                         .as_ref()
                         .map(|value| serde_json::json!(value)),
-                    snapshot.api_key_rate_limit,
-                    snapshot.api_key_concurrent_limit,
+                    None,
+                    None,
                     None,
                     snapshot.api_key_is_active,
                     snapshot
@@ -89,7 +89,6 @@ impl InMemoryAuthApiKeySnapshotRepository {
                             .map(|value| serde_json::json!(value)),
                     )
                 })
-                .map(|record| record.with_daily_usage_limit(snapshot.api_key_daily_usage_limit_usd))
                 .expect("derived auth api key export record should build"),
             );
             if let Some(key_hash) = key_hash {
@@ -549,9 +548,6 @@ impl AuthApiKeyWriteRepository for InMemoryAuthApiKeySnapshotRepository {
                 api_key_is_active: record.is_active,
                 api_key_is_locked: false,
                 api_key_is_standalone: false,
-                api_key_rate_limit: Some(record.rate_limit),
-                api_key_daily_usage_limit_usd: record.daily_usage_limit_usd,
-                api_key_concurrent_limit: record.concurrent_limit,
                 api_key_expires_at_unix_secs: record.expires_at_unix_secs,
                 api_key_allowed_providers: record.allowed_providers.clone(),
                 api_key_allowed_api_formats: record.allowed_api_formats.clone(),
@@ -579,8 +575,6 @@ impl AuthApiKeyWriteRepository for InMemoryAuthApiKeySnapshotRepository {
                 record.is_active,
                 false,
                 false,
-                Some(record.rate_limit),
-                record.concurrent_limit,
                 record.expires_at_unix_secs.map(|value| value as i64),
                 record
                     .allowed_providers
@@ -601,7 +595,6 @@ impl AuthApiKeyWriteRepository for InMemoryAuthApiKeySnapshotRepository {
                     .as_ref()
                     .map(|value| serde_json::json!(value)),
             )?
-            .with_daily_usage_limits(None, record.daily_usage_limit_usd)
         };
 
         let now_unix_secs = current_unix_secs() as i64;
@@ -688,9 +681,6 @@ impl AuthApiKeyWriteRepository for InMemoryAuthApiKeySnapshotRepository {
                 api_key_is_active: record.is_active,
                 api_key_is_locked: false,
                 api_key_is_standalone: true,
-                api_key_rate_limit: record.rate_limit,
-                api_key_daily_usage_limit_usd: record.daily_usage_limit_usd,
-                api_key_concurrent_limit: record.concurrent_limit,
                 api_key_expires_at_unix_secs: record.expires_at_unix_secs,
                 api_key_allowed_providers: record.allowed_providers.clone(),
                 api_key_allowed_api_formats: record.allowed_api_formats.clone(),
@@ -718,8 +708,6 @@ impl AuthApiKeyWriteRepository for InMemoryAuthApiKeySnapshotRepository {
                 record.is_active,
                 false,
                 true,
-                record.rate_limit,
-                record.concurrent_limit,
                 record.expires_at_unix_secs.map(|value| value as i64),
                 record
                     .allowed_providers
@@ -740,7 +728,6 @@ impl AuthApiKeyWriteRepository for InMemoryAuthApiKeySnapshotRepository {
                     .as_ref()
                     .map(|value| serde_json::json!(value)),
             )?
-            .with_daily_usage_limits(None, record.daily_usage_limit_usd)
         };
 
         let now_unix_secs = current_unix_secs() as i64;
@@ -816,30 +803,6 @@ impl AuthApiKeyWriteRepository for InMemoryAuthApiKeySnapshotRepository {
                 export.name = Some(name);
             }
         }
-        if let Some(rate_limit) = record.rate_limit {
-            if let Some(snapshot) = index.by_api_key_id.get_mut(&record.api_key_id) {
-                snapshot.api_key_rate_limit = Some(rate_limit);
-            }
-            if let Some(export) = index.export_by_api_key_id.get_mut(&record.api_key_id) {
-                export.rate_limit = Some(rate_limit);
-            }
-        }
-        if record.daily_usage_limit_present {
-            if let Some(snapshot) = index.by_api_key_id.get_mut(&record.api_key_id) {
-                snapshot.api_key_daily_usage_limit_usd = record.daily_usage_limit_usd;
-            }
-            if let Some(export) = index.export_by_api_key_id.get_mut(&record.api_key_id) {
-                export.daily_usage_limit_usd = record.daily_usage_limit_usd;
-            }
-        }
-        if let Some(concurrent_limit) = record.concurrent_limit {
-            if let Some(snapshot) = index.by_api_key_id.get_mut(&record.api_key_id) {
-                snapshot.api_key_concurrent_limit = Some(concurrent_limit);
-            }
-            if let Some(export) = index.export_by_api_key_id.get_mut(&record.api_key_id) {
-                export.concurrent_limit = Some(concurrent_limit);
-            }
-        }
         if let Some(ip_rules) = record.ip_rules {
             if let Some(snapshot) = index.by_api_key_id.get_mut(&record.api_key_id) {
                 snapshot.api_key_ip_rules = ip_rules.clone();
@@ -871,30 +834,6 @@ impl AuthApiKeyWriteRepository for InMemoryAuthApiKeySnapshotRepository {
             }
             if let Some(export) = index.export_by_api_key_id.get_mut(&record.api_key_id) {
                 export.name = Some(name);
-            }
-        }
-        if record.rate_limit_present {
-            if let Some(snapshot) = index.by_api_key_id.get_mut(&record.api_key_id) {
-                snapshot.api_key_rate_limit = record.rate_limit;
-            }
-            if let Some(export) = index.export_by_api_key_id.get_mut(&record.api_key_id) {
-                export.rate_limit = record.rate_limit;
-            }
-        }
-        if record.daily_usage_limit_present {
-            if let Some(snapshot) = index.by_api_key_id.get_mut(&record.api_key_id) {
-                snapshot.api_key_daily_usage_limit_usd = record.daily_usage_limit_usd;
-            }
-            if let Some(export) = index.export_by_api_key_id.get_mut(&record.api_key_id) {
-                export.daily_usage_limit_usd = record.daily_usage_limit_usd;
-            }
-        }
-        if record.concurrent_limit_present {
-            if let Some(snapshot) = index.by_api_key_id.get_mut(&record.api_key_id) {
-                snapshot.api_key_concurrent_limit = record.concurrent_limit;
-            }
-            if let Some(export) = index.export_by_api_key_id.get_mut(&record.api_key_id) {
-                export.concurrent_limit = record.concurrent_limit;
             }
         }
         if let Some(allowed_providers) = record.allowed_providers {
@@ -1202,8 +1141,6 @@ mod tests {
             true,
             false,
             false,
-            Some(60),
-            Some(5),
             Some(200),
             Some(serde_json::json!(["openai"])),
             Some(serde_json::json!(["openai:chat"])),
@@ -1369,7 +1306,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn update_user_api_key_basic_updates_concurrent_limit() {
+    async fn update_user_api_key_basic_leaves_admission_fields_to_policy_repository() {
         let repository = InMemoryAuthApiKeySnapshotRepository::seed(vec![(
             Some("hash-1".to_string()),
             sample_snapshot("key-1", "user-1"),
@@ -1389,8 +1326,8 @@ mod tests {
             .await
             .expect("update should succeed")
             .expect("record should exist");
-        assert_eq!(updated.concurrent_limit, Some(11));
-        assert_eq!(updated.daily_usage_limit_usd, Some(6.0));
+        assert_eq!(updated.concurrent_limit, None);
+        assert_eq!(updated.daily_usage_limit_usd, None);
 
         let cleared = repository
             .update_user_api_key_basic(UpdateUserApiKeyBasicRecord {
@@ -1404,20 +1341,19 @@ mod tests {
                 ip_rules: None,
             })
             .await
-            .expect("daily limit clear should succeed")
+            .expect("policy field update should succeed")
             .expect("record should exist");
         assert_eq!(cleared.daily_usage_limit_usd, None);
 
-        let snapshot = repository
+        repository
             .find_api_key_snapshot(AuthApiKeyLookupKey::ApiKeyId("key-1"))
             .await
             .expect("find should succeed")
             .expect("snapshot should exist");
-        assert_eq!(snapshot.api_key_concurrent_limit, Some(11));
     }
 
     #[tokio::test]
-    async fn update_standalone_api_key_basic_updates_concurrent_limit_when_present() {
+    async fn update_standalone_api_key_basic_leaves_admission_fields_to_policy_repository() {
         let mut standalone = sample_snapshot("key-standalone", "admin-1");
         standalone.api_key_is_standalone = true;
         let repository = InMemoryAuthApiKeySnapshotRepository::seed(vec![(
@@ -1447,14 +1383,13 @@ mod tests {
             .await
             .expect("update should succeed")
             .expect("record should exist");
-        assert_eq!(updated.concurrent_limit, Some(13));
-        assert_eq!(updated.daily_usage_limit_usd, Some(7.0));
+        assert_eq!(updated.concurrent_limit, None);
+        assert_eq!(updated.daily_usage_limit_usd, None);
 
-        let snapshot = repository
+        repository
             .find_api_key_snapshot(AuthApiKeyLookupKey::ApiKeyId("key-standalone"))
             .await
             .expect("find should succeed")
             .expect("snapshot should exist");
-        assert_eq!(snapshot.api_key_concurrent_limit, Some(13));
     }
 }

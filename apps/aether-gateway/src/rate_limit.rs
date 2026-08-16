@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::Mutex as StdMutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use aether_cache::ExpiringMap;
 use aether_runtime_state::{RateLimitCheck, RateLimitInput, RateLimitScope};
 use tokio::sync::Mutex;
 use tracing::warn;
@@ -11,10 +9,6 @@ use tracing::warn;
 use crate::control::GatewayControlDecision;
 use crate::stage_metrics::observe_gateway_stage_ms;
 use crate::{AppState, GatewayError};
-
-const SYSTEM_RPM_CONFIG_KEY: &str = "rate_limit_per_minute";
-const SYSTEM_RPM_CONFIG_CACHE_TTL: Duration = Duration::from_secs(15);
-const SYSTEM_RPM_CONFIG_CACHE_MAX_ENTRIES: usize = 8;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FrontdoorUserRpmConfig {
@@ -94,9 +88,6 @@ pub(crate) enum FrontdoorUserRpmOutcome {
 pub(crate) struct FrontdoorUserRpmLimiter {
     config: FrontdoorUserRpmConfig,
     memory_counts: Arc<Mutex<HashMap<String, (u64, u32)>>>,
-    system_default_cache: Arc<ExpiringMap<String, u32>>,
-    #[cfg(test)]
-    system_default_override: Arc<StdMutex<Option<u32>>>,
 }
 
 impl FrontdoorUserRpmLimiter {
@@ -104,25 +95,11 @@ impl FrontdoorUserRpmLimiter {
         Self {
             config,
             memory_counts: Arc::new(Mutex::new(HashMap::new())),
-            system_default_cache: Arc::new(ExpiringMap::default()),
-            #[cfg(test)]
-            system_default_override: Arc::new(StdMutex::new(None)),
         }
     }
 
     pub(crate) fn config(&self) -> &FrontdoorUserRpmConfig {
         &self.config
-    }
-
-    pub(crate) async fn current_system_default_limit(
-        &self,
-        state: &AppState,
-    ) -> Result<u32, GatewayError> {
-        self.resolve_system_default_limit(state).await
-    }
-
-    pub(crate) fn clear_system_default_cache(&self) {
-        self.system_default_cache.clear();
     }
 
     pub(crate) fn current_bucket(&self, now_ts: u64) -> u64 {
@@ -191,14 +168,7 @@ impl FrontdoorUserRpmLimiter {
             return Ok(FrontdoorUserRpmOutcome::NotApplicable);
         }
 
-        let system_default_started_at = Instant::now();
-        let system_default_limit = self.resolve_system_default_limit(state).await?;
-        observe_gateway_stage_ms(
-            "frontdoor_rpm_system_default",
-            system_default_started_at.elapsed().as_millis() as u64,
-        );
-        let Some(plan) = RpmPlan::from_decision(decision, &self.config, system_default_limit)
-        else {
+        let Some(plan) = RpmPlan::from_decision(decision, &self.config) else {
             return Ok(FrontdoorUserRpmOutcome::NotApplicable);
         };
 
@@ -249,44 +219,6 @@ impl FrontdoorUserRpmLimiter {
             memory_fallback_started_at.elapsed().as_millis() as u64,
         );
         Ok(outcome)
-    }
-
-    async fn resolve_system_default_limit(&self, state: &AppState) -> Result<u32, GatewayError> {
-        #[cfg(test)]
-        if let Ok(guard) = self.system_default_override.lock() {
-            if let Some(limit) = *guard {
-                return Ok(limit);
-            }
-        }
-
-        let cache_key = SYSTEM_RPM_CONFIG_KEY.to_string();
-        if let Some(limit) = self
-            .system_default_cache
-            .get_fresh(&cache_key, SYSTEM_RPM_CONFIG_CACHE_TTL)
-        {
-            return Ok(limit);
-        }
-
-        let limit = parse_system_default_limit(
-            state
-                .read_system_config_json_value(SYSTEM_RPM_CONFIG_KEY)
-                .await?,
-        )?;
-        self.system_default_cache.insert(
-            cache_key,
-            limit,
-            SYSTEM_RPM_CONFIG_CACHE_TTL,
-            SYSTEM_RPM_CONFIG_CACHE_MAX_ENTRIES,
-        );
-        Ok(limit)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn with_system_default_limit_for_tests(self, limit: u32) -> Self {
-        if let Ok(mut guard) = self.system_default_override.lock() {
-            *guard = Some(limit);
-        }
-        self
     }
 
     async fn check_and_consume_runtime(
@@ -391,7 +323,6 @@ impl RpmPlan {
     fn from_decision(
         decision: &GatewayControlDecision,
         config: &FrontdoorUserRpmConfig,
-        system_default_limit: u32,
     ) -> Option<Self> {
         let auth = decision.auth_context.as_ref()?;
         if auth.local_rejection.is_some() || auth.user_id.is_empty() || auth.api_key_id.is_empty() {
@@ -406,14 +337,20 @@ impl RpmPlan {
         let retry_after = config.retry_after(now_ts);
 
         if auth.api_key_is_standalone {
+            let principal_limit = auth
+                .admission_policy
+                .principal
+                .requests_per_minute()
+                .unwrap_or_default();
             return Some(Self {
                 bucket,
                 retry_after,
                 user_rpm_key: format!("rpm:ukey:{}:{bucket}", auth.api_key_id),
                 user_rpm_limit: auth
-                    .api_key_rate_limit
-                    .map(|value| normalize_limit(Some(value)))
-                    .unwrap_or(system_default_limit),
+                    .admission_policy
+                    .api_key
+                    .requests_per_minute()
+                    .unwrap_or(principal_limit),
                 key_rpm_key: format!("rpm:key:{}:{bucket}", auth.api_key_id),
                 key_rpm_limit: 0,
             });
@@ -424,20 +361,18 @@ impl RpmPlan {
             retry_after,
             user_rpm_key: format!("rpm:user:{}:{bucket}", auth.user_id),
             user_rpm_limit: auth
-                .user_rate_limit
-                .map(|value| normalize_limit(Some(value)))
-                .unwrap_or(system_default_limit),
+                .admission_policy
+                .principal
+                .requests_per_minute()
+                .unwrap_or_default(),
             key_rpm_key: format!("rpm:key:{}:{bucket}", auth.api_key_id),
-            key_rpm_limit: normalize_limit(auth.api_key_rate_limit),
+            key_rpm_limit: auth
+                .admission_policy
+                .api_key
+                .requests_per_minute()
+                .unwrap_or_default(),
         })
     }
-}
-
-fn normalize_limit(value: Option<i32>) -> u32 {
-    value
-        .map(|value| value.max(0))
-        .and_then(|value| u32::try_from(value).ok())
-        .unwrap_or_default()
 }
 
 fn current_unix_secs() -> u64 {
@@ -447,53 +382,15 @@ fn current_unix_secs() -> u64 {
         .as_secs()
 }
 
-fn parse_system_default_limit(value: Option<serde_json::Value>) -> Result<u32, GatewayError> {
-    let normalized = match value {
-        None | Some(serde_json::Value::Null) => 0_i64,
-        Some(serde_json::Value::Bool(value)) => {
-            if value {
-                1
-            } else {
-                0
-            }
-        }
-        Some(serde_json::Value::Number(value)) => {
-            if let Some(value) = value.as_i64() {
-                value
-            } else if let Some(value) = value.as_u64() {
-                i64::try_from(value).unwrap_or(i64::MAX)
-            } else if let Some(value) = value.as_f64() {
-                if !value.is_finite() {
-                    return Err(GatewayError::Internal(
-                        "invalid system config rate_limit_per_minute".to_string(),
-                    ));
-                }
-                value.trunc() as i64
-            } else {
-                return Err(GatewayError::Internal(
-                    "invalid system config rate_limit_per_minute".to_string(),
-                ));
-            }
-        }
-        Some(serde_json::Value::String(value)) => value.parse::<i64>().map_err(|_| {
-            GatewayError::Internal("invalid system config rate_limit_per_minute".to_string())
-        })?,
-        Some(_) => {
-            return Err(GatewayError::Internal(
-                "invalid system config rate_limit_per_minute".to_string(),
-            ));
-        }
-    };
-
-    Ok(u32::try_from(normalized.max(0)).unwrap_or(u32::MAX))
-}
-
 #[cfg(test)]
 mod tests {
     use super::{FrontdoorUserRpmConfig, FrontdoorUserRpmLimiter, FrontdoorUserRpmOutcome};
     use crate::control::GatewayControlAuthContext;
     use crate::control::GatewayControlDecision;
     use crate::AppState;
+    use aether_data_contracts::repository::admission::{
+        AdmissionPolicyDocument, ResolvedAdmissionPolicy,
+    };
 
     fn sample_decision(auth_context: GatewayControlAuthContext) -> GatewayControlDecision {
         GatewayControlDecision {
@@ -515,8 +412,16 @@ mod tests {
         }
     }
 
+    fn admission_policy(principal_rpm: u32, key_rpm: u32) -> ResolvedAdmissionPolicy {
+        ResolvedAdmissionPolicy {
+            principal: AdmissionPolicyDocument::default()
+                .with_requests_per_minute(Some(principal_rpm)),
+            api_key: AdmissionPolicyDocument::default().with_requests_per_minute(Some(key_rpm)),
+        }
+    }
+
     #[tokio::test]
-    async fn limiter_uses_memory_fallback_for_explicit_user_rate_limit() {
+    async fn limiter_uses_memory_fallback_for_resolved_principal_policy() {
         let limiter = FrontdoorUserRpmLimiter::new(FrontdoorUserRpmConfig::new(60, 120, false));
         let decision = sample_decision(GatewayControlAuthContext {
             user_id: "user-1".to_string(),
@@ -525,10 +430,7 @@ mod tests {
             api_key_name: None,
             balance_remaining: Some(10.0),
             access_allowed: true,
-            user_rate_limit: Some(1),
-            api_key_rate_limit: Some(10),
-            user_daily_usage_limit_usd: None,
-            api_key_daily_usage_limit_usd: None,
+            admission_policy: admission_policy(1, 10),
             api_key_is_standalone: false,
             admin_bypass_limits: false,
             ip_bypass_limits: false,
@@ -558,9 +460,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn limiter_uses_system_default_for_missing_user_rate_limit() {
-        let limiter = FrontdoorUserRpmLimiter::new(FrontdoorUserRpmConfig::new(60, 120, false))
-            .with_system_default_limit_for_tests(1);
+    async fn limiter_uses_resolved_principal_policy() {
+        let limiter = FrontdoorUserRpmLimiter::new(FrontdoorUserRpmConfig::new(60, 120, false));
         let decision = sample_decision(GatewayControlAuthContext {
             user_id: "user-1".to_string(),
             api_key_id: "key-1".to_string(),
@@ -568,10 +469,7 @@ mod tests {
             api_key_name: None,
             balance_remaining: Some(10.0),
             access_allowed: true,
-            user_rate_limit: None,
-            api_key_rate_limit: Some(10),
-            user_daily_usage_limit_usd: None,
-            api_key_daily_usage_limit_usd: None,
+            admission_policy: admission_policy(1, 10),
             api_key_is_standalone: false,
             admin_bypass_limits: false,
             ip_bypass_limits: false,
@@ -602,8 +500,7 @@ mod tests {
 
     #[tokio::test]
     async fn limiter_skips_admin_bypass_context() {
-        let limiter = FrontdoorUserRpmLimiter::new(FrontdoorUserRpmConfig::new(60, 120, false))
-            .with_system_default_limit_for_tests(1);
+        let limiter = FrontdoorUserRpmLimiter::new(FrontdoorUserRpmConfig::new(60, 120, false));
         let decision = sample_decision(GatewayControlAuthContext {
             user_id: "admin-1".to_string(),
             api_key_id: "key-1".to_string(),
@@ -611,10 +508,7 @@ mod tests {
             api_key_name: None,
             balance_remaining: Some(10.0),
             access_allowed: true,
-            user_rate_limit: Some(1),
-            api_key_rate_limit: Some(1),
-            user_daily_usage_limit_usd: None,
-            api_key_daily_usage_limit_usd: None,
+            admission_policy: admission_policy(1, 1),
             api_key_is_standalone: false,
             admin_bypass_limits: true,
             ip_bypass_limits: false,
@@ -658,10 +552,7 @@ mod tests {
             api_key_name: None,
             balance_remaining: Some(10.0),
             access_allowed: true,
-            user_rate_limit: Some(1),
-            api_key_rate_limit: Some(10),
-            user_daily_usage_limit_usd: None,
-            api_key_daily_usage_limit_usd: None,
+            admission_policy: admission_policy(1, 10),
             api_key_is_standalone: false,
             admin_bypass_limits: false,
             ip_bypass_limits: false,

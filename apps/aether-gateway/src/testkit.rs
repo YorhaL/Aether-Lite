@@ -118,8 +118,6 @@ fn openai_chat_pressure_auth_snapshot(
         true,
         false,
         false,
-        Some(600_000),
-        Some(20_000),
         Some(4_102_444_800),
         Some(serde_json::json!(["openai"])),
         Some(serde_json::json!(["openai:chat"])),

@@ -1,6 +1,8 @@
 use super::ADMIN_SYSTEM_DATA_EXPORT_VERSION;
 use crate::handlers::admin::request::AdminAppState;
-use crate::handlers::admin::system::shared::configs::is_sensitive_admin_system_config_key;
+use crate::handlers::admin::system::shared::configs::{
+    is_sensitive_admin_system_config_key, merge_admission_system_config_entries,
+};
 use crate::handlers::admin::system::shared::export::{
     build_admin_system_export_providers_payload, decrypt_admin_system_export_secret,
     ADMIN_SYSTEM_EXPORT_PAGE_LIMIT,
@@ -83,6 +85,7 @@ impl<'a> AdminAppState<'a> {
             });
 
         let system_configs = self.list_system_config_entries().await?;
+        let system_configs = merge_admission_system_config_entries(self, &system_configs).await?;
         let system_configs_data = system_configs
             .iter()
             .map(|entry| {

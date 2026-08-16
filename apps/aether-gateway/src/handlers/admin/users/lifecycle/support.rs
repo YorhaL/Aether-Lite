@@ -1,9 +1,9 @@
 use super::super::format_optional_datetime_iso8601;
-use crate::data::state::{
-    resolve_group_effective_daily_usage_limit_policy, resolve_group_effective_rate_limit_policy,
-};
 use crate::handlers::admin::request::AdminAppState;
 use crate::GatewayError;
+use aether_data::repository::admission::{
+    AdmissionPolicyDocument, AdmissionScopeKind, SYSTEM_ADMISSION_POLICY_SUBJECT,
+};
 use serde_json::json;
 
 pub(super) async fn admin_user_password_policy(
@@ -31,11 +31,13 @@ pub(super) async fn admin_user_password_policy(
 pub(super) async fn admin_system_daily_usage_limit(
     state: &AdminAppState<'_>,
 ) -> Result<f64, GatewayError> {
-    crate::daily_usage_limit::parse_system_limit(
-        state
-            .read_system_config_json_value("daily_usage_limit_usd")
-            .await?,
-    )
+    state
+        .app()
+        .data
+        .scoped_admission_document(AdmissionScopeKind::System, SYSTEM_ADMISSION_POLICY_SUBJECT)
+        .await
+        .map(|document| document.daily_usage_limit_usd().unwrap_or_default())
+        .map_err(|err| GatewayError::Internal(err.to_string()))
 }
 
 pub(super) async fn find_admin_export_user(
@@ -229,14 +231,12 @@ fn effective_list_policy_payload(
 fn effective_rate_limit_policy_payload(
     groups: &[aether_data::repository::users::StoredUserGroup],
 ) -> serde_json::Value {
-    // Per-user policy columns are legacy-only. Reuse the runtime group resolver so the
-    // admin payload reports the same grant (unlimited, otherwise the highest custom RPM).
     let group_sources = groups
         .iter()
         .filter(|group| group.rate_limit_mode == "custom")
         .collect::<Vec<_>>();
     let source = combined_policy_source(false, group_sources.len(), "fallback");
-    match resolve_group_effective_rate_limit_policy(groups) {
+    match group_admission_grant(groups).requests_per_minute() {
         Some(rate_limit) => policy_payload("custom", json!(rate_limit), source, &group_sources),
         None => policy_payload("system", serde_json::Value::Null, source, &group_sources),
     }
@@ -251,7 +251,7 @@ fn effective_daily_usage_limit_policy_payload(
         .filter(|group| group.daily_usage_limit_mode == "custom")
         .collect::<Vec<_>>();
     let source = combined_policy_source(false, group_sources.len(), "system");
-    match resolve_group_effective_daily_usage_limit_policy(groups) {
+    match group_admission_grant(groups).daily_usage_limit_usd() {
         Some(limit) => policy_payload("custom", json!(limit), source, &group_sources),
         None => policy_payload(
             "system",
@@ -260,6 +260,25 @@ fn effective_daily_usage_limit_policy_payload(
             &group_sources,
         ),
     }
+}
+
+fn group_admission_grant(
+    groups: &[aether_data::repository::users::StoredUserGroup],
+) -> AdmissionPolicyDocument {
+    groups
+        .iter()
+        .fold(AdmissionPolicyDocument::default(), |document, group| {
+            let group_document = AdmissionPolicyDocument::default()
+                .with_requests_per_minute(
+                    (group.rate_limit_mode == "custom")
+                        .then_some(group.rate_limit.unwrap_or(0).max(0) as u32),
+                )
+                .with_daily_usage_limit_usd(
+                    (group.daily_usage_limit_mode == "custom")
+                        .then_some(group.daily_usage_limit_usd.unwrap_or_default().max(0.0)),
+                );
+            document.union_grants(&group_document)
+        })
 }
 
 fn policy_payload(

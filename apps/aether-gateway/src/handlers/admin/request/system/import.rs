@@ -898,8 +898,12 @@ impl<'a> AdminAppState<'a> {
 
         let mut stats = AdminSystemConfigImportStats::default();
 
-        let mut existing_system_config_keys = self
-            .list_system_config_entries()
+        let existing_system_configs = self.list_system_config_entries().await?;
+        let mut existing_system_config_keys =
+            crate::handlers::admin::system::shared::configs::merge_admission_system_config_entries(
+                self,
+                &existing_system_configs,
+            )
             .await?
             .into_iter()
             .map(|entry| normalize_imported_system_config_key(&entry.key))

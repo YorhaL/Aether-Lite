@@ -14,13 +14,6 @@ use super::{
     GatewayPublicRequestContext,
 };
 
-fn normalize_rate_limit_value(value: Option<i32>) -> u32 {
-    value
-        .map(|raw| raw.max(0))
-        .and_then(|raw| u32::try_from(raw).ok())
-        .unwrap_or(0)
-}
-
 fn daily_usage_available_payload(
     status: crate::daily_usage_limit::FrontdoorDailyUsageStatus,
 ) -> serde_json::Value {
@@ -112,13 +105,6 @@ pub(super) async fn handle_user_rate_limit_status(
     let limiter = state.frontdoor_user_rpm();
     let now = Utc::now();
     let now_unix_secs = u64::try_from(now.timestamp()).unwrap_or(0);
-    let system_default_limit = match limiter.current_system_default_limit(state).await {
-        Ok(value) => value,
-        Err(err) => {
-            tracing::warn!(error = ?err, "user rate limit status system default read failed");
-            0
-        }
-    };
     let bucket = limiter.current_bucket(now_unix_secs);
     let reset_time = (now
         + chrono::Duration::seconds(
@@ -172,30 +158,29 @@ pub(super) async fn handle_user_rate_limit_status(
             .as_ref()
             .map(|value| value.api_key_is_standalone)
             .unwrap_or(record.is_standalone);
+        let admission_policy = snapshot
+            .as_ref()
+            .map(|value| value.admission_policy.clone())
+            .unwrap_or_default();
         let user_limit = if is_standalone {
-            match record.rate_limit {
-                Some(value) => normalize_rate_limit_value(Some(value)),
-                None => system_default_limit,
-            }
+            admission_policy
+                .api_key
+                .requests_per_minute()
+                .or_else(|| admission_policy.principal.requests_per_minute())
+                .unwrap_or_default()
         } else {
-            normalize_rate_limit_value(
-                snapshot
-                    .as_ref()
-                    .and_then(|value| value.user_rate_limit)
-                    .or(Some(
-                        i32::try_from(system_default_limit).unwrap_or(i32::MAX),
-                    )),
-            )
+            admission_policy
+                .principal
+                .requests_per_minute()
+                .unwrap_or_default()
         };
         let key_limit = if is_standalone {
             0
         } else {
-            normalize_rate_limit_value(
-                snapshot
-                    .as_ref()
-                    .and_then(|value| value.api_key_rate_limit)
-                    .or(record.rate_limit),
-            )
+            admission_policy
+                .api_key
+                .requests_per_minute()
+                .unwrap_or_default()
         };
 
         let user_scope_key = if is_standalone {
@@ -269,15 +254,7 @@ pub(super) async fn handle_user_rate_limit_status(
             api_key_name: record.name.clone(),
             balance_remaining: None,
             access_allowed: true,
-            user_rate_limit: snapshot.as_ref().and_then(|value| value.user_rate_limit),
-            api_key_rate_limit: snapshot.as_ref().and_then(|value| value.api_key_rate_limit),
-            user_daily_usage_limit_usd: snapshot
-                .as_ref()
-                .and_then(|value| value.user_daily_usage_limit_usd),
-            api_key_daily_usage_limit_usd: snapshot
-                .as_ref()
-                .and_then(|value| value.api_key_daily_usage_limit_usd)
-                .or(record.daily_usage_limit_usd),
+            admission_policy,
             api_key_is_standalone: is_standalone,
             admin_bypass_limits: snapshot.as_ref().is_some_and(|value| {
                 value.user_role.eq_ignore_ascii_case("admin") && !value.api_key_is_standalone
