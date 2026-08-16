@@ -1006,7 +1006,7 @@ function showDebugUpdateDialog() {
     current_version: currentVersion,
     latest_version: 'v0.7.0-rc99',
     has_update: true,
-    release_url: 'https://github.com/YorhaL/Aether/releases',
+    release_url: 'https://github.com/YorhaL/Aether-Lite/releases',
     release_notes: [
       "### What's Changed",
       '- 调整版本更新提示样式',
@@ -1029,7 +1029,7 @@ function showDebugVersionStatus(hasUpdate = true) {
     current_version: currentVersion,
     latest_version: hasUpdate ? 'v0.7.0-rc99' : currentVersion,
     has_update: hasUpdate,
-    release_url: hasUpdate ? 'https://github.com/YorhaL/Aether/releases' : null,
+    release_url: hasUpdate ? 'https://github.com/YorhaL/Aether-Lite/releases' : null,
     release_notes: hasUpdate
       ? [
         "### What's Changed",

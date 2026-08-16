@@ -992,17 +992,14 @@ ALTER TABLE users ADD COLUMN ldap_dn VARCHAR(1024);
         let schema_dir = workspace.join("crates/aether-data/runtime/schema/logical");
         let mut required_sql_paths = vec![workspace
             .join("crates/aether-data/adapters/postgres/migrations/20260403000000_baseline.sql")];
-        for driver in ["sqlite"] {
-            let driver_dir =
-                workspace.join(format!("crates/aether-data/adapters/{driver}/migrations"));
-            let mut paths = std::fs::read_dir(&driver_dir)
-                .unwrap_or_else(|err| panic!("failed to read {}: {err}", driver_dir.display()))
-                .map(|entry| entry.expect("migration entry should be readable").path())
-                .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("sql"))
-                .collect::<Vec<_>>();
-            paths.sort();
-            required_sql_paths.extend(paths);
-        }
+        let sqlite_migrations = workspace.join("crates/aether-data/adapters/sqlite/migrations");
+        let mut paths = std::fs::read_dir(&sqlite_migrations)
+            .unwrap_or_else(|err| panic!("failed to read {}: {err}", sqlite_migrations.display()))
+            .map(|entry| entry.expect("migration entry should be readable").path())
+            .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("sql"))
+            .collect::<Vec<_>>();
+        paths.sort();
+        required_sql_paths.extend(paths);
 
         let loaded = load_schema_sources(schema_dir).expect("workspace logical schema should load");
         check_required_tables(&loaded.schema, &required_sql_paths)

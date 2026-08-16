@@ -3378,7 +3378,7 @@ mod tests {
         build_streaming_usage_event_from_owned_seed, build_streaming_usage_record,
         build_sync_terminal_usage_event, build_sync_terminal_usage_payload_seed,
         build_sync_terminal_usage_seed, build_terminal_usage_context_seed,
-        build_terminal_usage_event_from_seed, build_usage_event_data_seed, decode_body_for_storage,
+        build_terminal_usage_event_from_seed, build_usage_event_data_seed,
         extract_token_counts_from_json, extract_token_counts_from_value, headers_to_json,
         mask_header_value, mask_sensitive_body_fields, mask_sensitive_headers_in_json_value,
         parse_sse_body_for_storage, resolve_error_message, trim_owned_non_empty_string,
@@ -6721,27 +6721,6 @@ mod tests {
         assert_eq!(
             resolve_error_message(500, None, Some(body_base64.as_str())),
             Some("upstream exploded".to_string()),
-        );
-    }
-
-    #[test]
-    fn decode_body_for_storage_extracts_connect_json_error_frames() {
-        let payload = br#"{"error":{"code":"resource_exhausted","message":"quota exhausted"}}"#;
-        let mut framed = Vec::new();
-        framed.push(2);
-        framed.extend_from_slice(&(payload.len() as u32).to_be_bytes());
-        framed.extend_from_slice(payload);
-        let body_base64 = base64::engine::general_purpose::STANDARD.encode(framed);
-
-        assert_eq!(
-            decode_body_for_storage(Some(body_base64.as_str())),
-            Some(json!({
-                "error": {
-                    "code": "resource_exhausted",
-                    "message": "quota exhausted",
-                    "type": "resource_exhausted"
-                }
-            }))
         );
     }
 

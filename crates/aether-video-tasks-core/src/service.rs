@@ -20,6 +20,12 @@ pub struct VideoTaskService {
     store: Arc<dyn VideoTaskStore>,
 }
 
+impl Default for VideoTaskService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VideoTaskService {
     pub fn new() -> Self {
         Self::with_store(Arc::new(InMemoryVideoTaskStore::default()))

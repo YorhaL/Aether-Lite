@@ -116,6 +116,6 @@ describe('i18n infrastructure', () => {
     expect(translateLegacyText('最大转移超时', 'en-US')).toBe('Max transfer timeout')
     expect(translateLegacyText('0 (不限制)', 'en-US')).toBe('0 (unlimited)')
     expect(translateLegacyText('  发布于 2026-01-01  ', 'en-US')).toBe('  Published at 2026-01-01  ')
-    expect(translateLegacyText('git clone https://github.com/YorhaL/Aether.git', 'en-US')).toBe('git clone https://github.com/YorhaL/Aether.git')
+    expect(translateLegacyText('git clone https://github.com/YorhaL/Aether-Lite.git', 'en-US')).toBe('git clone https://github.com/YorhaL/Aether-Lite.git')
   })
 })

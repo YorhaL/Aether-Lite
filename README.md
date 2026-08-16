@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/YorhaL/Aether/actions/workflows/lite-docker.yml">
-    <img src="https://github.com/YorhaL/Aether/actions/workflows/lite-docker.yml/badge.svg?branch=master" alt="Lite Docker Build">
+  <a href="https://github.com/YorhaL/Aether-Lite/actions/workflows/lite-docker.yml">
+    <img src="https://github.com/YorhaL/Aether-Lite/actions/workflows/lite-docker.yml/badge.svg?branch=master" alt="Lite Docker Build">
   </a>
 </p>
 
@@ -32,8 +32,8 @@ Lite 定位和长期演进边界见 [Lite 版本策略](docs/architecture/lite-e
 要求 Docker Engine 和 Docker Compose Plugin。
 
 ```bash
-git clone --branch master --single-branch https://github.com/YorhaL/Aether.git
-cd Aether
+git clone --branch master --single-branch https://github.com/YorhaL/Aether-Lite.git
+cd Aether-Lite
 ./install.sh
 ```
 

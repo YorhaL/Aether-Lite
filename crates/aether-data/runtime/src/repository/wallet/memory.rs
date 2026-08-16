@@ -245,7 +245,7 @@ impl WalletReadRepository for InMemoryWalletRepository {
                 updated_at_unix_secs: Some(wallet.updated_at_unix_secs),
             })
             .collect::<Vec<_>>();
-        items.sort_by(|left, right| right.updated_at_unix_secs.cmp(&left.updated_at_unix_secs));
+        items.sort_by_key(|item| std::cmp::Reverse(item.updated_at_unix_secs));
         let total = items.len() as u64;
         let items = items
             .into_iter()

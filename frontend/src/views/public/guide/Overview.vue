@@ -20,7 +20,7 @@ const copiedStep = ref<string | null>(null)
 const productionSteps = [
   {
     title: '克隆代码',
-    code: 'git clone --branch master --single-branch https://github.com/YorhaL/Aether.git\ncd Aether',
+    code: 'git clone --branch master --single-branch https://github.com/YorhaL/Aether-Lite.git\ncd Aether-Lite',
     icon: Code
   },
   {

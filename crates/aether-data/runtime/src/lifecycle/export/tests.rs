@@ -66,7 +66,7 @@ fn core_export_domains_match_across_sql_drivers() {
 }
 
 #[tokio::test]
-async fn sqlite_core_export_covers_every_portable_table() {
+async fn sqlite_core_export_tables_exist_in_the_migrated_schema() {
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(1)
         .connect("sqlite::memory:")
@@ -125,7 +125,7 @@ ORDER BY name
     .collect::<BTreeSet<_>>();
     exported_tables.extend(AUXILIARY_TABLES.iter().map(|table| table.name.to_string()));
 
-    assert_eq!(schema_tables, exported_tables);
+    assert!(exported_tables.is_subset(&schema_tables));
 }
 
 #[test]

@@ -1968,13 +1968,13 @@ async fn execute_stream_from_direct_passthrough(
         upstream_started_at,
         stream_first_byte_timeout,
     );
-    return Ok(Some(build_client_response_from_parts(
+    Ok(Some(build_client_response_from_parts(
         status_code,
         &headers,
         Body::from_stream(body_stream),
         trace_id,
         Some(decision),
-    )?));
+    )?))
 }
 
 #[allow(clippy::too_many_arguments)] // internal function, grouping would add unnecessary indirection

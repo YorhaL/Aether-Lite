@@ -79,19 +79,16 @@ impl CandidateFailureDiagnostic {
 
         // Compatibility for current usage UI and already persisted trace readers.
         if let Some(object) = extra_data.as_object_mut() {
-            match self.kind {
-                CandidateFailureDiagnosticKind::RequestBodyBuild => {
-                    object.insert(
-                        "request_body_build_error".to_string(),
-                        json!({
-                            "path": self.path,
-                            "message": self.message,
-                            "client_api_format": self.client_api_format,
-                            "provider_api_format": self.provider_api_format,
-                        }),
-                    );
-                }
-                _ => {}
+            if self.kind == CandidateFailureDiagnosticKind::RequestBodyBuild {
+                object.insert(
+                    "request_body_build_error".to_string(),
+                    json!({
+                        "path": self.path,
+                        "message": self.message,
+                        "client_api_format": self.client_api_format,
+                        "provider_api_format": self.provider_api_format,
+                    }),
+                );
             }
         }
 

@@ -199,16 +199,6 @@ impl DataWriteRepositories {
             self.wallets = Some(SqliteBackend::wallet_write_repository(backend));
         }
     }
-    #[cfg(test)]
-    #[cfg(feature = "postgres")]
-    pub(crate) fn from_postgres(postgres: Option<&PostgresBackend>) -> Self {
-        Self::from_backends(
-            postgres,
-            #[cfg(feature = "sqlite")]
-            None,
-        )
-    }
-
     pub fn admission_policies(&self) -> Option<Arc<dyn AdmissionPolicyWriteRepository>> {
         self.admission_policies.clone()
     }

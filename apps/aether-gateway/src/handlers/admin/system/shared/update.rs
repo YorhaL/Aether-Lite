@@ -1129,7 +1129,7 @@ mod tests {
     #[test]
     fn update_validates_download_urls() {
         assert!(validate_update_download_url(
-            "https://github.com/YorhaL/Aether/releases/download/v1/aether.tar.gz"
+            "https://github.com/YorhaL/Aether-Lite/releases/download/v1/aether.tar.gz"
         )
         .is_ok());
         assert!(validate_update_download_url(
@@ -1137,7 +1137,7 @@ mod tests {
         )
         .is_ok());
         assert!(validate_update_download_url(
-            "http://github.com/YorhaL/Aether/releases/download/v1/aether.tar.gz"
+            "http://github.com/YorhaL/Aether-Lite/releases/download/v1/aether.tar.gz"
         )
         .is_err());
         assert!(validate_update_download_url("https://example.com/aether.tar.gz").is_err());

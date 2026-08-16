@@ -144,10 +144,6 @@ mod tests {
             [
                 "VideoTaskFollowUp",
                 "LocalVideo",
-                "LocalImage",
-                "LocalOpenAiChat",
-                "LocalOpenAiResponses",
-                "LocalStandardFamily",
                 "LocalSameFormatProvider",
                 "LocalGeminiFiles",
             ]
@@ -161,7 +157,7 @@ mod tests {
             outcomes: Mutex::new(VecDeque::from([
                 None,
                 None,
-                Some("image_decision"),
+                Some("provider_decision"),
                 Some("should_not_run"),
             ])),
             calls: Mutex::default(),
@@ -169,31 +165,30 @@ mod tests {
 
         let decision = run_ai_sync_decision_path(&port).await.unwrap();
 
-        assert_eq!(decision, Some("image_decision"));
+        assert_eq!(decision, Some("provider_decision"));
         assert_eq!(
             port.calls.lock().unwrap().as_slice(),
-            ["VideoTaskFollowUp", "LocalVideo", "LocalImage"]
+            ["VideoTaskFollowUp", "LocalVideo", "LocalSameFormatProvider"]
         );
     }
 
     #[tokio::test]
     async fn stream_decision_path_stops_at_first_decision() {
         let port = TestStreamDecisionPort {
-            outcomes: Mutex::new(VecDeque::from([
-                None,
-                None,
-                Some("chat_decision"),
-                Some("should_not_run"),
-            ])),
+            outcomes: Mutex::new(VecDeque::from([None, None, Some("files_decision")])),
             calls: Mutex::default(),
         };
 
         let decision = run_ai_stream_decision_path(&port).await.unwrap();
 
-        assert_eq!(decision, Some("chat_decision"));
+        assert_eq!(decision, Some("files_decision"));
         assert_eq!(
             port.calls.lock().unwrap().as_slice(),
-            ["LocalVideoContent", "LocalImage", "LocalOpenAiChat"]
+            [
+                "LocalVideoContent",
+                "LocalSameFormatProvider",
+                "LocalGeminiFiles"
+            ]
         );
     }
 }

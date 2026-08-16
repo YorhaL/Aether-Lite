@@ -93,15 +93,17 @@ impl AppState {
         let user_id = user_id.trim();
         let api_key_id = api_key_id.trim();
         let lookup = if api_key_is_standalone {
-            (!api_key_id.is_empty())
-                .then(|| aether_data::repository::wallet::WalletLookupKey::ApiKeyId(api_key_id))
+            (!api_key_id.is_empty()).then_some(
+                aether_data::repository::wallet::WalletLookupKey::ApiKeyId(api_key_id),
+            )
         } else if !user_id.is_empty() {
             Some(aether_data::repository::wallet::WalletLookupKey::UserId(
                 user_id,
             ))
         } else {
-            (!api_key_id.is_empty())
-                .then(|| aether_data::repository::wallet::WalletLookupKey::ApiKeyId(api_key_id))
+            (!api_key_id.is_empty()).then_some(
+                aether_data::repository::wallet::WalletLookupKey::ApiKeyId(api_key_id),
+            )
         };
 
         let Some(lookup) = lookup else {

@@ -1,3 +1,4 @@
+#[cfg(feature = "sqlite")]
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::DataLayerError;
@@ -63,6 +64,7 @@ WHERE id = ?
     }
 }
 
+#[cfg(feature = "sqlite")]
 fn now_unix_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

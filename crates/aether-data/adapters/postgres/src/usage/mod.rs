@@ -12280,17 +12280,6 @@ fn parse_usage_body_capture_state(value: &str) -> Option<UsageBodyCaptureState> 
     }
 }
 
-#[cfg(test)]
-fn usage_http_audit_body_refs(metadata: Option<&Value>) -> UsageHttpAuditRefs {
-    let object = metadata.and_then(Value::as_object);
-    UsageHttpAuditRefs {
-        request_body_ref: metadata_ref_value(object, "request_body_ref"),
-        provider_request_body_ref: metadata_ref_value(object, "provider_request_body_ref"),
-        response_body_ref: metadata_ref_value(object, "response_body_ref"),
-        client_response_body_ref: metadata_ref_value(object, "client_response_body_ref"),
-    }
-}
-
 fn resolved_read_usage_body_ref(
     explicit_ref: Option<&str>,
     metadata: Option<&serde_json::Map<String, Value>>,
@@ -12914,132 +12903,6 @@ fn inflate_usage_json_value(bytes: &[u8]) -> Result<Value, DataLayerError> {
     })
 }
 
-#[cfg(test)]
-fn attach_compressed_body_refs(
-    request_id: &str,
-    metadata: Option<Value>,
-    has_request_body_compressed: bool,
-    has_provider_request_body_compressed: bool,
-    has_response_body_compressed: bool,
-    has_client_response_body_compressed: bool,
-) -> Option<Value> {
-    let mut metadata = match metadata {
-        Some(Value::Object(object)) => object,
-        Some(value) => return Some(value),
-        None => Map::new(),
-    };
-    maybe_insert_usage_body_ref(
-        &mut metadata,
-        "request_body_ref",
-        request_id,
-        "request_body",
-        has_request_body_compressed,
-    );
-    maybe_insert_usage_body_ref(
-        &mut metadata,
-        "provider_request_body_ref",
-        request_id,
-        "provider_request_body",
-        has_provider_request_body_compressed,
-    );
-    maybe_insert_usage_body_ref(
-        &mut metadata,
-        "response_body_ref",
-        request_id,
-        "response_body",
-        has_response_body_compressed,
-    );
-    maybe_insert_usage_body_ref(
-        &mut metadata,
-        "client_response_body_ref",
-        request_id,
-        "client_response_body",
-        has_client_response_body_compressed,
-    );
-    (!metadata.is_empty()).then_some(Value::Object(metadata))
-}
-
-#[cfg(test)]
-fn attach_usage_http_audit_body_refs(
-    metadata: Option<Value>,
-    refs: &UsageHttpAuditRefs,
-) -> Option<Value> {
-    if !refs.any_present() {
-        return metadata;
-    }
-
-    let mut metadata = match metadata {
-        Some(Value::Object(object)) => object,
-        Some(value) => return Some(value),
-        None => Map::new(),
-    };
-    maybe_insert_string_value(
-        &mut metadata,
-        "request_body_ref",
-        refs.request_body_ref.as_deref(),
-    );
-    maybe_insert_string_value(
-        &mut metadata,
-        "provider_request_body_ref",
-        refs.provider_request_body_ref.as_deref(),
-    );
-    maybe_insert_string_value(
-        &mut metadata,
-        "response_body_ref",
-        refs.response_body_ref.as_deref(),
-    );
-    maybe_insert_string_value(
-        &mut metadata,
-        "client_response_body_ref",
-        refs.client_response_body_ref.as_deref(),
-    );
-    (!metadata.is_empty()).then_some(Value::Object(metadata))
-}
-
-#[cfg(test)]
-fn attach_usage_routing_snapshot_metadata(
-    metadata: Option<Value>,
-    snapshot: &UsageRoutingSnapshot,
-) -> Option<Value> {
-    if !snapshot.has_metadata_fields() {
-        return metadata;
-    }
-
-    let mut metadata = match metadata {
-        Some(Value::Object(object)) => object,
-        Some(value) => return Some(value),
-        None => Map::new(),
-    };
-    maybe_insert_string_value(
-        &mut metadata,
-        "candidate_id",
-        snapshot.candidate_id.as_deref(),
-    );
-    maybe_insert_string_value(&mut metadata, "key_name", snapshot.key_name.as_deref());
-    maybe_insert_string_value(
-        &mut metadata,
-        "planner_kind",
-        snapshot.planner_kind.as_deref(),
-    );
-    maybe_insert_string_value(
-        &mut metadata,
-        "route_family",
-        snapshot.route_family.as_deref(),
-    );
-    maybe_insert_string_value(&mut metadata, "route_kind", snapshot.route_kind.as_deref());
-    maybe_insert_string_value(
-        &mut metadata,
-        "execution_path",
-        snapshot.execution_path.as_deref(),
-    );
-    maybe_insert_string_value(
-        &mut metadata,
-        "local_execution_runtime_miss_reason",
-        snapshot.local_execution_runtime_miss_reason.as_deref(),
-    );
-    (!metadata.is_empty()).then_some(Value::Object(metadata))
-}
-
 fn prepare_request_metadata_for_body_storage<const N: usize>(
     metadata: Option<Value>,
     body_fields: [(
@@ -13250,26 +13113,6 @@ where
         .map_postgres_err()?;
 
     Ok(())
-}
-
-#[cfg(test)]
-fn maybe_insert_usage_body_ref(
-    metadata: &mut Map<String, Value>,
-    key: &str,
-    request_id: &str,
-    field: &str,
-    should_insert: bool,
-) {
-    if !should_insert || metadata.contains_key(key) {
-        return;
-    }
-    metadata.insert(
-        key.to_string(),
-        Value::String(usage_body_ref(
-            request_id,
-            UsageBodyField::from_storage_field(field).expect("known usage body field"),
-        )),
-    );
 }
 
 fn maybe_insert_string_value(metadata: &mut Map<String, Value>, key: &str, value: Option<&str>) {

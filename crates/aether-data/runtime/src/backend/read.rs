@@ -230,16 +230,6 @@ impl DataReadRepositories {
             self.wallets = Some(SqliteBackend::wallet_read_repository(backend));
         }
     }
-    #[cfg(test)]
-    #[cfg(feature = "postgres")]
-    pub(crate) fn from_postgres(postgres: Option<&PostgresBackend>) -> Self {
-        Self::from_backends(
-            postgres,
-            #[cfg(feature = "sqlite")]
-            None,
-        )
-    }
-
     pub fn admission_policies(&self) -> Option<Arc<dyn AdmissionPolicyReadRepository>> {
         self.admission_policies.clone()
     }
