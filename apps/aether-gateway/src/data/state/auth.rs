@@ -141,10 +141,8 @@ impl GatewayDataState {
     pub(crate) async fn create_user_group(
         &self,
         record: aether_data::repository::users::UpsertUserGroupRecord,
-        daily_usage_limit_usd: Option<f64>,
+        admission_policy: aether_data::repository::admission::AdmissionPolicyDocument,
     ) -> Result<Option<GatewayUserGroup>, DataLayerError> {
-        let request_limit = (record.rate_limit_mode == "custom")
-            .then_some(record.rate_limit.unwrap_or(0).max(0) as u32);
         let created = match &self.user_reader {
             Some(repository) => repository.create_user_group(record).await,
             None => Ok(None),
@@ -152,14 +150,11 @@ impl GatewayDataState {
         let Some(created) = created else {
             return Ok(None);
         };
-        let document = aether_data::repository::admission::AdmissionPolicyDocument::default()
-            .with_requests_per_minute(request_limit)
-            .with_daily_usage_limit_usd(daily_usage_limit_usd);
         if let Err(error) = self
             .store_scoped_admission_document(
                 aether_data::repository::admission::AdmissionScopeKind::UserGroup,
                 &created.id,
-                &document,
+                &admission_policy,
             )
             .await
         {
@@ -179,10 +174,8 @@ impl GatewayDataState {
         &self,
         group_id: &str,
         record: aether_data::repository::users::UpsertUserGroupRecord,
-        daily_usage_limit_usd: Option<f64>,
+        admission_policy: aether_data::repository::admission::AdmissionPolicyDocument,
     ) -> Result<Option<GatewayUserGroup>, DataLayerError> {
-        let request_limit = (record.rate_limit_mode == "custom")
-            .then_some(record.rate_limit.unwrap_or(0).max(0) as u32);
         let updated = match &self.user_reader {
             Some(repository) => repository.update_user_group(group_id, record).await,
             None => Ok(None),
@@ -190,13 +183,10 @@ impl GatewayDataState {
         let Some(updated) = updated else {
             return Ok(None);
         };
-        let document = aether_data::repository::admission::AdmissionPolicyDocument::default()
-            .with_requests_per_minute(request_limit)
-            .with_daily_usage_limit_usd(daily_usage_limit_usd);
         self.store_scoped_admission_document(
             aether_data::repository::admission::AdmissionScopeKind::UserGroup,
             group_id,
-            &document,
+            &admission_policy,
         )
         .await?;
         Ok(self

@@ -122,6 +122,8 @@ export interface UserGroupExport {
   rate_limit_mode?: 'inherit' | 'system' | 'custom'
   daily_usage_limit_usd?: number | null
   daily_usage_limit_mode?: 'inherit' | 'system' | 'custom'
+  concurrent_limit?: number | null
+  concurrent_limit_mode?: 'inherit' | 'system' | 'custom'
 }
 
 export interface UserExport {

@@ -42,6 +42,8 @@
             :model-options="modelOptions"
             :help-text="groupPolicyHelpTextLocalized"
           />
+
+          <UserGroupAdmissionPolicyFields v-model:form="form" />
         </div>
       </div>
     </div>
@@ -76,18 +78,22 @@ import { useConfirm } from '@/composables/useConfirm'
 import { parseApiError } from '@/utils/errorParser'
 import { useI18n } from '@/i18n'
 import { useUserAccessControlOptions } from '@/features/users/composables/useUserAccessControlOptions'
+import UserGroupAdmissionPolicyFields from './UserGroupAdmissionPolicyFields.vue'
 import UserGroupAccessControlFields from './UserGroupAccessControlFields.vue'
 import UserGroupEditorHeader from './UserGroupEditorHeader.vue'
 import UserGroupListPanel from './UserGroupListPanel.vue'
 import UserGroupProfileFields from './UserGroupProfileFields.vue'
 import type {
   ListPolicyMode,
-  RateLimitPolicyMode,
   UpsertUserGroupRequest,
   User,
   UserGroup,
 } from '@/api/users'
 import type { UserGroupFormState } from './user-management-types'
+import {
+  buildUserGroupAdmissionPayload,
+  createUserGroupAdmissionForm,
+} from './userGroupAdmissionPolicy'
 
 const props = defineProps<{
   open: boolean
@@ -120,9 +126,9 @@ const USER_OPTIONS_CACHE_TTL_MS = 30 * 1000
 let dialogUsersLoadedAt = 0
 let dialogUsersLoadedVersion = -1
 
-const groupPolicyHelpText = '模型、供应商和端点会在多个用户组之间叠加授权；unrestricted 仍表示不限制，deny_all 只是不授予额外权限。速率限制和额度限制均按组取更高额度，任一自定义组为 0 表示不限；Key 自身限制仍可收窄最终权限。'
+const groupPolicyHelpText = '模型、供应商和端点会在多个用户组之间叠加授权；unrestricted 表示不限制，deny_all 表示该组不授予额外权限。Key 自身限制仍可收窄最终权限。'
 const groupPolicyHelpTextLocalized = computed(() => locale.value === 'en-US'
-  ? 'Models, providers, and endpoints accumulate across user groups. RPM and usage limits take the highest custom group value, while any custom 0 means unlimited. Key limits may narrow the result.'
+  ? 'Models, providers, and endpoints accumulate across user groups. Key restrictions may narrow the final result.'
   : groupPolicyHelpText)
 
 const form = ref<UserGroupFormState>(createEmptyForm())
@@ -205,10 +211,7 @@ async function selectGroup(groupId: string): Promise<void> {
     allowed_providers: group.allowed_providers ? [...group.allowed_providers] : [],
     allowed_api_formats: group.allowed_api_formats ? [...group.allowed_api_formats] : [],
     allowed_models: group.allowed_models ? [...group.allowed_models] : [],
-    rate_limit_mode: normalizeRateMode(group.rate_limit_mode),
-    rate_limit: group.rate_limit ?? undefined,
-    daily_usage_limit_mode: normalizeRateMode(group.daily_usage_limit_mode),
-    daily_usage_limit_usd: group.daily_usage_limit_usd ?? undefined,
+    ...createUserGroupAdmissionForm(group),
   }
   try {
     const members = await usersStore.listUserGroupMembers(group.id)
@@ -223,10 +226,6 @@ function normalizeListMode(mode: ListPolicyMode): ListPolicyMode {
   return mode === 'specific' ? 'specific' : 'unrestricted'
 }
 
-function normalizeRateMode(mode: RateLimitPolicyMode): RateLimitPolicyMode {
-  return mode === 'custom' ? 'custom' : 'system'
-}
-
 function createEmptyForm(): UserGroupFormState {
   return {
     name: '',
@@ -236,10 +235,7 @@ function createEmptyForm(): UserGroupFormState {
     allowed_providers: [],
     allowed_api_formats: [],
     allowed_models: [],
-    rate_limit_mode: 'system',
-    rate_limit: undefined,
-    daily_usage_limit_mode: 'system',
-    daily_usage_limit_usd: undefined,
+    ...createUserGroupAdmissionForm(),
   }
 }
 
@@ -254,8 +250,8 @@ async function toggleDefault(): Promise<void> {
   if (!group || group.is_default) return
   const confirmed = await confirmInfo(
     locale.value === 'en-US'
-      ? `Set "${group.name}" as the default registration group? Locally registered users and OAuth-created users will join this group.`
-      : `确定将「${group.name}」设为默认注册组吗？后续本地注册和 OAuth 自动创建的用户将加入该分组。`,
+      ? `Set "${group.name}" as the default registration group? Newly registered users will join this group.`
+      : `确定将「${group.name}」设为默认注册组吗？后续新注册用户将加入该分组。`,
     legacyT('设为默认注册组'),
   )
   if (!confirmed) return
@@ -287,14 +283,7 @@ function buildPayload(): UpsertUserGroupRequest {
     allowed_models: form.value.allowed_models_mode === 'specific'
       ? [...form.value.allowed_models]
       : null,
-    rate_limit_mode: form.value.rate_limit_mode,
-    rate_limit: form.value.rate_limit_mode === 'custom'
-      ? (form.value.rate_limit ?? 0)
-      : null,
-    daily_usage_limit_mode: form.value.daily_usage_limit_mode,
-    daily_usage_limit_usd: form.value.daily_usage_limit_mode === 'custom'
-      ? (form.value.daily_usage_limit_usd ?? 0)
-      : null,
+    ...buildUserGroupAdmissionPayload(form.value),
   }
 }
 

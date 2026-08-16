@@ -28,15 +28,14 @@ pub(super) async fn admin_user_password_policy(
     )
 }
 
-pub(super) async fn admin_system_daily_usage_limit(
+pub(super) async fn admin_system_admission_policy(
     state: &AdminAppState<'_>,
-) -> Result<f64, GatewayError> {
+) -> Result<AdmissionPolicyDocument, GatewayError> {
     state
         .app()
         .data
         .scoped_admission_document(AdmissionScopeKind::System, SYSTEM_ADMISSION_POLICY_SUBJECT)
         .await
-        .map(|document| document.daily_usage_limit_usd().unwrap_or_default())
         .map_err(|err| GatewayError::Internal(err.to_string()))
 }
 
@@ -52,7 +51,15 @@ pub(super) fn build_admin_user_payload(
     rate_limit: Option<i32>,
     unlimited: bool,
 ) -> serde_json::Value {
-    build_admin_user_payload_with_groups(user, rate_limit, None, unlimited, &[], &[], 0.0)
+    build_admin_user_payload_with_groups(
+        user,
+        rate_limit,
+        None,
+        unlimited,
+        &[],
+        &[],
+        &AdmissionPolicyDocument::default(),
+    )
 }
 
 pub(super) fn build_admin_user_payload_with_groups(
@@ -62,7 +69,7 @@ pub(super) fn build_admin_user_payload_with_groups(
     unlimited: bool,
     groups: &[crate::data::GatewayUserGroup],
     policy_groups: &[crate::data::GatewayUserGroup],
-    system_daily_usage_limit_usd: f64,
+    system_admission_policy: &AdmissionPolicyDocument,
 ) -> serde_json::Value {
     json!({
         "id": user.id,
@@ -91,7 +98,7 @@ pub(super) fn build_admin_user_payload_with_groups(
             user.allowed_models.as_ref(),
             &user.allowed_models_mode,
             policy_groups,
-            system_daily_usage_limit_usd,
+            system_admission_policy,
         ),
     })
 }
@@ -106,7 +113,7 @@ pub(super) fn build_admin_user_export_payload(
     total_tokens: u64,
     groups: &[crate::data::GatewayUserGroup],
     policy_groups: &[crate::data::GatewayUserGroup],
-    system_daily_usage_limit_usd: f64,
+    system_admission_policy: &AdmissionPolicyDocument,
 ) -> serde_json::Value {
     json!({
         "id": row.id,
@@ -138,7 +145,7 @@ pub(super) fn build_admin_user_export_payload(
             row.allowed_models.as_ref(),
             &row.allowed_models_mode,
             policy_groups,
-            system_daily_usage_limit_usd,
+            system_admission_policy,
         ),
     })
 }
@@ -159,7 +166,7 @@ fn effective_policy_payload(
     allowed_models: Option<&Vec<String>>,
     allowed_models_mode: &str,
     groups: &[crate::data::GatewayUserGroup],
-    system_daily_usage_limit_usd: f64,
+    system_admission_policy: &AdmissionPolicyDocument,
 ) -> serde_json::Value {
     let mut sorted_groups = groups.to_vec();
     sorted_groups.sort_by(|left, right| {
@@ -186,10 +193,17 @@ fn effective_policy_payload(
             &sorted_groups,
             |group| (&group.allowed_models_mode, group.allowed_models.as_ref()),
         ),
-        "rate_limit": effective_rate_limit_policy_payload(&sorted_groups),
+        "rate_limit": effective_rate_limit_policy_payload(
+            &sorted_groups,
+            system_admission_policy,
+        ),
         "daily_usage_limit_usd": effective_daily_usage_limit_policy_payload(
             &sorted_groups,
-            system_daily_usage_limit_usd,
+            system_admission_policy,
+        ),
+        "concurrent_limit": effective_concurrent_limit_policy_payload(
+            &sorted_groups,
+            system_admission_policy,
         ),
     })
 }
@@ -226,6 +240,7 @@ fn effective_list_policy_payload(
 
 fn effective_rate_limit_policy_payload(
     groups: &[crate::data::GatewayUserGroup],
+    system_admission_policy: &AdmissionPolicyDocument,
 ) -> serde_json::Value {
     let group_sources = groups
         .iter()
@@ -234,13 +249,16 @@ fn effective_rate_limit_policy_payload(
     let source = combined_policy_source(false, group_sources.len(), "fallback");
     match group_admission_grant(groups).requests_per_minute() {
         Some(rate_limit) => policy_payload("custom", json!(rate_limit), source, &group_sources),
-        None => policy_payload("system", serde_json::Value::Null, source, &group_sources),
+        None => match system_admission_policy.requests_per_minute() {
+            Some(limit) => policy_payload("system", json!(limit), "system", &group_sources),
+            None => policy_payload("system", serde_json::Value::Null, source, &group_sources),
+        },
     }
 }
 
 fn effective_daily_usage_limit_policy_payload(
     groups: &[crate::data::GatewayUserGroup],
-    system_daily_usage_limit_usd: f64,
+    system_admission_policy: &AdmissionPolicyDocument,
 ) -> serde_json::Value {
     let group_sources = groups
         .iter()
@@ -251,7 +269,31 @@ fn effective_daily_usage_limit_policy_payload(
         Some(limit) => policy_payload("custom", json!(limit), source, &group_sources),
         None => policy_payload(
             "system",
-            json!(system_daily_usage_limit_usd),
+            json!(system_admission_policy
+                .daily_usage_limit_usd()
+                .unwrap_or_default()),
+            source,
+            &group_sources,
+        ),
+    }
+}
+
+fn effective_concurrent_limit_policy_payload(
+    groups: &[crate::data::GatewayUserGroup],
+    system_admission_policy: &AdmissionPolicyDocument,
+) -> serde_json::Value {
+    let group_sources = groups
+        .iter()
+        .filter(|group| group.concurrent_limit_mode == "custom")
+        .collect::<Vec<_>>();
+    let source = combined_policy_source(false, group_sources.len(), "system");
+    match group_admission_grant(groups).concurrent_requests() {
+        Some(limit) => policy_payload("custom", json!(limit), source, &group_sources),
+        None => policy_payload(
+            "system",
+            json!(system_admission_policy
+                .concurrent_requests()
+                .unwrap_or_default()),
             source,
             &group_sources,
         ),
@@ -270,6 +312,10 @@ fn group_admission_grant(groups: &[crate::data::GatewayUserGroup]) -> AdmissionP
                 .with_daily_usage_limit_usd(
                     (group.daily_usage_limit_mode == "custom")
                         .then_some(group.daily_usage_limit_usd.unwrap_or_default().max(0.0)),
+                )
+                .with_concurrent_requests(
+                    (group.concurrent_limit_mode == "custom")
+                        .then_some(group.concurrent_limit.unwrap_or_default()),
                 );
             document.union_grants(&group_document)
         })
@@ -357,6 +403,8 @@ mod tests {
         name: &str,
         rate_limit: Option<i32>,
     ) -> crate::data::GatewayUserGroup {
+        let document = AdmissionPolicyDocument::default()
+            .with_requests_per_minute(rate_limit.map(|value| value.max(0) as u32));
         crate::data::GatewayUserGroup::from_stored(
             StoredUserGroup {
                 id: id.to_string(),
@@ -370,13 +418,14 @@ mod tests {
                 allowed_api_formats_mode: "inherit".to_string(),
                 allowed_models: None,
                 allowed_models_mode: "inherit".to_string(),
-                rate_limit,
-                rate_limit_mode: "custom".to_string(),
+                rate_limit: None,
+                rate_limit_mode: "inherit".to_string(),
                 created_at: None,
                 updated_at: None,
             },
-            None,
+            &document,
         )
+        .expect("sample group should be valid")
     }
 
     fn sample_user() -> StoredUserAuthRecord {
@@ -403,10 +452,13 @@ mod tests {
 
     #[test]
     fn effective_rate_limit_payload_uses_highest_group_grant() {
-        let payload = effective_rate_limit_policy_payload(&[
-            sample_group("group-basic", "Basic", Some(30)),
-            sample_group("group-pro", "Pro", Some(100)),
-        ]);
+        let payload = effective_rate_limit_policy_payload(
+            &[
+                sample_group("group-basic", "Basic", Some(30)),
+                sample_group("group-pro", "Pro", Some(100)),
+            ],
+            &AdmissionPolicyDocument::default(),
+        );
 
         assert_eq!(payload["mode"], "custom");
         assert_eq!(payload["value"], 100);
@@ -419,10 +471,13 @@ mod tests {
 
     #[test]
     fn effective_rate_limit_payload_treats_unlimited_group_as_highest_grant() {
-        let payload = effective_rate_limit_policy_payload(&[
-            sample_group("group-basic", "Basic", Some(30)),
-            sample_group("group-unlimited", "Unlimited", Some(0)),
-        ]);
+        let payload = effective_rate_limit_policy_payload(
+            &[
+                sample_group("group-basic", "Basic", Some(30)),
+                sample_group("group-unlimited", "Unlimited", Some(0)),
+            ],
+            &AdmissionPolicyDocument::default(),
+        );
 
         assert_eq!(payload["mode"], "custom");
         assert_eq!(payload["value"], 0);
@@ -438,7 +493,7 @@ mod tests {
             false,
             &[],
             &[],
-            0.0,
+            &AdmissionPolicyDocument::default(),
         );
         let effective = &payload["effective_policy"]["rate_limit"];
 
@@ -450,7 +505,9 @@ mod tests {
 
     #[test]
     fn effective_daily_usage_payload_reports_system_value_and_custom_sources() {
-        let system = effective_daily_usage_limit_policy_payload(&[], 12.5);
+        let system_policy =
+            AdmissionPolicyDocument::default().with_daily_usage_limit_usd(Some(12.5));
+        let system = effective_daily_usage_limit_policy_payload(&[], &system_policy);
         assert_eq!(system["mode"], "system");
         assert_eq!(system["value"], 12.5);
         assert_eq!(system["source"], "system");
@@ -461,7 +518,7 @@ mod tests {
         let mut pro = sample_group("group-pro", "Pro", None);
         pro.daily_usage_limit_mode = "custom".to_string();
         pro.daily_usage_limit_usd = Some(25.0);
-        let custom = effective_daily_usage_limit_policy_payload(&[basic, pro], 12.5);
+        let custom = effective_daily_usage_limit_policy_payload(&[basic, pro], &system_policy);
         assert_eq!(custom["mode"], "custom");
         assert_eq!(custom["value"], 25.0);
         assert_eq!(custom["source"], "combined");
@@ -469,5 +526,24 @@ mod tests {
             custom["group_ids"],
             serde_json::json!(["group-basic", "group-pro"])
         );
+    }
+
+    #[test]
+    fn effective_concurrent_limit_uses_group_grants_and_system_fallback() {
+        let system_policy = AdmissionPolicyDocument::default().with_concurrent_requests(Some(8));
+        let system = effective_concurrent_limit_policy_payload(&[], &system_policy);
+        assert_eq!(system["mode"], "system");
+        assert_eq!(system["value"], 8);
+
+        let mut basic = sample_group("group-basic", "Basic", None);
+        basic.concurrent_limit_mode = "custom".to_string();
+        basic.concurrent_limit = Some(3);
+        let mut pro = sample_group("group-pro", "Pro", None);
+        pro.concurrent_limit_mode = "custom".to_string();
+        pro.concurrent_limit = Some(12);
+        let custom = effective_concurrent_limit_policy_payload(&[basic, pro], &system_policy);
+        assert_eq!(custom["mode"], "custom");
+        assert_eq!(custom["value"], 12);
+        assert_eq!(custom["source"], "combined");
     }
 }

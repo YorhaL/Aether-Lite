@@ -6,7 +6,7 @@ use super::super::{
     validate_admin_user_password, AdminUpdateUserPatch,
 };
 use super::support::{
-    admin_system_daily_usage_limit, admin_user_id_from_detail_path, admin_user_password_policy,
+    admin_system_admission_policy, admin_user_id_from_detail_path, admin_user_password_policy,
     build_admin_user_payload_with_groups, find_admin_export_user,
 };
 use crate::handlers::admin::request::{AdminAppState, AdminRequestContext};
@@ -341,7 +341,7 @@ pub(in super::super) async fn build_admin_update_user_response(
     let export_row = find_admin_export_user(state, &user_id).await?;
     let group_policy_sets = state.user_group_policy_sets_for_user(&user_id).await?;
     let rate_limit = export_row.as_ref().and_then(|row| row.rate_limit);
-    let system_daily_usage_limit_usd = admin_system_daily_usage_limit(state).await?;
+    let system_admission_policy = admin_system_admission_policy(state).await?;
 
     let mut payload = build_admin_user_payload_with_groups(
         &user,
@@ -350,7 +350,7 @@ pub(in super::super) async fn build_admin_update_user_response(
         unlimited,
         &group_policy_sets.assigned_groups,
         &group_policy_sets.effective_groups,
-        system_daily_usage_limit_usd,
+        &system_admission_policy,
     );
     payload["feature_settings"] = export_row
         .as_ref()

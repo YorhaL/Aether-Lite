@@ -20,12 +20,17 @@ describe('mobile dialog layout', () => {
   it('keeps group navigation compact before the editor on mobile', () => {
     const dialogSource = readSource('src/features/users/components/UserGroupsDialog.vue')
     const listSource = readSource('src/features/users/components/UserGroupListPanel.vue')
+    const admissionSource = readSource('src/features/users/components/UserGroupAdmissionPolicyFields.vue')
 
     expect(dialogSource).toContain('lg:grid-cols-[17rem_minmax(0,1fr)]')
     expect(listSource).toContain('snap-x snap-mandatory')
     expect(listSource).toContain('overflow-x-auto')
     expect(listSource).toContain('min-h-10')
     expect(listSource).toContain('lg:w-full')
+    expect(dialogSource).toContain('UserGroupAdmissionPolicyFields')
+    expect(admissionSource).toContain("legacyT('流控策略')")
+    expect(admissionSource).toContain('space-y-4')
+    expect(admissionSource).toContain('sm:flex-row sm:items-center')
   })
 
   it('provides mobile state labels and 40px icon targets', () => {

@@ -1,7 +1,7 @@
 use super::super::{build_admin_users_bad_request_response, format_optional_datetime_iso8601};
 use super::support::{
-    admin_system_daily_usage_limit, admin_user_id_from_detail_path,
-    build_admin_user_export_payload, build_admin_user_payload_with_groups, find_admin_export_user,
+    admin_system_admission_policy, admin_user_id_from_detail_path, build_admin_user_export_payload,
+    build_admin_user_payload_with_groups, find_admin_export_user,
 };
 use crate::handlers::admin::request::{AdminAppState, AdminRequestContext};
 use crate::handlers::admin::shared::{query_param_optional_bool, query_param_value};
@@ -69,15 +69,15 @@ pub(in super::super) async fn build_admin_list_users_response(
         wallet_rows_result,
         usage_totals_result,
         group_policy_sets_result,
-        system_daily_usage_limit_result,
+        system_admission_policy_result,
     ) = tokio::join!(
         state.list_user_auth_by_ids(&user_ids),
         state.list_wallet_snapshots_by_user_ids(&user_ids),
         state.summarize_usage_totals_by_user_ids(&user_ids),
         state.user_group_policy_sets_for_users(&user_ids),
-        admin_system_daily_usage_limit(state),
+        admin_system_admission_policy(state),
     );
-    let system_daily_usage_limit_usd = system_daily_usage_limit_result?;
+    let system_admission_policy = system_admission_policy_result?;
     let auth_by_user_id = auth_rows_result?
         .into_iter()
         .map(|user| (user.id.clone(), user))
@@ -119,7 +119,7 @@ pub(in super::super) async fn build_admin_list_users_response(
                 .unwrap_or_default(),
             assigned_groups,
             effective_groups,
-            system_daily_usage_limit_usd,
+            &system_admission_policy,
         ));
     }
 
@@ -156,7 +156,7 @@ pub(in super::super) async fn build_admin_get_user_response(
         .await?;
     let export_row = find_admin_export_user(state, &user_id).await?;
     let group_policy_sets = state.user_group_policy_sets_for_user(&user_id).await?;
-    let system_daily_usage_limit_usd = admin_system_daily_usage_limit(state).await?;
+    let system_admission_policy = admin_system_admission_policy(state).await?;
     let unlimited = wallet
         .as_ref()
         .is_some_and(|wallet| wallet.limit_mode.eq_ignore_ascii_case("unlimited"));
@@ -167,7 +167,7 @@ pub(in super::super) async fn build_admin_get_user_response(
         unlimited,
         &group_policy_sets.assigned_groups,
         &group_policy_sets.effective_groups,
-        system_daily_usage_limit_usd,
+        &system_admission_policy,
     );
     payload["feature_settings"] = export_row
         .as_ref()

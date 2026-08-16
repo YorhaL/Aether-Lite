@@ -340,6 +340,12 @@ fn imported_optional_u64(value: Option<&Value>, field_name: &str) -> Result<Opti
     }
 }
 
+fn imported_optional_u32(value: Option<&Value>, field_name: &str) -> Result<Option<u32>, String> {
+    imported_optional_u64(value, field_name)?
+        .map(|value| u32::try_from(value).map_err(|_| format!("{field_name} 超出范围")))
+        .transpose()
+}
+
 fn imported_optional_f64(value: Option<&Value>, field_name: &str) -> Result<Option<f64>, String> {
     match value {
         None | Some(Value::Null) => Ok(None),
@@ -586,7 +592,7 @@ fn build_imported_user_group_record(
         Option<String>,
         String,
         aether_data::repository::users::UpsertUserGroupRecord,
-        Option<f64>,
+        aether_data::repository::admission::AdmissionPolicyDocument,
     ),
     String,
 > {
@@ -602,11 +608,16 @@ fn build_imported_user_group_record(
     let allowed_api_formats = normalize_imported_user_api_formats(group, "allowed_api_formats")?;
     let allowed_models = normalize_imported_user_string_list(group, "allowed_models")?;
     let rate_limit = imported_optional_i32(group.get("rate_limit"), "rate_limit")?;
+    if rate_limit.is_some_and(|value| value < 0) {
+        return Err(format!("{field_name}.rate_limit 必须大于等于 0"));
+    }
     let daily_usage_limit_usd =
         imported_optional_f64(group.get("daily_usage_limit_usd"), "daily_usage_limit_usd")?;
     if daily_usage_limit_usd.is_some_and(|value| value < 0.0) {
         return Err(format!("{field_name}.daily_usage_limit_usd 必须大于等于 0"));
     }
+    let concurrent_limit =
+        imported_optional_u32(group.get("concurrent_limit"), "concurrent_limit")?;
 
     let allowed_providers_mode = imported_optional_list_policy_mode(
         group.get("allowed_providers_mode"),
@@ -663,6 +674,25 @@ fn build_imported_user_group_record(
     });
     let admission_daily_usage_limit_usd = (daily_usage_limit_mode == "custom")
         .then_some(daily_usage_limit_usd.unwrap_or(0.0).max(0.0));
+    let concurrent_limit_mode = imported_optional_rate_limit_policy_mode(
+        group.get("concurrent_limit_mode"),
+        "concurrent_limit_mode",
+    )?
+    .unwrap_or_else(|| {
+        if concurrent_limit.is_some() {
+            "custom".to_string()
+        } else {
+            "inherit".to_string()
+        }
+    });
+    let admission_concurrent_limit =
+        (concurrent_limit_mode == "custom").then_some(concurrent_limit.unwrap_or(0));
+    let admission_request_limit =
+        (rate_limit_mode == "custom").then_some(rate_limit.unwrap_or(0).max(0) as u32);
+    let admission_policy = aether_data::repository::admission::AdmissionPolicyDocument::default()
+        .with_requests_per_minute(admission_request_limit)
+        .with_daily_usage_limit_usd(admission_daily_usage_limit_usd)
+        .with_concurrent_requests(admission_concurrent_limit);
 
     let normalized_name = name.to_ascii_lowercase();
 
@@ -682,7 +712,7 @@ fn build_imported_user_group_record(
             rate_limit,
             rate_limit_mode,
         },
-        admission_daily_usage_limit_usd,
+        admission_policy,
     ))
 }
 
@@ -1831,7 +1861,7 @@ impl<'a> AdminAppState<'a> {
                 Ok(value) => value,
                 Err(detail) => return Ok(Err(invalid_request(detail))),
             };
-            let (export_id, normalized_name, record, daily_usage_limit_usd) = invalid_value!(
+            let (export_id, normalized_name, record, admission_policy) = invalid_value!(
                 build_imported_user_group_record(group, &format!("user_groups[{index}]"))
             );
             if default_group_id
@@ -1865,7 +1895,7 @@ impl<'a> AdminAppState<'a> {
                     }
                     AdminImportMergeMode::Overwrite => {
                         let Some(updated) = self
-                            .update_user_group(&existing.id, record, daily_usage_limit_usd)
+                            .update_user_group(&existing.id, record, admission_policy)
                             .await?
                         else {
                             return Ok(Err((
@@ -1880,10 +1910,7 @@ impl<'a> AdminAppState<'a> {
                 continue;
             }
 
-            let Some(created) = self
-                .create_user_group(record, daily_usage_limit_usd)
-                .await?
-            else {
+            let Some(created) = self.create_user_group(record, admission_policy).await? else {
                 return Ok(Err((
                     http::StatusCode::SERVICE_UNAVAILABLE,
                     json!({ "detail": "Admin system data unavailable" }),

@@ -5,8 +5,7 @@ use super::super::{
     normalize_admin_username, validate_admin_user_password, AdminCreateUserRequest,
 };
 use super::support::{
-    admin_system_daily_usage_limit, admin_user_password_policy,
-    build_admin_user_payload_with_groups,
+    admin_system_admission_policy, admin_user_password_policy, build_admin_user_payload_with_groups,
 };
 use crate::handlers::admin::request::{AdminAppState, AdminRequestContext};
 use crate::handlers::admin::shared::attach_admin_audit_response;
@@ -232,7 +231,7 @@ pub(in super::super) async fn build_admin_create_user_response(
         None
     };
 
-    let system_daily_usage_limit_usd = admin_system_daily_usage_limit(state).await?;
+    let system_admission_policy = admin_system_admission_policy(state).await?;
     let mut payload = build_admin_user_payload_with_groups(
         &user,
         None,
@@ -240,7 +239,7 @@ pub(in super::super) async fn build_admin_create_user_response(
         payload.unlimited,
         &groups,
         &groups,
-        system_daily_usage_limit_usd,
+        &system_admission_policy,
     );
     payload["feature_settings"] = feature_settings.unwrap_or(Value::Null);
 

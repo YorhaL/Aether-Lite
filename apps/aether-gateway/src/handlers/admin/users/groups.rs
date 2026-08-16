@@ -41,6 +41,10 @@ struct AdminUserGroupPayload {
     daily_usage_limit_usd: Option<f64>,
     #[serde(default = "default_rate_limit_mode")]
     daily_usage_limit_mode: String,
+    #[serde(default)]
+    concurrent_limit: Option<u32>,
+    #[serde(default = "default_rate_limit_mode")]
+    concurrent_limit_mode: String,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -80,11 +84,11 @@ pub(in super::super) async fn build_admin_create_user_group_response(
             "当前为只读模式，无法创建用户分组",
         ));
     }
-    let (record, daily_usage_limit_usd) = match parse_group_record(request_body) {
+    let (record, admission_policy) = match parse_group_record(request_body) {
         Ok(value) => value,
         Err(detail) => return Ok(bad_request_owned(detail)),
     };
-    let group = match state.create_user_group(record, daily_usage_limit_usd).await {
+    let group = match state.create_user_group(record, admission_policy).await {
         Ok(Some(group)) => group,
         Ok(None) => {
             return Ok(build_admin_users_read_only_response(
@@ -119,12 +123,12 @@ pub(in super::super) async fn build_admin_update_user_group_response(
     let Some(group_id) = user_group_id_from_path(request_context.path()) else {
         return Ok(build_admin_users_bad_request_response("缺少 group_id"));
     };
-    let (record, daily_usage_limit_usd) = match parse_group_record(request_body) {
+    let (record, admission_policy) = match parse_group_record(request_body) {
         Ok(value) => value,
         Err(detail) => return Ok(bad_request_owned(detail)),
     };
     let group = match state
-        .update_user_group(&group_id, record, daily_usage_limit_usd)
+        .update_user_group(&group_id, record, admission_policy)
         .await
     {
         Ok(Some(group)) => group,
@@ -367,7 +371,7 @@ fn parse_group_record(
 ) -> Result<
     (
         aether_data::repository::users::UpsertUserGroupRecord,
-        Option<f64>,
+        aether_data::repository::admission::AdmissionPolicyDocument,
     ),
     String,
 > {
@@ -397,6 +401,16 @@ fn parse_group_record(
     let daily_usage_limit_mode = normalize_rate_mode(&payload.daily_usage_limit_mode)?;
     let daily_usage_limit_usd = (daily_usage_limit_mode == "custom")
         .then_some(payload.daily_usage_limit_usd.unwrap_or(0.0).max(0.0));
+    let concurrent_limit_mode = normalize_rate_mode(&payload.concurrent_limit_mode)?;
+    let concurrent_limit =
+        (concurrent_limit_mode == "custom").then_some(payload.concurrent_limit.unwrap_or(0));
+    let rate_limit_mode = normalize_rate_mode(&payload.rate_limit_mode)?;
+    let request_limit =
+        (rate_limit_mode == "custom").then_some(payload.rate_limit.unwrap_or(0).max(0) as u32);
+    let admission_policy = aether_data::repository::admission::AdmissionPolicyDocument::default()
+        .with_requests_per_minute(request_limit)
+        .with_daily_usage_limit_usd(daily_usage_limit_usd)
+        .with_concurrent_requests(concurrent_limit);
     Ok((
         aether_data::repository::users::UpsertUserGroupRecord {
             name,
@@ -412,9 +426,9 @@ fn parse_group_record(
             allowed_models,
             allowed_models_mode: normalize_list_mode(&payload.allowed_models_mode)?,
             rate_limit: payload.rate_limit,
-            rate_limit_mode: normalize_rate_mode(&payload.rate_limit_mode)?,
+            rate_limit_mode,
         },
-        daily_usage_limit_usd,
+        admission_policy,
     ))
 }
 
@@ -447,6 +461,8 @@ fn user_group_payload(
         "rate_limit_mode": group.rate_limit_mode,
         "daily_usage_limit_usd": group.daily_usage_limit_usd,
         "daily_usage_limit_mode": group.daily_usage_limit_mode,
+        "concurrent_limit": group.concurrent_limit,
+        "concurrent_limit_mode": group.concurrent_limit_mode,
         "is_default": default_group_id == Some(group.id.as_str()),
         "created_at": format_optional_datetime_iso8601(group.created_at),
         "updated_at": format_optional_datetime_iso8601(group.updated_at),
@@ -533,5 +549,85 @@ fn is_duplicate_group_name_error(err: &GatewayError) -> bool {
     match err {
         GatewayError::Internal(message) => message.contains("duplicate user group name"),
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_all_group_admission_rules_into_one_lite_policy() {
+        let body = axum::body::Bytes::from(
+            json!({
+                "name": "Internal",
+                "rate_limit_mode": "custom",
+                "rate_limit": 120,
+                "daily_usage_limit_mode": "custom",
+                "daily_usage_limit_usd": 25.5,
+                "concurrent_limit_mode": "custom",
+                "concurrent_limit": 8
+            })
+            .to_string(),
+        );
+
+        let (record, policy) = parse_group_record(Some(&body)).expect("payload should parse");
+
+        assert_eq!(record.name, "Internal");
+        assert_eq!(policy.requests_per_minute(), Some(120));
+        assert_eq!(policy.daily_usage_limit_usd(), Some(25.5));
+        assert_eq!(policy.concurrent_requests(), Some(8));
+    }
+
+    #[test]
+    fn system_modes_do_not_leave_group_admission_rules() {
+        let body = axum::body::Bytes::from(
+            json!({
+                "name": "Inherited",
+                "rate_limit_mode": "system",
+                "rate_limit": 120,
+                "daily_usage_limit_mode": "system",
+                "daily_usage_limit_usd": 25.5,
+                "concurrent_limit_mode": "system",
+                "concurrent_limit": 8
+            })
+            .to_string(),
+        );
+
+        let (_, policy) = parse_group_record(Some(&body)).expect("payload should parse");
+
+        assert!(policy.is_empty());
+    }
+
+    #[test]
+    fn group_payload_returns_concurrent_policy_for_form_rehydration() {
+        let stored = aether_data::repository::users::StoredUserGroup {
+            id: "group-1".to_string(),
+            name: "Internal".to_string(),
+            normalized_name: "internal".to_string(),
+            description: None,
+            priority: 0,
+            allowed_providers: None,
+            allowed_providers_mode: "inherit".to_string(),
+            allowed_api_formats: None,
+            allowed_api_formats_mode: "inherit".to_string(),
+            allowed_models: None,
+            allowed_models_mode: "inherit".to_string(),
+            rate_limit: None,
+            rate_limit_mode: "inherit".to_string(),
+            created_at: None,
+            updated_at: None,
+        };
+        let policy = aether_data::repository::admission::AdmissionPolicyDocument::default()
+            .with_concurrent_requests(Some(8));
+        let group = crate::data::GatewayUserGroup::from_stored(stored, &policy)
+            .expect("stored group should enrich");
+
+        let payload = user_group_payload(group, None);
+
+        assert_eq!(payload["concurrent_limit"], 8);
+        assert_eq!(payload["concurrent_limit_mode"], "custom");
+        assert!(payload["rate_limit"].is_null());
+        assert_eq!(payload["rate_limit_mode"], "inherit");
     }
 }

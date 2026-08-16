@@ -54,11 +54,32 @@ pub(crate) struct GatewayUserGroup {
     stored: StoredUserGroup,
     pub(crate) daily_usage_limit_usd: Option<f64>,
     pub(crate) daily_usage_limit_mode: String,
+    pub(crate) concurrent_limit: Option<u32>,
+    pub(crate) concurrent_limit_mode: String,
 }
 
 impl GatewayUserGroup {
-    pub(crate) fn from_stored(stored: StoredUserGroup, daily_usage_limit_usd: Option<f64>) -> Self {
-        Self {
+    pub(crate) fn from_stored(
+        mut stored: StoredUserGroup,
+        document: &AdmissionPolicyDocument,
+    ) -> Result<Self, DataLayerError> {
+        stored.rate_limit = document
+            .requests_per_minute()
+            .map(i32::try_from)
+            .transpose()
+            .map_err(|_| {
+                DataLayerError::UnexpectedValue(
+                    "user group request limit exceeds the supported API range".to_string(),
+                )
+            })?;
+        stored.rate_limit_mode = if stored.rate_limit.is_some() {
+            "custom".to_string()
+        } else {
+            "inherit".to_string()
+        };
+        let daily_usage_limit_usd = document.daily_usage_limit_usd();
+        let concurrent_limit = document.concurrent_requests();
+        Ok(Self {
             stored,
             daily_usage_limit_usd,
             daily_usage_limit_mode: if daily_usage_limit_usd.is_some() {
@@ -66,7 +87,13 @@ impl GatewayUserGroup {
             } else {
                 "inherit".to_string()
             },
-        }
+            concurrent_limit,
+            concurrent_limit_mode: if concurrent_limit.is_some() {
+                "custom".to_string()
+            } else {
+                "inherit".to_string()
+            },
+        })
     }
 
     pub(crate) fn into_stored(self) -> StoredUserGroup {
@@ -348,22 +375,7 @@ impl GatewayDataState {
         let mut enriched = Vec::with_capacity(groups.len());
         for group in groups {
             let document = policies.get(&group.id).cloned().unwrap_or_default();
-            let mut group = GatewayUserGroup::from_stored(group, document.daily_usage_limit_usd());
-            group.rate_limit = document
-                .requests_per_minute()
-                .map(i32::try_from)
-                .transpose()
-                .map_err(|_| {
-                    DataLayerError::UnexpectedValue(
-                        "user group request limit exceeds the supported API range".to_string(),
-                    )
-                })?;
-            group.rate_limit_mode = if group.rate_limit.is_some() {
-                "custom".to_string()
-            } else {
-                "inherit".to_string()
-            };
-            enriched.push(group);
+            enriched.push(GatewayUserGroup::from_stored(group, &document)?);
         }
         Ok(enriched)
     }

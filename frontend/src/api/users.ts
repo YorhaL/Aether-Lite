@@ -30,6 +30,7 @@ export interface UserEffectivePolicy {
   allowed_models?: EffectivePolicyField<string[]>
   rate_limit?: EffectivePolicyField<number>
   daily_usage_limit_usd?: EffectivePolicyField<number>
+  concurrent_limit?: EffectivePolicyField<number>
 }
 
 export interface User {
@@ -177,6 +178,8 @@ export interface UserGroup {
   rate_limit_mode: RateLimitPolicyMode
   daily_usage_limit_usd?: number | null
   daily_usage_limit_mode: RateLimitPolicyMode
+  concurrent_limit?: number | null
+  concurrent_limit_mode: RateLimitPolicyMode
   is_default?: boolean
   created_at?: string | null
   updated_at?: string | null
@@ -195,6 +198,8 @@ export interface UpsertUserGroupRequest {
   rate_limit_mode?: RateLimitPolicyMode
   daily_usage_limit_usd?: number | null
   daily_usage_limit_mode?: RateLimitPolicyMode
+  concurrent_limit?: number | null
+  concurrent_limit_mode?: RateLimitPolicyMode
 }
 
 export interface UserGroupMember {

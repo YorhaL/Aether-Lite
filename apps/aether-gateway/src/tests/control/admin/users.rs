@@ -1814,7 +1814,8 @@ async fn admin_created_user_keys_inherit_owner_group_policy() {
                 rate_limit: Some(15),
                 rate_limit_mode: "custom".to_string(),
             },
-            None,
+            aether_data::repository::admission::AdmissionPolicyDocument::default()
+                .with_requests_per_minute(Some(15)),
         )
         .await
         .expect("target group should update")

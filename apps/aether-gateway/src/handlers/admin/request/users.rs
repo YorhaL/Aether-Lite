@@ -93,21 +93,19 @@ impl<'a> AdminAppState<'a> {
     pub(crate) async fn create_user_group(
         &self,
         record: aether_data::repository::users::UpsertUserGroupRecord,
-        daily_usage_limit_usd: Option<f64>,
+        admission_policy: aether_data::repository::admission::AdmissionPolicyDocument,
     ) -> Result<Option<crate::data::GatewayUserGroup>, GatewayError> {
-        self.app
-            .create_user_group(record, daily_usage_limit_usd)
-            .await
+        self.app.create_user_group(record, admission_policy).await
     }
 
     pub(crate) async fn update_user_group(
         &self,
         group_id: &str,
         record: aether_data::repository::users::UpsertUserGroupRecord,
-        daily_usage_limit_usd: Option<f64>,
+        admission_policy: aether_data::repository::admission::AdmissionPolicyDocument,
     ) -> Result<Option<crate::data::GatewayUserGroup>, GatewayError> {
         self.app
-            .update_user_group(group_id, record, daily_usage_limit_usd)
+            .update_user_group(group_id, record, admission_policy)
             .await
     }
 

@@ -225,6 +225,8 @@ impl<'a> AdminAppState<'a> {
                     "rate_limit_mode": group.rate_limit_mode.clone(),
                     "daily_usage_limit_usd": group.daily_usage_limit_usd,
                     "daily_usage_limit_mode": group.daily_usage_limit_mode.clone(),
+                    "concurrent_limit": group.concurrent_limit,
+                    "concurrent_limit_mode": group.concurrent_limit_mode.clone(),
                 })
             })
             .collect::<Vec<_>>();
