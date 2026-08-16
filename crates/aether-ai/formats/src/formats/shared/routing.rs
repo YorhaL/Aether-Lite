@@ -1,3 +1,4 @@
+use base64::Engine as _;
 use http::Method;
 use url::form_urlencoded;
 
@@ -476,9 +477,96 @@ pub fn is_matching_stream_http_request(
     plan_kind: &str,
     parts: &http::request::Parts,
     body_json: &serde_json::Value,
-    _body_base64: Option<&str>,
+    body_base64: Option<&str>,
 ) -> bool {
+    if plan_kind == OPENAI_IMAGE_STREAM_PLAN_KIND
+        && matches!(
+            parts.uri.path(),
+            "/v1/images/generations" | "/v1/images/edits"
+        )
+    {
+        return body_base64
+            .and_then(|body| multipart_boolean_field(parts, body, "stream"))
+            .unwrap_or_else(|| {
+                body_json
+                    .get("stream")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false)
+            });
+    }
     is_matching_stream_request(plan_kind, parts.uri.path(), body_json)
+}
+
+fn multipart_boolean_field(
+    parts: &http::request::Parts,
+    body_base64: &str,
+    field_name: &str,
+) -> Option<bool> {
+    let content_type = parts
+        .headers
+        .get(http::header::CONTENT_TYPE)?
+        .to_str()
+        .ok()?;
+    let boundary = content_type.split(';').find_map(|segment| {
+        let (key, value) = segment.trim().split_once('=')?;
+        key.eq_ignore_ascii_case("boundary")
+            .then(|| value.trim().trim_matches('"'))
+            .filter(|value| !value.is_empty())
+    })?;
+    let body = base64::engine::general_purpose::STANDARD
+        .decode(body_base64.trim())
+        .ok()?;
+    let delimiter = format!("--{boundary}").into_bytes();
+    let mut cursor = 0;
+
+    while let Some(relative_start) = find_subslice(&body[cursor..], &delimiter) {
+        let mut start = cursor + relative_start + delimiter.len();
+        if body.get(start..start + 2) == Some(b"--") {
+            break;
+        }
+        if body.get(start..start + 2) == Some(b"\r\n") {
+            start += 2;
+        }
+        let relative_end = find_subslice(&body[start..], &delimiter)?;
+        let raw = body[start..start + relative_end]
+            .strip_suffix(b"\r\n")
+            .unwrap_or(&body[start..start + relative_end]);
+        let header_end = find_subslice(raw, b"\r\n\r\n")?;
+        let headers = String::from_utf8_lossy(&raw[..header_end]);
+        let name = headers.lines().find_map(|line| {
+            let (header, value) = line.split_once(':')?;
+            header
+                .trim()
+                .eq_ignore_ascii_case("content-disposition")
+                .then_some(value)?
+                .split(';')
+                .find_map(|parameter| {
+                    let (key, value) = parameter.trim().split_once('=')?;
+                    key.eq_ignore_ascii_case("name")
+                        .then(|| value.trim().trim_matches('"'))
+                })
+        });
+        if name == Some(field_name) {
+            let value = std::str::from_utf8(&raw[header_end + 4..]).ok()?.trim();
+            return match value.to_ascii_lowercase().as_str() {
+                "true" | "1" | "yes" => Some(true),
+                "false" | "0" | "no" => Some(false),
+                _ => None,
+            };
+        }
+        cursor = start + relative_end;
+    }
+    None
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    (!needle.is_empty() && haystack.len() >= needle.len())
+        .then(|| {
+            haystack
+                .windows(needle.len())
+                .position(|window| window == needle)
+        })
+        .flatten()
 }
 
 pub fn supports_sync_execution_decision_kind(plan_kind: &str) -> bool {
