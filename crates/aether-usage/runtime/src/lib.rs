@@ -36,7 +36,7 @@ pub use report::{
 };
 pub use report_context::{
     build_locally_actionable_report_context_from_request_candidate,
-    build_locally_actionable_report_context_from_video_task, report_context_is_locally_actionable,
+    report_context_is_locally_actionable,
 };
 pub use runtime::{
     UsageBillingEventEnricher, UsageBodyCapturePolicy, UsageQueueHealthSnapshot,

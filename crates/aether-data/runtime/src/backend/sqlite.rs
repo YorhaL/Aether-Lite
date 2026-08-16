@@ -46,9 +46,6 @@ use crate::repository::usage::{
     UsageWriteRepository,
 };
 use crate::repository::users::{SqliteUserReadRepository, UserReadRepository};
-use crate::repository::video_tasks::{
-    SqliteVideoTaskRepository, VideoTaskReadRepository, VideoTaskWriteRepository,
-};
 use crate::repository::wallet::{
     SqliteWalletReadRepository, WalletReadRepository, WalletWriteRepository,
 };
@@ -160,14 +157,6 @@ impl SqliteBackend {
 
     pub fn user_read_repository(&self) -> Arc<dyn UserReadRepository> {
         Arc::new(SqliteUserReadRepository::new(self.pool_clone()))
-    }
-
-    pub fn video_task_read_repository(&self) -> Arc<dyn VideoTaskReadRepository> {
-        Arc::new(SqliteVideoTaskRepository::new(self.pool_clone()))
-    }
-
-    pub fn video_task_write_repository(&self) -> Arc<dyn VideoTaskWriteRepository> {
-        Arc::new(SqliteVideoTaskRepository::new(self.pool_clone()))
     }
 
     pub fn oauth_provider_read_repository(&self) -> Arc<dyn OAuthProviderReadRepository> {

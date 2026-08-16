@@ -1,6 +1,6 @@
 use super::{
     classified, classified_with_request_auth_channel, detect_claude_client_surface,
-    is_gemini_cli_request, is_gemini_models_route, is_gemini_operation_route, ClassifiedRoute,
+    is_gemini_cli_request, is_gemini_models_route, ClassifiedRoute,
 };
 use crate::ai_serving::ApiOperation;
 
@@ -102,14 +102,6 @@ pub(super) fn classify_ai_public_route(
             .with_client_surface(detect_claude_client_surface(headers))
             .with_api_operation(ApiOperation::ClaudeMessagesCreate),
         )
-    } else if normalized_path.starts_with("/v1/videos") {
-        Some(classified(
-            "ai_public",
-            "openai",
-            "video",
-            "openai:video",
-            true,
-        ))
     } else if method == http::Method::POST
         && matches!(normalized_path, "/v1/interactions" | "/v1beta/interactions")
     {
@@ -122,15 +114,7 @@ pub(super) fn classify_ai_public_route(
             true,
         ))
     } else if method == http::Method::POST && is_gemini_models_route(normalized_path) {
-        if normalized_path.ends_with(":predictLongRunning") {
-            Some(classified(
-                "ai_public",
-                "gemini",
-                "video",
-                "gemini:video",
-                true,
-            ))
-        } else if normalized_path.ends_with(":embedContent")
+        if normalized_path.ends_with(":embedContent")
             || normalized_path.ends_with(":batchEmbedContents")
         {
             Some(classified_with_request_auth_channel(
@@ -160,16 +144,6 @@ pub(super) fn classify_ai_public_route(
                 true,
             ))
         }
-    } else if is_gemini_operation_method(method, normalized_path)
-        && is_gemini_operation_route(normalized_path)
-    {
-        Some(classified(
-            "ai_public",
-            "gemini",
-            "video",
-            "gemini:video",
-            true,
-        ))
     } else {
         None
     }
@@ -187,9 +161,4 @@ fn claude_request_auth_channel(headers: &http::HeaderMap) -> &'static str {
     } else {
         "api_key"
     }
-}
-
-fn is_gemini_operation_method(method: &http::Method, normalized_path: &str) -> bool {
-    method == http::Method::GET
-        || (method == http::Method::POST && normalized_path.ends_with(":cancel"))
 }

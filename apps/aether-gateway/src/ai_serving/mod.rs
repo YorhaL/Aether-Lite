@@ -3,10 +3,9 @@ mod planner;
 mod pure;
 pub(crate) mod transport;
 
-use axum::body::Body;
-use axum::http::{Response, Uri};
+use axum::http::Uri;
 
-use crate::{usage::GatewaySyncReportRequest, AppState, GatewayError};
+use crate::{AppState, GatewayError};
 
 pub(crate) use self::planner::{
     apply_local_runtime_candidate_terminal_reason, build_local_same_format_stream_attempt_source,
@@ -121,12 +120,4 @@ pub(crate) fn generic_decision_missing_exact_provider_request(
         "gateway generic decision missing exact provider request; falling back to plan"
     );
     true
-}
-
-pub(crate) fn maybe_build_local_sync_finalize_response(
-    trace_id: &str,
-    decision: &GatewayControlDecision,
-    payload: &GatewaySyncReportRequest,
-) -> Result<Option<Response<Body>>, GatewayError> {
-    crate::execution_runtime::maybe_build_local_sync_finalize_response(trace_id, decision, payload)
 }

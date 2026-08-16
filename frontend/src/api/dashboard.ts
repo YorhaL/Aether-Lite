@@ -103,19 +103,6 @@ export interface ProviderStatusResponse {
   providers: ProviderStatus[]
 }
 
-// 视频/图像/音频计费信息
-export interface VideoBilling {
-  task_type: 'video' | 'image' | 'audio'
-  duration_seconds?: number  // 视频时长（秒）
-  resolution?: string        // 分辨率
-  video_price_per_second?: number  // 每秒单价
-  video_cost?: number        // 视频费用
-  cost?: number              // 总费用
-  rule_name?: string         // 计费规则名称
-  expression?: string        // 计费公式
-  status?: string            // 计费状态
-}
-
 export interface RequestErrorDomain {
   source?: string | null
   status_code?: number | null
@@ -312,8 +299,6 @@ export interface RequestDetail {
     current_tier: RequestPricingTier  // 当前命中的阶梯配置
     tiers: RequestPricingTier[]  // 完整阶梯配置列表
   } | null
-  // 视频/图像/音频计费信息
-  video_billing?: VideoBilling | null
 }
 
 export interface CurlData {

@@ -580,8 +580,8 @@ mod tests {
                     "messages": [{
                         "role": "user",
                         "content": [{
-                            "type": "video_url",
-                            "video_url": {"url": "https://example.com/video.mp4"},
+                            "type": "output_text",
+                            "text": "unsupported here",
                             "prompt_cache_breakpoint": {"mode": "explicit"}
                         }]
                     }]

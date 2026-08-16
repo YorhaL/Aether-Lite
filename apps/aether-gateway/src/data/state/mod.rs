@@ -12,7 +12,6 @@ use super::decision_trace::{read_decision_trace, DecisionTrace};
 use crate::provider_transport::{
     read_provider_transport_snapshot, GatewayProviderTransportSnapshot,
 };
-use crate::video_tasks::LocalVideoTaskReadResponse;
 use aether_cache::ExpiringMap;
 use aether_data::repository::announcements::{
     AnnouncementListQuery, AnnouncementReadRepository, AnnouncementWriteRepository,
@@ -92,10 +91,6 @@ use aether_data_contracts::repository::usage::{
     StoredProviderUsageSummary, StoredRequestUsageAudit, StoredUsageDailyActualCostRollup,
     UpsertUsageRecord, UsageDailyActualCostRollupQuery, UsageReadRepository, UsageWriteRepository,
 };
-use aether_data_contracts::repository::video_tasks::{
-    StoredVideoTask, UpsertVideoTask, VideoTaskLookupKey, VideoTaskModelCount,
-    VideoTaskQueryFilter, VideoTaskReadRepository, VideoTaskStatusCount, VideoTaskWriteRepository,
-};
 use aether_runtime_state::{RuntimeQueueStore, RuntimeState};
 
 #[derive(Clone, Default)]
@@ -130,8 +125,6 @@ pub(crate) struct GatewayDataState {
     user_preferences: Option<Arc<RwLock<BTreeMap<String, StoredUserPreferenceRecord>>>>,
     usage_worker_queue: Option<Arc<dyn RuntimeQueueStore>>,
     daily_usage_runtime_state: Option<Arc<RuntimeState>>,
-    video_task_reader: Option<Arc<dyn VideoTaskReadRepository>>,
-    video_task_writer: Option<Arc<dyn VideoTaskWriteRepository>>,
     wallet_reader: Option<Arc<dyn WalletReadRepository>>,
     wallet_writer: Option<Arc<dyn WalletWriteRepository>>,
     settlement_writer: Option<Arc<dyn SettlementWriteRepository>>,
@@ -278,8 +271,6 @@ impl fmt::Debug for GatewayDataState {
             .field("has_usage_writer", &self.usage_writer.is_some())
             .field("has_user_preferences", &self.user_preferences.is_some())
             .field("has_usage_worker_queue", &self.usage_worker_queue.is_some())
-            .field("has_video_task_reader", &self.video_task_reader.is_some())
-            .field("has_video_task_writer", &self.video_task_writer.is_some())
             .field("has_wallet_reader", &self.wallet_reader.is_some())
             .field("has_wallet_writer", &self.wallet_writer.is_some())
             .field("has_settlement_writer", &self.settlement_writer.is_some())

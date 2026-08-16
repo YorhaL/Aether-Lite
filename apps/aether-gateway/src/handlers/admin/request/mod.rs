@@ -15,5 +15,5 @@ mod users;
 pub(crate) use self::context::AdminRequestContext;
 pub(crate) type AdminGatewayProviderTransportSnapshot =
     crate::provider_transport::GatewayProviderTransportSnapshot;
-pub(crate) use self::route_request::{AdminCancelVideoTaskError, AdminRouteRequest};
+pub(crate) use self::route_request::AdminRouteRequest;
 pub(crate) use self::state::{AdminAppState, AdminRouteResponse, AdminRouteResult};

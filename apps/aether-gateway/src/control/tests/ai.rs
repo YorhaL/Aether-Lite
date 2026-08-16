@@ -380,21 +380,3 @@ fn classifies_gemini_interactions_as_interactions_route() {
     );
     assert!(decision.is_execution_runtime_candidate());
 }
-
-#[test]
-fn classifies_gemini_predict_long_running_as_video_route() {
-    let headers = headers(&[]);
-    let uri: Uri = "/v1beta/models/veo-3:predictLongRunning"
-        .parse()
-        .expect("uri should parse");
-    let decision =
-        classify_control_route(&http::Method::POST, &uri, &headers).expect("route should classify");
-
-    assert_eq!(decision.route_family.as_deref(), Some("gemini"));
-    assert_eq!(decision.route_kind.as_deref(), Some("video"));
-    assert_eq!(
-        decision.auth_endpoint_signature.as_deref(),
-        Some("gemini:video")
-    );
-    assert!(decision.is_execution_runtime_candidate());
-}

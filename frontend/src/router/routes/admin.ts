@@ -162,10 +162,6 @@ export const adminRoutes: RouteRecordRaw[] = [
         path: 'async-tasks',
         name: 'AsyncTasks',
         component: view(() => import('@/views/admin/AsyncTasks.vue'))
-      },
-      {
-        path: 'video-tasks',
-        redirect: '/admin/async-tasks'
       }
     ]
   }

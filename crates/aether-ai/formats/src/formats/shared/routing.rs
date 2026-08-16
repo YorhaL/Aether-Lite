@@ -8,14 +8,11 @@ use crate::contracts::{
     GEMINI_CHAT_STREAM_PLAN_KIND, GEMINI_CHAT_SYNC_PLAN_KIND, GEMINI_CLI_STREAM_PLAN_KIND,
     GEMINI_CLI_SYNC_PLAN_KIND, GEMINI_EMBEDDING_SYNC_PLAN_KIND,
     GEMINI_INTERACTIONS_STREAM_PLAN_KIND, GEMINI_INTERACTIONS_SYNC_PLAN_KIND,
-    GEMINI_VIDEO_CANCEL_SYNC_PLAN_KIND, GEMINI_VIDEO_CREATE_SYNC_PLAN_KIND,
     OPENAI_CHAT_STREAM_PLAN_KIND, OPENAI_CHAT_SYNC_PLAN_KIND, OPENAI_EMBEDDING_SYNC_PLAN_KIND,
     OPENAI_IMAGE_STREAM_PLAN_KIND, OPENAI_IMAGE_SYNC_PLAN_KIND, OPENAI_RERANK_SYNC_PLAN_KIND,
     OPENAI_RESPONSES_COMPACT_STREAM_PLAN_KIND, OPENAI_RESPONSES_COMPACT_SYNC_PLAN_KIND,
     OPENAI_RESPONSES_STREAM_PLAN_KIND, OPENAI_RESPONSES_SYNC_PLAN_KIND,
-    OPENAI_SEARCH_SYNC_PLAN_KIND, OPENAI_VIDEO_CANCEL_SYNC_PLAN_KIND,
-    OPENAI_VIDEO_CONTENT_PLAN_KIND, OPENAI_VIDEO_CREATE_SYNC_PLAN_KIND,
-    OPENAI_VIDEO_DELETE_SYNC_PLAN_KIND, OPENAI_VIDEO_REMIX_SYNC_PLAN_KIND,
+    OPENAI_SEARCH_SYNC_PLAN_KIND,
 };
 
 pub fn resolve_execution_runtime_stream_plan_kind(
@@ -106,14 +103,6 @@ pub fn resolve_execution_runtime_stream_plan_kind_with_client_surface(
         return Some(OPENAI_IMAGE_STREAM_PLAN_KIND);
     }
 
-    if route_family == Some("openai")
-        && route_kind == Some("video")
-        && *method == Method::GET
-        && path.ends_with("/content")
-    {
-        return Some(OPENAI_VIDEO_CONTENT_PLAN_KIND);
-    }
-
     None
 }
 
@@ -147,56 +136,6 @@ pub fn resolve_execution_runtime_sync_plan_kind_with_client_surface(
 ) -> Option<&'static str> {
     if route_class != Some("ai_public") {
         return None;
-    }
-
-    if route_family == Some("openai")
-        && route_kind == Some("video")
-        && *method == Method::POST
-        && path.starts_with("/v1/videos/")
-        && path.ends_with("/cancel")
-    {
-        return Some(OPENAI_VIDEO_CANCEL_SYNC_PLAN_KIND);
-    }
-
-    if route_family == Some("openai")
-        && route_kind == Some("video")
-        && *method == Method::POST
-        && path.starts_with("/v1/videos/")
-        && path.ends_with("/remix")
-    {
-        return Some(OPENAI_VIDEO_REMIX_SYNC_PLAN_KIND);
-    }
-
-    if route_family == Some("openai")
-        && route_kind == Some("video")
-        && *method == Method::POST
-        && path == "/v1/videos"
-    {
-        return Some(OPENAI_VIDEO_CREATE_SYNC_PLAN_KIND);
-    }
-
-    if route_family == Some("openai")
-        && route_kind == Some("video")
-        && *method == Method::DELETE
-        && path.starts_with("/v1/videos/")
-    {
-        return Some(OPENAI_VIDEO_DELETE_SYNC_PLAN_KIND);
-    }
-
-    if route_family == Some("gemini")
-        && route_kind == Some("video")
-        && *method == Method::POST
-        && path.ends_with(":cancel")
-    {
-        return Some(GEMINI_VIDEO_CANCEL_SYNC_PLAN_KIND);
-    }
-
-    if route_family == Some("gemini")
-        && route_kind == Some("video")
-        && *method == Method::POST
-        && path.ends_with(":predictLongRunning")
-    {
-        return Some(GEMINI_VIDEO_CREATE_SYNC_PLAN_KIND);
     }
 
     if route_family == Some("gemini")
@@ -555,12 +494,6 @@ pub fn supports_sync_execution_decision_kind(plan_kind: &str) -> bool {
             | GEMINI_CLI_SYNC_PLAN_KIND
             | GEMINI_EMBEDDING_SYNC_PLAN_KIND
             | GEMINI_INTERACTIONS_SYNC_PLAN_KIND
-            | OPENAI_VIDEO_CREATE_SYNC_PLAN_KIND
-            | OPENAI_VIDEO_REMIX_SYNC_PLAN_KIND
-            | OPENAI_VIDEO_CANCEL_SYNC_PLAN_KIND
-            | OPENAI_VIDEO_DELETE_SYNC_PLAN_KIND
-            | GEMINI_VIDEO_CREATE_SYNC_PLAN_KIND
-            | GEMINI_VIDEO_CANCEL_SYNC_PLAN_KIND
     )
 }
 
@@ -575,7 +508,6 @@ pub fn supports_stream_execution_decision_kind(plan_kind: &str) -> bool {
             | CLAUDE_CLI_STREAM_PLAN_KIND
             | GEMINI_CLI_STREAM_PLAN_KIND
             | GEMINI_INTERACTIONS_STREAM_PLAN_KIND
-            | OPENAI_VIDEO_CONTENT_PLAN_KIND
     )
 }
 

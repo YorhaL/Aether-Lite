@@ -33,12 +33,6 @@ describe('provider model form embedding helpers', () => {
       tieredPricingModified: false,
       pricePerRequest: 0.25,
       pricePerRequestModified: false,
-      cleanConfig: {
-        embedding: true,
-        model_type: 'embedding',
-        api_formats: ['openai:embedding'],
-      },
-      configTouched: false,
       supportsStreaming: false,
       isActive: true,
     })
@@ -48,7 +42,6 @@ describe('provider model form embedding helpers', () => {
       provider_model_name: 'text-embedding-3-small',
       tiered_pricing: undefined,
       price_per_request: undefined,
-      config: undefined,
       supports_streaming: false,
     })
     expect('supports_embedding' in payload).toBe(false)
@@ -62,8 +55,6 @@ describe('provider model form embedding helpers', () => {
       tieredPricingModified: false,
       pricePerRequest: undefined,
       pricePerRequestModified: false,
-      cleanConfig: undefined,
-      configTouched: false,
       isActive: true,
     })
 
@@ -72,47 +63,16 @@ describe('provider model form embedding helpers', () => {
       provider_model_name: 'intranet-chat-model-v1',
       tiered_pricing: undefined,
       price_per_request: undefined,
-      config: undefined,
       is_active: true,
     })
   })
 
-  it('preserves edited provider embedding config without posting unsupported embedding controls', () => {
-    const payload = buildProviderModelUpdatePayload({
-      finalTieredPricing: pricing,
-      tieredPricingModified: true,
-      pricePerRequest: undefined,
-      pricePerRequestModified: false,
-      cleanConfig: {
-        streaming: false,
-        embedding: true,
-        model_type: 'embedding',
-        api_formats: ['gemini:embedding'],
-      },
-      configTouched: true,
-      supportsStreaming: false,
-      isActive: true,
-    })
-
-    expect(payload.config).toEqual({
-      streaming: false,
-      embedding: true,
-      model_type: 'embedding',
-      api_formats: ['gemini:embedding'],
-    })
-    expect(payload.tiered_pricing).toEqual(pricing)
-    expect(payload.supports_streaming).toBe(false)
-    expect('supports_embedding' in payload).toBe(false)
-  })
-
-  it('keeps inherited pricing and config out of an unchanged provider update', () => {
+  it('keeps inherited pricing out of an unchanged provider update', () => {
     const payload = buildProviderModelUpdatePayload({
       finalTieredPricing: pricing,
       tieredPricingModified: false,
       pricePerRequest: 0.25,
       pricePerRequestModified: false,
-      cleanConfig: { billing: { video: { price_per_second_by_resolution: { '720p': 0.1 } } } },
-      configTouched: false,
       isActive: true,
     })
 
@@ -127,8 +87,6 @@ describe('provider model form embedding helpers', () => {
       tieredPricingModified: false,
       pricePerRequest: 0.5,
       pricePerRequestModified: true,
-      cleanConfig: undefined,
-      configTouched: false,
       isActive: true,
     })
     const cleared = buildProviderModelUpdatePayload({
@@ -136,8 +94,6 @@ describe('provider model form embedding helpers', () => {
       tieredPricingModified: false,
       pricePerRequest: undefined,
       pricePerRequestModified: true,
-      cleanConfig: undefined,
-      configTouched: false,
       isActive: true,
     })
 
@@ -181,7 +137,6 @@ describe('provider model pricing override helpers', () => {
       finalTieredPricing: override,
       tieredPricingModified: true,
       pricePerRequestModified: false,
-      configTouched: false,
       isActive: true,
     })
     expect(createPayload.tiered_pricing).toEqual(override)

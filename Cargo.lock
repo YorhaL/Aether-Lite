@@ -293,7 +293,6 @@ dependencies = [
  "aether-task-runtime",
  "aether-test-support",
  "aether-usage-runtime",
- "aether-video-tasks-core",
  "aether-wallet",
  "async-stream",
  "async-trait",
@@ -495,7 +494,6 @@ dependencies = [
  "aether-crypto",
  "aether-data-contracts",
  "aether-runtime-state",
- "aether-video-tasks-core",
  "async-trait",
  "axum",
  "base64 0.22.1",
@@ -637,19 +635,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "aether-video-tasks-core"
-version = "0.1.0"
-dependencies = [
- "aether-contracts",
- "aether-data-contracts",
- "async-trait",
- "serde",
- "serde_json",
- "url",
- "uuid",
 ]
 
 [[package]]

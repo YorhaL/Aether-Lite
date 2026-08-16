@@ -6357,7 +6357,6 @@ Additional properties: `任意 JSON 值`
 | GET | `v1beta/files` | - | `ListFilesResponse` | `gemini files` |
 | GET | `v1beta/{+name}` | - | `File` | `gemini files` |
 | DELETE | `v1beta/{+name}` | - | `Empty` | `gemini files` |
-| POST | `v1beta/{+model}:predictLongRunning` | `PredictLongRunningRequest` | `Operation` | `gemini video` |
 
 ## Gemini Schema 字段表
 
@@ -6596,7 +6595,6 @@ Additional properties: `任意 JSON 值`
 
 | 字段 | 必填 | 类型 | 枚举/常量 | 说明 |
 | --- | --- | --- | --- | --- |
-| `audioTrackExtraction` | 否 | `boolean` | - | Optional. Whether to extract audio from video content. |
 | `autoTruncate` | 否 | `boolean` | - | Optional. Whether to silently truncate the input content if it's longer than the maximum sequence length. |
 | `documentOcr` | 否 | `boolean` | - | Optional. Whether to enable OCR for document content. |
 | `outputDimensionality` | 否 | `integer(int32)` | - | Optional. Reduced dimension for the output embedding. If set, excessive values in the output embedding are truncated from the end. |
@@ -6678,7 +6676,6 @@ Additional properties: `任意 JSON 值`
 | `state` | 否 | `string` | `STATE_UNSPECIFIED`, `PROCESSING`, `ACTIVE`, `FAILED` | Output only. Processing state of the File. |
 | `updateTime` | 否 | `string(google-datetime)` | - | Output only. The timestamp of when the File was last updated. |
 | `uri` | 否 | `string` | - | Output only. The uri of the File. |
-| `videoMetadata` | 否 | `VideoFileMetadata` | - | Output only. Metadata for a video. |
 
 ### `FileData`
 
@@ -7141,7 +7138,7 @@ Additional properties: `任意 JSON 值`
 
 | 字段 | 必填 | 类型 | 枚举/常量 | 说明 |
 | --- | --- | --- | --- | --- |
-| `modality` | 否 | `string` | `MODALITY_UNSPECIFIED`, `TEXT`, `IMAGE`, `VIDEO`, `AUDIO`, `DOCUMENT` | The modality associated with this token count. |
+| `modality` | 否 | `string` | `MODALITY_UNSPECIFIED`, `TEXT`, `IMAGE`, `AUDIO`, `DOCUMENT` | The modality associated with this token count. |
 | `tokenCount` | 否 | `integer(int32)` | - | Number of tokens. |
 
 ### `ModelStatus`
@@ -7205,7 +7202,6 @@ Additional properties: `任意 JSON 值`
 | `thoughtSignature` | 否 | `string(byte)` | - | Optional. An opaque signature for the thought so it can be reused in subsequent requests. |
 | `toolCall` | 否 | `ToolCall` | - | Server-side tool call. This field is populated when the model predicts a tool invocation that should be executed on the server. The client is expected to echo this message back to… |
 | `toolResponse` | 否 | `ToolResponse` | - | The output from a server-side ToolCall execution. This field is populated by the client with the results of executing the corresponding ToolCall. |
-| `videoMetadata` | 否 | `VideoMetadata` | - | Optional. Video metadata. The metadata should only be specified while the video data is presented in inline_data or file_data. |
 
 ### `PlaceAnswerSources`
 
@@ -7609,30 +7605,6 @@ Additional properties: `任意 JSON 值`
 | `toolUsePromptTokenCount` | 否 | `integer(int32)` | - | Output only. Number of tokens present in tool-use prompt(s). |
 | `toolUsePromptTokensDetails` | 否 | `array<ModalityTokenCount>` | - | Output only. List of modalities that were processed for tool-use request inputs. |
 | `totalTokenCount` | 否 | `integer(int32)` | - | Total token count for the generation request (prompt + thoughts + response candidates). |
-
-### `VideoFileMetadata`
-
-| 项 | 值 |
-| --- | --- |
-| 类型 | `object` |
-| 说明 | Metadata for a video File. |
-
-| 字段 | 必填 | 类型 | 枚举/常量 | 说明 |
-| --- | --- | --- | --- | --- |
-| `videoDuration` | 否 | `string(google-duration)` | - | Duration of the video. |
-
-### `VideoMetadata`
-
-| 项 | 值 |
-| --- | --- |
-| 类型 | `object` |
-| 说明 | Deprecated: Use GenerateContentRequest.processing_options instead. Metadata describes the input video content. |
-
-| 字段 | 必填 | 类型 | 枚举/常量 | 说明 |
-| --- | --- | --- | --- | --- |
-| `endOffset` | 否 | `string(google-duration)` | - | Optional. The end offset of the video. |
-| `fps` | 否 | `number(double)` | - | Optional. The frame rate of the video sent to the model. If not specified, the default value will be 1.0. The fps range is (0.0, 24.0]. |
-| `startOffset` | 否 | `string(google-duration)` | - | Optional. The start offset of the video. |
 
 ### `VoiceConfig`
 

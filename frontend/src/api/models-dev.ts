@@ -37,7 +37,7 @@ export interface ModelsDevModel {
   knowledge?: string
   release_date?: string
   last_updated?: string
-  input?: string[] // 输入模态: text, image, audio, video, pdf
+  input?: string[] // 输入模态: text, image, audio, pdf
   output?: string[] // 输出模态: text, image, audio
   modalities?: {
     input?: string[]

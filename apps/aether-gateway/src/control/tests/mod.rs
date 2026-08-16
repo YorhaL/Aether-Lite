@@ -85,7 +85,6 @@ mod admin_security;
 mod admin_stats;
 mod admin_usage;
 mod admin_users;
-mod admin_video_tasks;
 mod admin_wallets;
 mod ai;
 mod internal;

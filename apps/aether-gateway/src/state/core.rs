@@ -26,7 +26,6 @@ use super::{
     AppState, FrontdoorCorsConfig, FrontdoorRuntimeGuardConfig, LocalExecutionRuntimeMissDiagnostic,
 };
 
-use super::super::async_task::{spawn_video_task_poller, VideoTaskPollerConfig, VideoTaskService};
 use super::super::cache::{
     AuthApiKeyLastUsedCache, AuthContextCache, AuthSnapshotCache, DashboardResponseCache,
     JsonValueCache, SchedulerAffinityCache, SchedulerAffinitySnapshotEntry,
@@ -279,8 +278,6 @@ impl AppState {
             background_data_isolated: false,
             runtime_state: runtime_state.clone(),
             usage_runtime: Arc::new(usage::UsageRuntime::disabled()),
-            video_tasks: Arc::new(VideoTaskService::new()),
-            video_task_poller: None,
             frontdoor_runtime_guards: Arc::clone(&frontdoor_runtime_guards),
             request_body_buffer_budget: Arc::new(tokio::sync::Semaphore::new(
                 frontdoor_runtime_guards.request_body_buffer_budget_permits,
@@ -486,14 +483,6 @@ impl AppState {
         sqlx::migrate::MigrateError,
     > {
         self.data.pending_database_backfills().await
-    }
-
-    pub fn with_video_task_poller_config(mut self, interval: Duration, batch_size: usize) -> Self {
-        self.video_task_poller = Some(VideoTaskPollerConfig {
-            interval,
-            batch_size: batch_size.max(1),
-        });
-        self
     }
 
     pub fn with_request_concurrency_limit(mut self, limit: usize) -> Self {
@@ -1662,14 +1651,6 @@ impl AppState {
             .fresh_entries_for_epoch(ttl, self.scheduler_affinity_epoch())
     }
 
-    pub fn with_video_task_store_path(
-        mut self,
-        path: impl Into<std::path::PathBuf>,
-    ) -> std::io::Result<Self> {
-        self.video_tasks = Arc::new(VideoTaskService::with_file_store(path)?);
-        Ok(self)
-    }
-
     fn background_worker_state(&self) -> Self {
         let mut state = self.clone();
         state.data = self.background_data.clone();
@@ -1749,10 +1730,6 @@ impl AppState {
         supervise_worker(
             crate::task_runtime::TASK_KEY_MODEL_FETCH_WORKER,
             spawn_model_fetch_worker(background_state.clone()),
-        );
-        supervise_worker(
-            crate::task_runtime::TASK_KEY_VIDEO_TASK_POLLER,
-            spawn_video_task_poller(background_state.clone()),
         );
         supervise_worker(
             crate::backup::worker::S3_BACKUP_WORKER_TASK_KEY,

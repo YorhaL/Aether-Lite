@@ -42,11 +42,7 @@ pub(crate) fn frontdoor_self_loop_public_ai_path(path: &str) -> bool {
             | "/v1/responses"
             | "/v1/responses/compact"
             | "/v1/alpha/search"
-            | "/v1beta/operations"
-            | "/v1/videos"
-    ) || path.starts_with("/v1/videos/")
-        || path.starts_with("/v1beta/operations/")
-        || path.starts_with("/v1internal:")
+    ) || path.starts_with("/v1internal:")
         || is_gemini_generation_path(path)
 }
 

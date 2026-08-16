@@ -8,13 +8,11 @@ export const API_FORMATS = {
   OPENAI_RESPONSES_COMPACT: 'openai:responses:compact',
   OPENAI_SEARCH: 'openai:search',
   OPENAI_IMAGE: 'openai:image',
-  OPENAI_VIDEO: 'openai:video',
   OPENAI_EMBEDDING: 'openai:embedding',
   OPENAI_RERANK: 'openai:rerank',
   GEMINI: 'gemini:generate_content',
   GEMINI_GENERATE_CONTENT: 'gemini:generate_content',
   GEMINI_INTERACTIONS: 'gemini:interactions',
-  GEMINI_VIDEO: 'gemini:video',
   GEMINI_EMBEDDING: 'gemini:embedding',
   JINA_EMBEDDING: 'jina:embedding',
   JINA_RERANK: 'jina:rerank',
@@ -32,12 +30,10 @@ export const API_FORMAT_LABELS: Record<string, string> = {
   [API_FORMATS.OPENAI_RESPONSES_COMPACT]: 'OpenAI Responses Compact',
   [API_FORMATS.OPENAI_SEARCH]: 'OpenAI Search',
   [API_FORMATS.OPENAI_IMAGE]: 'OpenAI Image',
-  [API_FORMATS.OPENAI_VIDEO]: 'OpenAI Video',
   [API_FORMATS.OPENAI_EMBEDDING]: 'OpenAI Embedding',
   [API_FORMATS.OPENAI_RERANK]: 'OpenAI Rerank',
   [API_FORMATS.GEMINI_GENERATE_CONTENT]: 'Gemini Generate Content',
   [API_FORMATS.GEMINI_INTERACTIONS]: 'Gemini Interactions',
-  [API_FORMATS.GEMINI_VIDEO]: 'Gemini Video',
   [API_FORMATS.GEMINI_EMBEDDING]: 'Gemini Embedding',
   [API_FORMATS.JINA_EMBEDDING]: 'Jina Embedding',
   [API_FORMATS.JINA_RERANK]: 'Jina Rerank',
@@ -50,13 +46,11 @@ export const API_FORMAT_LABELS: Record<string, string> = {
   OPENAI_RESPONSES_COMPACT: 'OpenAI Responses Compact',
   OPENAI_SEARCH: 'OpenAI Search',
   OPENAI_IMAGE: 'OpenAI Image',
-  OPENAI_VIDEO: 'OpenAI Video',
   OPENAI_EMBEDDING: 'OpenAI Embedding',
   OPENAI_RERANK: 'OpenAI Rerank',
   GEMINI: 'Gemini Generate Content',
   GEMINI_GENERATE_CONTENT: 'Gemini Generate Content',
   GEMINI_INTERACTIONS: 'Gemini Interactions',
-  GEMINI_VIDEO: 'Gemini Video',
   GEMINI_EMBEDDING: 'Gemini Embedding',
   JINA_EMBEDDING: 'Jina Embedding',
   JINA_RERANK: 'Jina Rerank',
@@ -71,13 +65,11 @@ export const API_FORMAT_SHORT: Record<string, string> = {
   [API_FORMATS.OPENAI_RESPONSES_COMPACT]: 'ORC',
   [API_FORMATS.OPENAI_SEARCH]: 'OS',
   [API_FORMATS.OPENAI_IMAGE]: 'OI',
-  [API_FORMATS.OPENAI_VIDEO]: 'OV',
   [API_FORMATS.OPENAI_EMBEDDING]: 'OE',
   [API_FORMATS.OPENAI_RERANK]: 'ORR',
   [API_FORMATS.CLAUDE_MESSAGES]: 'CM',
   [API_FORMATS.GEMINI_GENERATE_CONTENT]: 'G',
   [API_FORMATS.GEMINI_INTERACTIONS]: 'GI',
-  [API_FORMATS.GEMINI_VIDEO]: 'GV',
   [API_FORMATS.GEMINI_EMBEDDING]: 'GE',
   [API_FORMATS.JINA_EMBEDDING]: 'JE',
   [API_FORMATS.JINA_RERANK]: 'JR',
@@ -88,7 +80,6 @@ export const API_FORMAT_SHORT: Record<string, string> = {
   OPENAI_RESPONSES_COMPACT: 'ORC',
   OPENAI_SEARCH: 'OS',
   OPENAI_IMAGE: 'OI',
-  OPENAI_VIDEO: 'OV',
   OPENAI_EMBEDDING: 'OE',
   OPENAI_RERANK: 'ORR',
   CLAUDE: 'CM',
@@ -96,7 +87,6 @@ export const API_FORMAT_SHORT: Record<string, string> = {
   GEMINI: 'G',
   GEMINI_GENERATE_CONTENT: 'G',
   GEMINI_INTERACTIONS: 'GI',
-  GEMINI_VIDEO: 'GV',
   GEMINI_EMBEDDING: 'GE',
   JINA_EMBEDDING: 'JE',
   JINA_RERANK: 'JR',
@@ -113,12 +103,10 @@ export const API_FORMAT_ORDER: string[] = [
   API_FORMATS.OPENAI_EMBEDDING,
   API_FORMATS.OPENAI_RERANK,
   API_FORMATS.OPENAI_IMAGE,
-  API_FORMATS.OPENAI_VIDEO,
   API_FORMATS.CLAUDE_MESSAGES,
   API_FORMATS.GEMINI_GENERATE_CONTENT,
   API_FORMATS.GEMINI_INTERACTIONS,
   API_FORMATS.GEMINI_EMBEDDING,
-  API_FORMATS.GEMINI_VIDEO,
   API_FORMATS.JINA_EMBEDDING,
   API_FORMATS.JINA_RERANK,
   API_FORMATS.DOUBAO_EMBEDDING,
@@ -145,7 +133,6 @@ export const API_FORMAT_KIND_LABELS: Record<string, string> = {
   generate_content: 'Generate Content',
   interactions: 'Interactions',
   image: 'Image',
-  video: 'Video',
   embedding: 'Embedding',
   rerank: 'Rerank',
 }
@@ -179,8 +166,6 @@ export function normalizeApiFormatAlias(format: string | null | undefined): stri
       return API_FORMATS.OPENAI_SEARCH
     case 'OPENAI_IMAGE':
       return API_FORMATS.OPENAI_IMAGE
-    case 'OPENAI_VIDEO':
-      return API_FORMATS.OPENAI_VIDEO
     case 'OPENAI_EMBEDDING':
       return API_FORMATS.OPENAI_EMBEDDING
     case 'OPENAI_RERANK':
@@ -190,8 +175,6 @@ export function normalizeApiFormatAlias(format: string | null | undefined): stri
       return API_FORMATS.GEMINI_GENERATE_CONTENT
     case 'GEMINI_INTERACTIONS':
       return API_FORMATS.GEMINI_INTERACTIONS
-    case 'GEMINI_VIDEO':
-      return API_FORMATS.GEMINI_VIDEO
     case 'GEMINI_EMBEDDING':
       return API_FORMATS.GEMINI_EMBEDDING
     case 'JINA_EMBEDDING':

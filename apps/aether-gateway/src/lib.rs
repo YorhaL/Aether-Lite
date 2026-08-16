@@ -30,7 +30,6 @@ mod ai_serving;
 mod allocator_metrics;
 mod api;
 mod app_timezone;
-mod async_task;
 mod audit;
 mod auth;
 mod backup;
@@ -79,12 +78,11 @@ pub mod testkit;
 mod tokio_metrics;
 mod upstream_admission;
 mod usage;
-mod video_tasks;
 mod wallet_runtime;
 
 pub(crate) use self::ai_serving::api::{
     AiControlPlanRequest, EXECUTION_RUNTIME_STREAM_DECISION_ACTION,
-    EXECUTION_RUNTIME_SYNC_DECISION_ACTION, OPENAI_VIDEO_CONTENT_PLAN_KIND,
+    EXECUTION_RUNTIME_SYNC_DECISION_ACTION,
 };
 pub(crate) use self::ai_serving::{
     AiExecutionDecision, AiExecutionPlanPayload, AiStreamAttempt, AiSyncAttempt,

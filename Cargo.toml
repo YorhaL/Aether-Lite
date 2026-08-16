@@ -34,7 +34,6 @@ members = [
     "crates/aether-usage/core",
     "crates/aether-testing/support",
     "crates/aether-usage/runtime",
-    "crates/aether-video-tasks-core",
     "apps/aether-gateway",
     "crates/aether-http",
     "crates/aether-runtime/base",
@@ -85,7 +84,6 @@ aether-integration-tests = { path = "crates/aether-testing/integration" }
 aether-test-support = { path = "crates/aether-testing/support" }
 aether-usage-core = { path = "crates/aether-usage/core" }
 aether-usage-runtime = { path = "crates/aether-usage/runtime" }
-aether-video-tasks-core = { path = "crates/aether-video-tasks-core" }
 aether-gateway = { path = "apps/aether-gateway" }
 aether-http = { path = "crates/aether-http" }
 aether-runtime = { path = "crates/aether-runtime/base" }

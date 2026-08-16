@@ -30,14 +30,6 @@ impl AppState {
         self.data.has_background_task_writer()
     }
 
-    pub fn has_video_task_data_reader(&self) -> bool {
-        self.data.has_video_task_reader()
-    }
-
-    pub fn has_video_task_data_writer(&self) -> bool {
-        self.data.has_video_task_writer()
-    }
-
     pub fn has_request_candidate_data_reader(&self) -> bool {
         self.data.has_request_candidate_reader()
     }

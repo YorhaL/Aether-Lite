@@ -306,7 +306,7 @@ fn infer_ai_upstream_base_path(path: &str) -> &str {
         }
     }
 
-    for marker in ["/v1/videos", "/v1beta/"] {
+    for marker in ["/v1beta/"] {
         if let Some((prefix, _)) = trimmed.split_once(marker) {
             return normalize_inferred_ai_base_path(prefix);
         }
@@ -605,15 +605,6 @@ mod tests {
             )
             .as_deref(),
             Some("https://api.openai.example/custom/v1")
-        );
-    }
-
-    #[test]
-    fn infer_ai_upstream_base_url_strips_video_operation_path() {
-        assert_eq!(
-            infer_ai_upstream_base_url("https://video.example/nested/v1/videos/task-123/content")
-                .as_deref(),
-            Some("https://video.example/nested")
         );
     }
 

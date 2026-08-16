@@ -31,20 +31,6 @@ use crate::scheduler::state::SchedulerRuntimeState;
 use crate::{execution_runtime, provider_transport};
 
 #[async_trait]
-impl provider_transport::VideoTaskTransportSnapshotLookup for AppState {
-    async fn read_video_task_provider_transport_snapshot(
-        &self,
-        provider_id: &str,
-        endpoint_id: &str,
-        key_id: &str,
-    ) -> Result<Option<GatewayProviderTransportSnapshot>, String> {
-        self.read_provider_transport_snapshot(provider_id, endpoint_id, key_id)
-            .await
-            .map_err(GatewayError::into_message)
-    }
-}
-
-#[async_trait]
 impl ModelFetchTransportRuntime for AppState {
     async fn execute_model_fetch_execution_plan(
         &self,

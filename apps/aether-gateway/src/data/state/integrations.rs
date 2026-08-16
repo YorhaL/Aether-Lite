@@ -15,13 +15,11 @@ use aether_data_contracts::repository::settlement::{StoredUsageSettlement, Usage
 use aether_data_contracts::repository::usage::{
     StoredRequestUsageAudit, UpsertUsageRecord, UsageWriteRepository,
 };
-use aether_data_contracts::repository::video_tasks::{StoredVideoTask, VideoTaskLookupKey};
 use aether_runtime_state::RuntimeQueueStore;
 use aether_usage_runtime::{
     UsageBillingEventEnricher, UsageBodyCapturePolicy, UsageEvent, UsageRecordWriter,
     UsageRequestRecordLevel, UsageRuntimeAccess, UsageSettlementWriter,
 };
-use aether_video_tasks_core::StoredVideoTaskReadSide;
 use async_trait::async_trait;
 use serde_json::Value;
 use tracing::warn;
@@ -85,16 +83,6 @@ impl ResolvedAuthApiKeySnapshotReader for GatewayDataState {
         key: AuthApiKeyLookupKey<'_>,
     ) -> Result<Option<StoredAuthApiKeySnapshot>, DataLayerError> {
         GatewayDataState::find_auth_api_key_snapshot(self, key).await
-    }
-}
-
-#[async_trait]
-impl StoredVideoTaskReadSide for GatewayDataState {
-    async fn find_stored_video_task(
-        &self,
-        key: VideoTaskLookupKey<'_>,
-    ) -> Result<Option<StoredVideoTask>, DataLayerError> {
-        GatewayDataState::find_video_task(self, key).await
     }
 }
 

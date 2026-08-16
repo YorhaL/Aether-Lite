@@ -5,4 +5,3 @@ pub mod passthrough;
 pub mod request;
 pub mod routing;
 pub mod stream_core;
-pub mod video;

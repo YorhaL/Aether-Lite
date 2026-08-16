@@ -133,11 +133,6 @@ const PERMISSION_GROUPS: &[PermissionGroup] = &[
         assignable: true,
     },
     PermissionGroup {
-        scope: "video_tasks",
-        label: "视频任务",
-        assignable: true,
-    },
-    PermissionGroup {
         scope: "wallets",
         label: "钱包",
         assignable: true,
@@ -408,9 +403,6 @@ fn permission_key(scope: &str, access: &str) -> &'static str {
         ("users", "read") => "admin:users:read",
         ("users", "write") => "admin:users:write",
         ("users", "admin") => "admin:users:admin",
-        ("video_tasks", "read") => "admin:video_tasks:read",
-        ("video_tasks", "write") => "admin:video_tasks:write",
-        ("video_tasks", "admin") => "admin:video_tasks:admin",
         ("wallets", "read") => "admin:wallets:read",
         ("wallets", "write") => "admin:wallets:write",
         ("wallets", "admin") => "admin:wallets:admin",
@@ -467,7 +459,6 @@ mod tests {
             "tasks",
             "usage",
             "users",
-            "video_tasks",
             "wallets",
         ];
 

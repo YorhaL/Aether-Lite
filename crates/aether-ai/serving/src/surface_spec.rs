@@ -1,7 +1,6 @@
 use aether_ai_formats::api::{
     LocalOpenAiImageSpec, LocalOpenAiResponsesSpec, LocalSameFormatProviderFamily,
     LocalSameFormatProviderSpec, LocalStandardSourceFamily, LocalStandardSpec,
-    LocalVideoCreateFamily, LocalVideoCreateSpec,
 };
 use serde_json::Value;
 
@@ -77,33 +76,12 @@ pub const fn ai_openai_image_spec_metadata(
     }
 }
 
-pub const fn ai_video_create_spec_metadata(
-    spec: LocalVideoCreateSpec,
-) -> AiExecutionSurfaceSpecMetadata {
-    AiExecutionSurfaceSpecMetadata {
-        api_format: spec.api_format,
-        decision_kind: spec.decision_kind,
-        report_kind: Some(spec.report_kind),
-        require_streaming: false,
-        requested_model_family: Some(ai_requested_model_family_for_video_create(spec.family)),
-    }
-}
-
 pub const fn ai_requested_model_family_for_same_format_provider(
     family: LocalSameFormatProviderFamily,
 ) -> AiRequestedModelFamily {
     match family {
         LocalSameFormatProviderFamily::Standard => AiRequestedModelFamily::Standard,
         LocalSameFormatProviderFamily::Gemini => AiRequestedModelFamily::Gemini,
-    }
-}
-
-pub const fn ai_requested_model_family_for_video_create(
-    family: LocalVideoCreateFamily,
-) -> AiRequestedModelFamily {
-    match family {
-        LocalVideoCreateFamily::OpenAi => AiRequestedModelFamily::Standard,
-        LocalVideoCreateFamily::Gemini => AiRequestedModelFamily::Gemini,
     }
 }
 
@@ -173,22 +151,6 @@ mod tests {
         assert_eq!(
             metadata.requested_model_family,
             Some(AiRequestedModelFamily::Standard)
-        );
-    }
-
-    #[test]
-    fn video_spec_metadata_maps_gemini_family_without_stream_requirement() {
-        let metadata = ai_video_create_spec_metadata(LocalVideoCreateSpec {
-            family: LocalVideoCreateFamily::Gemini,
-            api_format: "gemini:video",
-            decision_kind: "gemini_video_create",
-            report_kind: "gemini_video_create_success",
-        });
-
-        assert!(!metadata.require_streaming);
-        assert_eq!(
-            metadata.requested_model_family,
-            Some(AiRequestedModelFamily::Gemini)
         );
     }
 

@@ -1385,7 +1385,6 @@ async fn gateway_handles_admin_system_api_formats_locally_with_trusted_admin_pri
     assert!(formats.iter().any(|item| item["value"] == "openai:rerank"));
     assert!(formats.iter().any(|item| item["value"] == "jina:embedding"));
     assert!(formats.iter().any(|item| item["value"] == "jina:rerank"));
-    assert!(formats.iter().any(|item| item["value"] == "gemini:video"));
     let gemini_interactions = formats
         .iter()
         .find(|item| item["value"] == "gemini:interactions")

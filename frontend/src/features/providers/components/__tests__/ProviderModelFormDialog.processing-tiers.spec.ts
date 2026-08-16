@@ -36,13 +36,7 @@ const editingModel = {
   price_per_request: null,
   effective_price_per_request: 0.25,
   config: null,
-  effective_config: {
-    billing: {
-      video: {
-        price_per_second_by_resolution: { '720p': 0.1 },
-      },
-    },
-  },
+  effective_config: {},
   effective_tiered_pricing: {
     tiers: [{ up_to: null, input_price_per_1m: 5, output_price_per_1m: 30 }],
     processing_tiers: {
@@ -115,7 +109,7 @@ describe('ProviderModelFormDialog processing-tier pricing', () => {
     await settle()
 
     expect(document.body.textContent).toContain('选择计费模式')
-    for (const tab of ['Token', '按次', '图片', '视频']) {
+    for (const tab of ['Token', '按次', '图片']) {
       expect(findButton(tab)).toBeDefined()
     }
     findButton('Token').click()

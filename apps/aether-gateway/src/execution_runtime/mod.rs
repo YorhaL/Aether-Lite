@@ -107,10 +107,6 @@ pub(crate) use stream::{
 pub(crate) use stream_pump::build_direct_execution_frame_stream;
 pub(crate) use sync::{
     execute_execution_runtime_sync, execute_execution_runtime_sync_with_retry_scope,
-    maybe_build_local_sync_finalize_response, maybe_build_local_video_error_response,
-    maybe_build_local_video_success_outcome, resolve_local_sync_error_background_report_kind,
-    resolve_local_sync_success_background_report_kind, LocalVideoSyncSuccessBuild,
-    LocalVideoSyncSuccessOutcome,
 };
 pub(crate) use transport::execute_sync_plan_with_report_context as execute_execution_runtime_sync_plan_with_report_context;
 pub(crate) use transport::{

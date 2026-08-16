@@ -4,4 +4,3 @@ pub mod prompt_cache;
 pub mod responses;
 pub mod search;
 pub mod shared;
-pub mod video;

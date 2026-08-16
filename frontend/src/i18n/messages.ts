@@ -1663,7 +1663,6 @@ const legacyExactEnglishMessages: Record<string, string> = {
   '手动添加模型 或 选择模型后自动填写。': 'Add a model manually or auto-fill after selecting one.',
   '模型偏好：标定这个模型是否支持这些能力，一般情况下可不选。': 'Model preferences: mark whether this model supports these capabilities. Usually optional.',
   '价格配置：': 'Pricing configuration:',
-  '计费方式：Token价格 + 按次价格 + 视频计费 = 最终计费': 'Billing method: token price + per-request price + video billing = final billing',
   '价格阶梯：以总Token数落在哪个区间为准，并非按阶梯溢出补全式计费': 'Price tiers use the total token range, not tiered overflow pricing.',
   '答疑解惑': 'Questions and troubleshooting',
   '在使用 Aether Lite 过程中遇到的常见问题与排错指南。': 'Common questions and troubleshooting guidance for using Aether Lite.',

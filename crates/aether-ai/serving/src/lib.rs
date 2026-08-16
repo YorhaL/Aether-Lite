@@ -104,9 +104,8 @@ pub use runtime_miss::{
 pub use surface_spec::{
     ai_openai_image_spec_metadata, ai_openai_responses_spec_metadata,
     ai_requested_model_family_for_same_format_provider,
-    ai_requested_model_family_for_standard_source, ai_requested_model_family_for_video_create,
-    ai_same_format_provider_spec_metadata, ai_standard_spec_metadata,
-    ai_video_create_spec_metadata, extract_ai_gemini_model_from_path,
+    ai_requested_model_family_for_standard_source, ai_same_format_provider_spec_metadata,
+    ai_standard_spec_metadata, extract_ai_gemini_model_from_path,
     extract_ai_requested_model_from_request_path, extract_ai_standard_requested_model,
     AiExecutionSurfaceSpecMetadata, AiRequestedModelFamily,
 };

@@ -16,7 +16,6 @@ mod shared;
 
 pub(crate) use self::auth::maybe_build_local_admin_security_response;
 pub(crate) use self::endpoint::build_admin_endpoint_health_status_payload;
-pub(crate) use self::features::maybe_build_local_admin_video_tasks_response;
 #[cfg(test)]
 pub(crate) use self::model::set_admin_external_models_source_url_for_tests;
 pub(crate) use self::observability::{

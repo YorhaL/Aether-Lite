@@ -22,7 +22,6 @@ mod tx;
 mod types;
 mod usage;
 mod users;
-mod video_tasks;
 mod wallet;
 
 pub use admission::PostgresAdmissionPolicyRepository;
@@ -57,5 +56,4 @@ pub use tx::{
 pub use types::DatabaseRecordId;
 pub use usage::{cleanup, SqlxUsageReadRepository};
 pub use users::SqlxUserReadRepository;
-pub use video_tasks::{SqlxVideoTaskReadRepository, SqlxVideoTaskRepository};
 pub use wallet::SqlxWalletRepository;

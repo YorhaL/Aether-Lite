@@ -6,9 +6,6 @@ use aether_contracts::{ExecutionPlan, ExecutionResult};
 use aether_data_contracts::repository::candidates::RequestCandidateReadRepository;
 use aether_data_contracts::repository::provider_catalog::ProviderCatalogReadRepository;
 use aether_data_contracts::repository::usage::{UsageReadRepository, UsageRepository};
-use aether_data_contracts::repository::video_tasks::{
-    VideoTaskReadRepository, VideoTaskRepository,
-};
 use serde_json::json;
 
 use super::{AppState, FrontdoorRuntimeGuardConfig, GatewayDataState};
@@ -42,45 +39,6 @@ impl AppState {
         config: FrontdoorRuntimeGuardConfig,
     ) -> Self {
         self.frontdoor_runtime_guards = Arc::new(config);
-        self
-    }
-
-    pub(crate) fn with_video_task_data_reader_for_tests(
-        mut self,
-        repository: Arc<dyn VideoTaskReadRepository>,
-    ) -> Self {
-        self.replace_data_state(Arc::new(
-            GatewayDataState::with_video_task_reader_for_tests(repository),
-        ));
-        self
-    }
-
-    pub(crate) fn with_video_task_data_repository_for_tests<T>(mut self, repository: Arc<T>) -> Self
-    where
-        T: VideoTaskRepository + 'static,
-    {
-        self.replace_data_state(Arc::new(
-            GatewayDataState::with_video_task_repository_for_tests(repository),
-        ));
-        self
-    }
-
-    pub(crate) fn with_video_task_repository_and_provider_transport_for_tests<T>(
-        mut self,
-        repository: Arc<T>,
-        provider_catalog_repository: Arc<dyn ProviderCatalogReadRepository>,
-        encryption_key: impl Into<String>,
-    ) -> Self
-    where
-        T: VideoTaskRepository + 'static,
-    {
-        self.replace_data_state(Arc::new(
-            GatewayDataState::with_video_task_repository_and_provider_transport_for_tests(
-                repository,
-                provider_catalog_repository,
-                encryption_key,
-            ),
-        ));
         self
     }
 

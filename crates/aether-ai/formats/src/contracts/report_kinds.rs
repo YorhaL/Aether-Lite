@@ -16,8 +16,6 @@ pub const OPENAI_EMBEDDING_SYNC_FINALIZE_REPORT_KIND: &str = "openai_embedding_s
 pub const OPENAI_IMAGE_SYNC_FINALIZE_REPORT_KIND: &str = "openai_image_sync_finalize";
 pub const CLAUDE_CLI_SYNC_FINALIZE_REPORT_KIND: &str = "claude_cli_sync_finalize";
 pub const GEMINI_CLI_SYNC_FINALIZE_REPORT_KIND: &str = "gemini_cli_sync_finalize";
-pub const OPENAI_VIDEO_CREATE_SYNC_FINALIZE_REPORT_KIND: &str = "openai_video_create_sync_finalize";
-pub const GEMINI_VIDEO_CREATE_SYNC_FINALIZE_REPORT_KIND: &str = "gemini_video_create_sync_finalize";
 const LEGACY_OPENAI_CLI_SYNC_FINALIZE_REPORT_KIND: &str = "openai_cli_sync_finalize";
 const LEGACY_OPENAI_COMPACT_SYNC_FINALIZE_REPORT_KIND: &str = "openai_compact_sync_finalize";
 

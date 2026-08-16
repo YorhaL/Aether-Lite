@@ -44,7 +44,7 @@ import { BookOpen } from 'lucide-vue-next'
             <li>
               价格配置：
               <ul class="list-[circle] pl-5 mt-1 space-y-1">
-                <li>计费方式：Token价格 + 按次价格 + 视频计费 = 最终计费</li>
+                <li>计费方式：Token 价格 + 按次价格 + 图片计费 = 最终计费</li>
                 <li>价格阶梯：以总Token数落在哪个区间为准，并非按阶梯溢出补全式计费</li>
               </ul>
             </li>

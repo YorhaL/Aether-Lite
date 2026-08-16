@@ -85,7 +85,7 @@ Embedding routes can select only embedding provider API formats. Chat, responses
 | `jina:embedding` | `/v1/embeddings` | OpenAI compatible payload with a Jina `task`. Defaults to `text-matching` if omitted. |
 | `gemini:embedding` | `models/{model}:embedContent` | Single text input uses `content.parts[].text`. Multiple text inputs use `requests[].content.parts[].text`. |
 | `doubao:embedding` | `/embeddings/multimodal` | Text input is emitted as `input` items like `{ "type": "text", "text": "..." }`. |
-| `aliyun:multimodal_embedding` | `/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding` | Text and multimodal inputs are emitted as DashScope `input.contents`. Supports `text`, `image`, `video`, `multi_images`, `parameters.enable_fusion`, `parameters.res_level`, and `parameters.max_video_frames`. Alias: `dashscope:multimodal_embedding`. |
+| `aliyun:multimodal_embedding` | `/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding` | Text and image inputs are emitted as DashScope `input.contents`. Supports `text`, `image`, `multi_images`, `parameters.enable_fusion`, and `parameters.res_level`. Alias: `dashscope:multimodal_embedding`. |
 
 Custom provider endpoint paths are available when the endpoint is configured for an embedding API format. Gemini custom paths can use `{model}` and `{action}`. For `gemini:embedding`, `{action}` expands to `embedContent`.
 
@@ -130,21 +130,6 @@ curl -sS "http://localhost:8084/v1/embeddings" \
       { "image": "https://dashscope.oss-cn-beijing.aliyuncs.com/images/256_1.png" }
     ],
     "parameters": { "enable_fusion": true }
-  }'
-```
-
-Video request:
-
-```bash
-curl -sS "http://localhost:8084/v1/embeddings" \
-  -H "Authorization: Bearer sk-your-aether-key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "qwen3-vl-embedding",
-    "input": [
-      { "video": "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250107/lbcemt/new+video.mp4" }
-    ],
-    "parameters": { "max_video_frames": 64 }
   }'
 ```
 

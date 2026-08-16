@@ -6,6 +6,5 @@ pub enum ProviderCapability {
     Responses,
     Embeddings,
     Images,
-    Video,
     Files,
 }

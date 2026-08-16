@@ -16,7 +16,6 @@ mod runtime;
 mod testing;
 mod transport_snapshots;
 mod types;
-mod video;
 
 pub(crate) use self::admin_types::AdminSecurityBlacklistEntry;
 pub use self::app::AppState;

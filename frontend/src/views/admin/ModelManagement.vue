@@ -139,17 +139,9 @@
                       <span class="text-muted-foreground">按次:</span>
                       <span class="font-mono ml-1">${{ model.default_price_per_request.toFixed(3) }}/次</span>
                     </div>
-                    <!-- 视频费用计费 -->
-                    <div v-if="hasVideoPricing(model)">
-                      <span class="text-muted-foreground">视频:</span>
-                      <span
-                        class="font-mono ml-1"
-                        :title="getVideoPricingTooltip(model)"
-                      >{{ getVideoPricingDisplay(model) }}</span>
-                    </div>
                     <!-- 无计费配置 -->
                     <div
-                      v-if="!getFirstTierPrice(model, 'input') && !getFirstTierPrice(model, 'output') && !model.default_price_per_request && !hasVideoPricing(model)"
+                      v-if="!getFirstTierPrice(model, 'input') && !getFirstTierPrice(model, 'output') && !model.default_price_per_request"
                       class="text-muted-foreground"
                     >
                       -
@@ -698,7 +690,6 @@ import { useConfirm } from '@/composables/useConfirm'
 import { useClipboard } from '@/composables/useClipboard'
 import { useRowClick } from '@/composables/useRowClick'
 import { parseApiError } from '@/utils/errorParser'
-import { sortResolutionEntries } from '@/utils/form'
 import {
   Button,
   Card,
@@ -863,43 +854,6 @@ function getFirstTierPrice(model: GlobalModelResponse, type: 'input' | 'output')
 function hasTieredPricing(model: GlobalModelResponse): boolean {
   const tiered = model.default_tiered_pricing
   return (tiered?.tiers?.length || 0) > 1
-}
-
-// 检测是否有视频分辨率计费配置
-function hasVideoPricing(model: GlobalModelResponse): boolean {
-  const priceByResolution = model.config?.billing?.video?.price_per_second_by_resolution
-  return priceByResolution && typeof priceByResolution === 'object' && Object.keys(priceByResolution).length > 0
-}
-
-// 获取视频分辨率计费的数量
-function _getVideoPricingCount(model: GlobalModelResponse): number {
-  const priceByResolution = model.config?.billing?.video?.price_per_second_by_resolution
-  if (!priceByResolution || typeof priceByResolution !== 'object') return 0
-  return Object.keys(priceByResolution).length
-}
-
-// 获取视频计费的显示文本（如：720p $0.1/s [多分辨率]）
-function getVideoPricingDisplay(model: GlobalModelResponse): string {
-  const priceByResolution = model.config?.billing?.video?.price_per_second_by_resolution
-  if (!priceByResolution || typeof priceByResolution !== 'object') return ''
-  const entries = sortResolutionEntries(Object.entries(priceByResolution))
-  if (entries.length === 0) return ''
-  // 获取最低分辨率和价格
-  const [firstRes, firstPrice] = entries[0]
-  const priceStr = `${firstRes} $${(firstPrice as number).toFixed(2)}/s`
-  // 如果有多个分辨率，添加标记
-  if (entries.length > 1) {
-    return `${priceStr} [${entries.length}种]`
-  }
-  return priceStr
-}
-
-// 获取视频计费详情的 tooltip
-function getVideoPricingTooltip(model: GlobalModelResponse): string {
-  const priceByResolution = model.config?.billing?.video?.price_per_second_by_resolution
-  if (!priceByResolution || typeof priceByResolution !== 'object') return ''
-  const entries = sortResolutionEntries(Object.entries(priceByResolution))
-  return entries.map(([res, price]) => `${res}: $${(price as number).toFixed(4)}/s`).join('\n')
 }
 
 // 检测是否有对话框打开（防止误关闭抽屉）

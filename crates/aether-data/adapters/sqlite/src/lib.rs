@@ -19,7 +19,6 @@ mod routing_profiles;
 mod settlement;
 mod usage;
 mod users;
-mod video_tasks;
 mod wallet;
 
 pub use admission::SqliteAdmissionPolicyRepository;
@@ -41,7 +40,6 @@ pub use routing_profiles::SqliteRoutingGroupRepository;
 pub use settlement::SqliteSettlementRepository;
 pub use usage::{SqliteUsageReadRepository, SqliteUsageWriteRepository};
 pub use users::SqliteUserReadRepository;
-pub use video_tasks::SqliteVideoTaskRepository;
 pub use wallet::SqliteWalletReadRepository;
 
 use sqlx::{sqlite::SqliteRow, Row};

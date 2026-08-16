@@ -14,7 +14,7 @@ export type AsyncTaskStatus =
   | 'completed'
 
 export type AsyncTaskKind = 'scheduled' | 'daemon' | 'on_demand' | 'fire_and_forget'
-export type AsyncTaskType = AsyncTaskKind | 'video'
+export type AsyncTaskType = AsyncTaskKind
 
 export interface AsyncTaskDefinition {
   task_key: string
@@ -50,9 +50,6 @@ export interface AsyncTaskItem {
   provider_id?: string
   provider_name?: string
   duration_seconds?: number
-  resolution?: string
-  aspect_ratio?: string
-  video_url?: string | null
   error_code?: string | null
   poll_count?: number
   max_poll_count?: number
@@ -105,14 +102,6 @@ export interface AsyncTaskDetail extends AsyncTaskItem {
   client_api_format?: string
   provider_api_format?: string
   original_request_body?: unknown
-  size?: string | null
-  video_urls?: string[] | null
-  thumbnail_url?: string | null
-  video_size_bytes?: number | null
-  video_duration_seconds?: number | null
-  video_expires_at?: string | null
-  stored_video_path?: string | null
-  storage_provider?: string | null
   retry_count?: number
   max_retries?: number
   poll_interval_seconds?: number
@@ -170,7 +159,7 @@ export const asyncTasksApi = {
     const searchParams = new URLSearchParams()
     if (params.status) searchParams.append('status', normalizeStatus(params.status))
     if (params.kind) searchParams.append('kind', params.kind)
-    if (params.task_type && params.task_type !== 'video') searchParams.append('kind', params.task_type)
+    if (params.task_type) searchParams.append('kind', params.task_type)
     if (params.task_key) searchParams.append('task_key', params.task_key)
     if (params.trigger) searchParams.append('trigger', params.trigger)
     if (params.page) searchParams.append('page', params.page.toString())

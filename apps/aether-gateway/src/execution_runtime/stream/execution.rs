@@ -112,7 +112,7 @@ use crate::stage_metrics::{
 };
 use crate::usage::submit_stream_report;
 use crate::usage::{GatewayStreamReportRequest, GatewaySyncReportRequest};
-use crate::{AppState, GatewayError, OPENAI_VIDEO_CONTENT_PLAN_KIND};
+use crate::{AppState, GatewayError};
 use aether_gateway_frontdoor::short_request_id;
 
 const OPENAI_IMAGE_STREAM_PLAN_KIND: &str = "openai_image_stream";
@@ -431,31 +431,6 @@ fn build_stream_body_capture(
         UsageBodyCaptureState::Inline
     });
     (body_base64, body_state)
-}
-
-fn wrap_non_json_binary_stream_error_for_client(
-    plan_kind: &str,
-    headers: &BTreeMap<String, String>,
-    error_body: &[u8],
-) -> Result<Option<Value>, GatewayError> {
-    let content_type = headers
-        .get("content-type")
-        .map(|value| value.to_ascii_lowercase())
-        .unwrap_or_default();
-    if content_type.starts_with("application/json") {
-        return Ok(None);
-    }
-
-    let body = match plan_kind {
-        OPENAI_VIDEO_CONTENT_PLAN_KIND => json!({
-            "error": {
-                "type": "upstream_error",
-                "message": "Video not available",
-            }
-        }),
-        _ => return Ok(None),
-    };
-    Ok(Some(body))
 }
 
 fn with_stream_error_trace_context(

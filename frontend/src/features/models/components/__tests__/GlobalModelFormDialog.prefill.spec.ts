@@ -271,11 +271,6 @@ describe('GlobalModelFormDialog preset replacement', () => {
       document.body.querySelector<HTMLInputElement>('[data-testid="tier-input-price"]'),
       '99',
     )
-    findExactButton('视频').click()
-    await nextTick()
-    findExactButton('Sora').click()
-    await nextTick()
-
     findButton('返回选择模型').click()
     await settle()
     findButton('Fresh Model').click()
@@ -440,19 +435,12 @@ describe('GlobalModelFormDialog preset replacement', () => {
     expect(globalModelMocks.updateGlobalModel).not.toHaveBeenCalled()
   })
 
-  it('opens model editing on Token while preserving alternate billing data', async () => {
+  it('opens model editing on Token while preserving per-request billing data', async () => {
     const existingModel = {
       ...buildExistingStaleModel(),
       default_price_per_request: 0.25,
       supported_capabilities: ['image_generation'],
-      config: {
-        streaming: true,
-        billing: {
-          video: {
-            price_per_second_by_resolution: { '720p': 0.1 },
-          },
-        },
-      },
+      config: { streaming: true },
     }
     globalModelMocks.listGlobalModels.mockResolvedValue({
       models: [existingModel],
@@ -467,8 +455,6 @@ describe('GlobalModelFormDialog preset replacement', () => {
     expect(findBillingTab('token').dataset.state).toBe('active')
     expect(findBillingTab('request').dataset.state).toBe('inactive')
     expect(findBillingTab('image').dataset.state).toBe('inactive')
-    expect(findBillingTab('video').dataset.state).toBe('inactive')
-
     findBillingTab('request').click()
     await nextTick()
     expect(document.body.querySelector<HTMLInputElement>('input[placeholder="如 0.01"]')?.value)

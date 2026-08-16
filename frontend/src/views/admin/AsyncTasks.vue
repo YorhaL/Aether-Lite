@@ -209,10 +209,6 @@
             <TableCell>
               <div class="space-y-1">
                 <div class="flex items-center gap-2">
-                  <Video
-                    v-if="isVideoTask(task)"
-                    class="w-4 h-4 text-muted-foreground shrink-0"
-                  />
                   <span class="font-medium text-sm truncate">{{ displayTaskName(task) }}</span>
                 </div>
                 <p
@@ -274,12 +270,6 @@
                   <Timer class="w-3 h-3" />
                   <span>{{ task.duration_seconds ? `${task.duration_seconds}s` : `${task.attempt}/${task.max_attempts ?? 1}` }}</span>
                 </div>
-                <div v-if="task.resolution">
-                  {{ task.resolution }}
-                </div>
-                <div v-if="task.aspect_ratio">
-                  {{ task.aspect_ratio }}
-                </div>
               </div>
             </TableCell>
             <!-- 时间 -->
@@ -310,16 +300,6 @@
                 >
                   <Eye class="w-4 h-4" />
                 </Button>
-                <Button
-                  v-if="isVideoTask(task)"
-                  variant="ghost"
-                  size="icon"
-                  class="h-7 w-7"
-                  title="使用记录"
-                  @click.stop="openUsageRecord(task)"
-                >
-                  <ExternalLink class="w-4 h-4" />
-                </Button>
               </div>
             </TableCell>
           </TableRow>
@@ -340,10 +320,6 @@
           <!-- 顶部：模型和状态 -->
           <div class="flex items-start justify-between gap-2">
             <div class="flex items-center gap-2 min-w-0 flex-1">
-              <Video
-                v-if="isVideoTask(task)"
-                class="w-4 h-4 text-muted-foreground shrink-0"
-              />
               <span class="font-medium text-sm truncate">{{ displayTaskName(task) }}</span>
             </div>
             <Badge
@@ -404,16 +380,6 @@
           <!-- 操作按钮 -->
           <div class="flex justify-end gap-2">
             <Button
-              v-if="isVideoTask(task)"
-              variant="outline"
-              size="sm"
-              class="h-7 text-xs"
-              @click.stop="openUsageRecord(task)"
-            >
-              <ExternalLink class="w-3.5 h-3.5 mr-1" />
-              使用记录
-            </Button>
-            <Button
               v-if="authStore.canOperateAdmin && canCancel(task.status)"
               variant="outline"
               size="sm"
@@ -463,10 +429,6 @@
                     任务详情
                   </h3>
                   <div class="flex items-center gap-1 text-sm font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">
-                    <Video
-                      v-if="isVideoTask(selectedTask)"
-                      class="w-3.5 h-3.5 mr-1"
-                    />
                     <span>{{ displayTaskName(selectedTask) }}</span>
                   </div>
                   <Badge :variant="getStatusVariant(selectedTask.status)">
@@ -559,105 +521,6 @@
                 </div>
               </div>
 
-              <!-- 视频结果（放在最前面） -->
-              <div
-                v-if="selectedTask.video_url || selectedTask.video_urls?.length"
-                class="space-y-3"
-              >
-                <!-- 主视频 -->
-                <div v-if="selectedTask.video_url">
-                  <div class="rounded-lg overflow-hidden border border-border/60 bg-black">
-                    <video
-                      :src="getVideoUrl(selectedTask.id, selectedTask.video_url)"
-                      controls
-                      preload="none"
-                      class="w-full max-h-[300px] object-contain"
-                    />
-                  </div>
-                  <!-- 视频信息 -->
-                  <div class="mt-2 space-y-2">
-                    <!-- 链接 -->
-                    <div class="flex items-center gap-1 p-1.5 bg-muted/50 rounded border border-border/40">
-                      <code
-                        class="flex-1 text-xs text-foreground truncate px-1"
-                        :title="selectedTask.video_url"
-                      >{{ selectedTask.video_url }}</code>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        class="h-6 px-2 text-xs shrink-0"
-                        @click="copyToClipboard(selectedTask.video_url)"
-                      >
-                        <Copy class="w-3 h-3" />
-                      </Button>
-                    </div>
-                    <!-- 元信息 -->
-                    <div
-                      v-if="selectedTask.video_size_bytes || selectedTask.video_expires_at"
-                      class="flex items-center gap-3 text-xs text-muted-foreground"
-                    >
-                      <span v-if="selectedTask.video_size_bytes">
-                        大小: {{ formatFileSize(selectedTask.video_size_bytes) }}
-                      </span>
-                      <span
-                        v-if="selectedTask.video_expires_at"
-                        class="text-amber-600 dark:text-amber-400"
-                      >
-                        过期: {{ formatDate(selectedTask.video_expires_at) }}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- 多个视频 -->
-                <div
-                  v-else-if="selectedTask.video_urls?.length"
-                  class="space-y-4"
-                >
-                  <div
-                    v-for="(url, index) in selectedTask.video_urls"
-                    :key="index"
-                  >
-                    <p class="text-xs text-muted-foreground font-medium mb-1.5">
-                      视频 {{ index + 1 }}
-                    </p>
-                    <div class="rounded-lg overflow-hidden border border-border/60 bg-black">
-                      <video
-                        :src="getVideoUrl(selectedTask.id, url)"
-                        controls
-                        preload="none"
-                        class="w-full max-h-[250px] object-contain"
-                      />
-                    </div>
-                    <div class="mt-1.5 flex items-center gap-1 p-1.5 bg-muted/50 rounded border border-border/40">
-                      <code
-                        class="flex-1 text-xs text-foreground truncate px-1"
-                        :title="url"
-                      >{{ url }}</code>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        class="h-6 px-2 text-xs shrink-0"
-                        @click="copyToClipboard(url)"
-                      >
-                        <Copy class="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 任务完成但无视频 -->
-              <div
-                v-else-if="isSucceededStatus(selectedTask.status) && isVideoTask(selectedTask)"
-                class="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800 text-center"
-              >
-                <Video class="w-8 h-8 mx-auto mb-2 text-amber-500" />
-                <p class="text-sm text-amber-600 dark:text-amber-400">
-                  视频链接不可用或已过期
-                </p>
-              </div>
-
               <!-- Prompt -->
               <div class="space-y-2">
                 <div class="flex items-center justify-between">
@@ -676,62 +539,6 @@
                 </div>
                 <div class="p-3 bg-muted/50 rounded-lg border border-border/60 text-sm whitespace-pre-wrap break-words max-h-32 overflow-y-auto leading-relaxed">
                   {{ displayTaskDescription(selectedTask) }}
-                </div>
-              </div>
-
-              <!-- 视频信息（网格布局） -->
-              <div
-                v-if="selectedTask.video_duration_seconds || selectedTask.resolution || selectedTask.aspect_ratio || selectedTask.size"
-                class="space-y-2"
-              >
-                <h4 class="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  视频信息
-                </h4>
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div
-                    v-if="selectedTask.video_duration_seconds"
-                    class="p-3 bg-muted/30 rounded-lg"
-                  >
-                    <p class="text-xs text-muted-foreground mb-0.5">
-                      视频时长
-                    </p>
-                    <p class="text-sm font-medium">
-                      {{ selectedTask.video_duration_seconds.toFixed(1) }}s
-                    </p>
-                  </div>
-                  <div
-                    v-if="selectedTask.resolution"
-                    class="p-3 bg-muted/30 rounded-lg"
-                  >
-                    <p class="text-xs text-muted-foreground mb-0.5">
-                      分辨率
-                    </p>
-                    <p class="text-sm font-medium">
-                      {{ selectedTask.resolution }}
-                    </p>
-                  </div>
-                  <div
-                    v-if="selectedTask.aspect_ratio"
-                    class="p-3 bg-muted/30 rounded-lg"
-                  >
-                    <p class="text-xs text-muted-foreground mb-0.5">
-                      宽高比
-                    </p>
-                    <p class="text-sm font-medium">
-                      {{ selectedTask.aspect_ratio }}
-                    </p>
-                  </div>
-                  <div
-                    v-if="selectedTask.size"
-                    class="p-3 bg-muted/30 rounded-lg"
-                  >
-                    <p class="text-xs text-muted-foreground mb-0.5">
-                      尺寸
-                    </p>
-                    <p class="text-sm font-medium">
-                      {{ selectedTask.size }}
-                    </p>
-                  </div>
                 </div>
               </div>
 
@@ -847,13 +654,6 @@
         </div>
       </Transition>
     </Teleport>
-
-    <!-- 使用记录详情抽屉 -->
-    <RequestDetailDrawer
-      :is-open="usageDetailOpen"
-      :request-id="usageRequestId"
-      @close="usageDetailOpen = false"
-    />
   </div>
 </template>
 
@@ -879,10 +679,8 @@ import TableRow from '@/components/ui/table-row.vue'
 import TableHead from '@/components/ui/table-head.vue'
 import TableCell from '@/components/ui/table-cell.vue'
 import Pagination from '@/components/ui/pagination.vue'
-import { RequestDetailDrawer } from '@/features/usage/components'
 import {
   Zap,
-  Video,
   Loader2,
   FileJson,
   CheckCircle,
@@ -896,7 +694,6 @@ import {
   X,
   AlertCircle,
   Eye,
-  ExternalLink,
   Copy,
 } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
@@ -924,9 +721,6 @@ let detailRefreshInterval: ReturnType<typeof setInterval> | null = null
 const isPageVisible = ref(typeof document === 'undefined' ? true : !document.hidden)
 let overviewRefreshInFlight = false
 
-// 使用记录详情抽屉状态
-const usageDetailOpen = ref(false)
-const usageRequestId = ref<string | null>(null)
 const runningCount = computed(() => {
   return stats.value?.running_count
     ?? stats.value?.processing_count
@@ -934,11 +728,6 @@ const runningCount = computed(() => {
     ?? stats.value?.by_status?.processing
     ?? 0
 })
-
-// 判断是否为视频任务
-function isVideoTask(task: AsyncTaskItem): boolean {
-  return task.task_type === 'video' || !!task.video_url || !!task.duration_seconds || task.task_key === 'video.task.poller'
-}
 
 function displayTaskName(task: AsyncTaskItem | AsyncTaskDetail): string {
   return task.model || task.task_key || task.id
@@ -964,10 +753,6 @@ function finishTime(task: AsyncTaskItem | AsyncTaskDetail): string | null {
 
 function isRunningStatus(status: string): boolean {
   return ['running', 'retrying', 'processing', 'submitted', 'pending', 'queued'].includes(status)
-}
-
-function isSucceededStatus(status: string): boolean {
-  return status === 'succeeded' || status === 'completed'
 }
 
 // 获取任务列表
@@ -1083,31 +868,6 @@ function closeDetail() {
   selectedTask.value = null
 }
 
-// 打开使用记录详情抽屉
-async function openUsageRecord(task: AsyncTaskItem) {
-  try {
-    // 获取任务详情以获得 request_id
-    const detail = await asyncTasksApi.getDetail(task.id)
-    const requestId = detail.request_metadata?.request_id
-    if (requestId) {
-      usageRequestId.value = requestId
-      usageDetailOpen.value = true
-    } else {
-      toast({
-        title: '无法打开使用记录',
-        description: '该任务没有关联的请求ID',
-        variant: 'destructive',
-      })
-    }
-  } catch (error: unknown) {
-    toast({
-      title: '获取任务信息失败',
-      description: error instanceof Error ? error.message : String(error),
-      variant: 'destructive',
-    })
-  }
-}
-
 // 取消任务
 async function cancelTask(task: AsyncTaskItem | AsyncTaskDetail) {
   if (!confirm(legacyT('确定要取消这个任务吗？'))) return
@@ -1200,33 +960,6 @@ function formatTimeWithMs(dateStr: string | null): string {
   const seconds = date.getSeconds().toString().padStart(2, '0')
   const ms = date.getMilliseconds().toString().padStart(3, '0')
   return `${hours}:${minutes}:${seconds}.${ms}`
-}
-
-// 格式化文件大小
-function formatFileSize(bytes: number | null): string {
-  if (!bytes) return '-'
-  const units = ['B', 'KB', 'MB', 'GB']
-  let size = bytes
-  let unitIndex = 0
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024
-    unitIndex++
-  }
-  return `${size.toFixed(unitIndex > 0 ? 2 : 0)} ${units[unitIndex]}`
-}
-
-// 获取视频 URL（需要认证的 Google URL 使用代理）
-function getVideoUrl(taskId: string, originalUrl: string): string {
-  // Google API 链接需要代理
-  if (originalUrl.includes('generativelanguage.googleapis.com')) {
-    // 从 localStorage 获取 token 作为 query param
-    const token = localStorage.getItem('access_token')
-    if (token) {
-      return `/api/admin/video-tasks/${taskId}/video?token=${encodeURIComponent(token)}`
-    }
-    return `/api/admin/video-tasks/${taskId}/video`
-  }
-  return originalUrl
 }
 
 // 计算时间差

@@ -9,7 +9,6 @@ mod request_url;
 pub mod rules;
 pub mod snapshot;
 pub mod url;
-mod video;
 
 pub use auth::{build_passthrough_headers, ensure_upstream_auth_header};
 pub use cache::{provider_transport_snapshot_looks_refreshed, ProviderTransportSnapshotCacheKey};
@@ -41,4 +40,3 @@ pub use snapshot::{
     read_provider_transport_snapshot, GatewayProviderTransportSnapshot,
     ProviderTransportSnapshotSource,
 };
-pub use video::{reconstruct_local_video_task_snapshot, VideoTaskTransportSnapshotLookup};

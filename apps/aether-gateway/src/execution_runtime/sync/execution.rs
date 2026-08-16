@@ -73,16 +73,7 @@ use aether_gateway_frontdoor::short_request_id;
 
 #[path = "execution/policy.rs"]
 mod policy;
-#[path = "execution/response.rs"]
-mod response;
-
 use policy::decode_execution_result_body;
-pub(crate) use response::{
-    maybe_build_local_sync_finalize_response, maybe_build_local_video_error_response,
-    maybe_build_local_video_success_outcome, resolve_local_sync_error_background_report_kind,
-    resolve_local_sync_success_background_report_kind, LocalVideoSyncSuccessBuild,
-    LocalVideoSyncSuccessOutcome,
-};
 
 const OPENAI_IMAGE_SYNC_PLAN_KIND: &str = "openai_image_sync";
 const OPENAI_IMAGE_SYNC_DEFAULT_TOTAL_TIMEOUT_MS: u64 = 900_000;
@@ -1982,7 +1973,6 @@ async fn execute_execution_runtime_sync_impl(
     let request_id = (!request_id_owned.trim().is_empty())
         .then_some(request_id_owned.as_str())
         .or(Some(plan_request_id.as_str()));
-    let request_id_for_log = short_request_id(request_id.unwrap_or("-"));
     let candidate_id = candidate_id_owned
         .as_deref()
         .or(plan_candidate_id.as_deref());
@@ -1993,7 +1983,7 @@ async fn execute_execution_runtime_sync_impl(
     let finalize_report_kind = explicit_finalize.then(|| report_kind.clone()).flatten();
 
     if let Some(finalize_report_kind) = finalize_report_kind {
-        let mut payload = build_sync_report_payload(
+        let payload = build_sync_report_payload(
             trace_id,
             finalize_report_kind,
             report_context,
@@ -2003,133 +1993,6 @@ async fn execute_execution_runtime_sync_impl(
             body_base64,
             telemetry,
         );
-        let mut payload = match maybe_build_local_video_success_outcome(
-            trace_id,
-            decision,
-            payload,
-            &state.video_tasks,
-            &plan,
-        )? {
-            LocalVideoSyncSuccessBuild::Handled(outcome) => {
-                let LocalVideoSyncSuccessOutcome {
-                    response,
-                    report_payload,
-                    original_report_context,
-                    local_task_snapshot,
-                } = outcome;
-                apply_sync_success_effects(
-                    state,
-                    &plan,
-                    original_report_context.as_ref(),
-                    &report_payload,
-                )
-                .await;
-                record_sync_terminal_usage_and_disarm_guard(
-                    state,
-                    &plan,
-                    original_report_context.as_ref(),
-                    &report_payload,
-                    candidate_started_at,
-                    candidate_first_byte_elapsed_ms,
-                    &mut terminal_guard,
-                )
-                .await;
-                let _ = state.upsert_video_task_snapshot(&local_task_snapshot).await?;
-                state.video_tasks.record_snapshot(local_task_snapshot);
-                spawn_sync_report(state.clone(), report_payload);
-                return Ok(Some(attach_control_metadata_headers(
-                    response,
-                    request_id,
-                    candidate_id,
-                )?));
-            }
-            LocalVideoSyncSuccessBuild::NotHandled(payload) => payload,
-        };
-        if let Some(response) =
-            maybe_build_local_sync_finalize_response(trace_id, decision, &payload)?
-        {
-            let background_success_report_kind =
-                resolve_local_sync_success_background_report_kind(payload.report_kind.as_str());
-            apply_sync_success_effects(state, &plan, payload.report_context.as_ref(), &payload)
-                .await;
-            record_sync_terminal_usage_and_disarm_guard(
-                state,
-                &plan,
-                payload.report_context.as_ref(),
-                &payload,
-                candidate_started_at,
-                candidate_first_byte_elapsed_ms,
-                &mut terminal_guard,
-            )
-            .await;
-            state
-                .video_tasks
-                .apply_finalize_mutation(request_path, payload.report_kind.as_str());
-            if let Some(snapshot) = state
-                .video_tasks
-                .snapshot_for_route(decision.route_family.as_deref(), request_path)
-            {
-                let _ = state.upsert_video_task_snapshot(&snapshot).await?;
-            }
-            if let Some(success_report_kind) = background_success_report_kind {
-                payload.report_kind = success_report_kind.to_string();
-            }
-            if background_success_report_kind.is_some() {
-                spawn_sync_report(state.clone(), payload);
-            } else {
-                warn!(
-                    event_name = "local_video_finalize_missing_success_report_mapping",
-                    log_type = "ops",
-                    trace_id = %trace_id,
-                    request_id = %request_id_for_log,
-                    candidate_id = ?candidate_id,
-                    report_kind = %payload.report_kind,
-                    "gateway local video finalize produced response without background success report mapping"
-                );
-            }
-            return Ok(Some(attach_control_metadata_headers(
-                response,
-                request_id,
-                candidate_id,
-            )?));
-        }
-        if let Some(response) =
-            maybe_build_local_video_error_response(trace_id, decision, &payload)?
-        {
-            let background_error_report_kind =
-                resolve_local_sync_error_background_report_kind(payload.report_kind.as_str());
-            if let Some(error_report_kind) = background_error_report_kind {
-                payload.report_kind = error_report_kind.to_string();
-            }
-            record_sync_terminal_usage_and_disarm_guard(
-                state,
-                &plan,
-                payload.report_context.as_ref(),
-                &payload,
-                candidate_started_at,
-                candidate_first_byte_elapsed_ms,
-                &mut terminal_guard,
-            )
-            .await;
-            if background_error_report_kind.is_some() {
-                spawn_sync_report(state.clone(), payload);
-            } else {
-                warn!(
-                    event_name = "local_video_finalize_missing_error_report_mapping",
-                    log_type = "ops",
-                    trace_id = %trace_id,
-                    request_id = %request_id_for_log,
-                    candidate_id = ?candidate_id,
-                    report_kind = %payload.report_kind,
-                    "gateway local video finalize produced response without background error report mapping"
-                );
-            }
-            return Ok(Some(attach_control_metadata_headers(
-                response,
-                request_id,
-                candidate_id,
-            )?));
-        }
         record_sync_terminal_usage_and_disarm_guard(
             state,
             &plan,

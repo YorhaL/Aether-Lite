@@ -46,10 +46,6 @@ use crate::repository::usage::{
     SqlxUsageReadRepository, UsageReadRepository, UsageWriteRepository,
 };
 use crate::repository::users::{SqlxUserReadRepository, UserReadRepository};
-use crate::repository::video_tasks::{
-    SqlxVideoTaskReadRepository, SqlxVideoTaskRepository, VideoTaskReadRepository,
-    VideoTaskWriteRepository,
-};
 use crate::repository::wallet::{
     SqlxWalletRepository, WalletReadRepository, WalletWriteRepository,
 };
@@ -207,14 +203,6 @@ impl PostgresBackend {
 
     pub fn settlement_write_repository(&self) -> Arc<dyn SettlementWriteRepository> {
         Arc::new(SqlxSettlementRepository::new(self.pool_clone()))
-    }
-
-    pub fn video_task_read_repository(&self) -> Arc<dyn VideoTaskReadRepository> {
-        Arc::new(SqlxVideoTaskReadRepository::new(self.pool_clone()))
-    }
-
-    pub fn video_task_write_repository(&self) -> Arc<dyn VideoTaskWriteRepository> {
-        Arc::new(SqlxVideoTaskRepository::new(self.pool_clone()))
     }
 
     pub fn transaction_runner(&self) -> PostgresTransactionRunner {

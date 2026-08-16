@@ -35,14 +35,8 @@ const AI_POST_ROUTE_PATTERNS: &[&str] = &[
 
 const CLAUDE_POST_ROUTE_PATTERNS: &[&str] = &["/v1/messages", "/v1/messages/count_tokens"];
 
-const AI_ANY_ROUTE_PATTERNS: &[&str] = &[
-    "/v1/models/{*gemini_path}",
-    "/v1beta/models/{*gemini_path}",
-    "/v1beta/operations",
-    "/v1beta/operations/{*operation_path}",
-    "/v1/videos",
-    "/v1/videos/{*video_path}",
-];
+const AI_ANY_ROUTE_PATTERNS: &[&str] =
+    &["/v1/models/{*gemini_path}", "/v1beta/models/{*gemini_path}"];
 
 pub(crate) fn mount_ai_routes(mut router: Router<AppState>) -> Router<AppState> {
     for path in AI_POST_ROUTE_PATTERNS {

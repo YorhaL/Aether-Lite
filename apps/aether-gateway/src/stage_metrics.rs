@@ -32,7 +32,6 @@ const STAGES: &[&str] = &[
     "frontdoor_execute_sync",
     "stream_candidate_slot",
     "stream_path_step",
-    "stream_path_step_video_content",
     "stream_path_step_image",
     "stream_path_step_openai_chat",
     "stream_path_step_openai_responses",

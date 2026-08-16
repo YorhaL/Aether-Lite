@@ -73,7 +73,7 @@ export interface Model {
   global_model_id: string  // 关联的 GlobalModel ID
   provider_model_name: string  // Provider 侧的主模型名称
   provider_model_mappings?: ProviderModelMapping[] | null  // 模型名称映射列表（带优先级）
-  config?: Record<string, unknown> | null  // 额外配置（如 billing/video 等）
+  config?: Record<string, unknown> | null  // 额外配置（如 billing 等）
   // 原始配置值（可能为空，为空时使用 GlobalModel 默认值）
   price_per_request?: number | null  // 按次计费价格
   tiered_pricing?: ProviderTieredPricingConfig | null  // Provider 原始覆盖，可仅包含 processing_tiers

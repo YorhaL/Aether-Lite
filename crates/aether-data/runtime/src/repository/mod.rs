@@ -23,5 +23,4 @@ pub mod settlement;
 pub mod system;
 pub mod usage;
 pub mod users;
-pub mod video_tasks;
 pub mod wallet;

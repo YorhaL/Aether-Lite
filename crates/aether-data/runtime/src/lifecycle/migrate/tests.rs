@@ -1397,9 +1397,6 @@ INSERT INTO provider_endpoints (id, provider_id, api_format, base_url, custom_pa
   ('image-root', 'provider-custom', 'openai:image', 'https://image.example.com', NULL),
   ('image-edit-custom-path', 'provider-custom', 'openai:image', 'https://image.example.com/api', '/v1/images/edits'),
   ('image-v4-edit-custom-path', 'provider-custom', 'openai:image', 'https://image.example.com/api/v4', '/v1/images/edits'),
-  ('video-root', 'provider-custom', 'openai:video', 'https://video.example.com', NULL),
-  ('video-v1beta-old-default-path', 'provider-custom', 'openai:video', 'https://video.example.com/api/v1beta', '/v1/videos'),
-  ('video-versioned-root', 'provider-custom', 'openai:video', 'https://ark.example.com/api/v3', NULL),
   ('google-versioned-segment-root', 'provider-custom', 'openai:embedding', 'https://generativelanguage.googleapis.com/v1beta/openai', NULL),
   ('gemini-root', 'provider-custom', 'gemini:generate_content', 'https://generativelanguage.googleapis.com', NULL),
   ('gemini-old-default-path', 'provider-custom', 'gemini:generate_content', 'https://generativelanguage.googleapis.com?tenant=demo', '/v1beta/models/{model}:{action}'),
@@ -1407,8 +1404,6 @@ INSERT INTO provider_endpoints (id, provider_id, api_format, base_url, custom_pa
   ('gemini-versioned-old-default', 'provider-custom', 'gemini:generate_content', 'https://generativelanguage.googleapis.com/v1beta', '/v1beta/models/{model}:{action}'),
   ('gemini-embedding-root', 'provider-custom', 'gemini:embedding', 'https://generativelanguage.googleapis.com', NULL),
   ('gemini-embedding-old-default', 'provider-custom', 'gemini:embedding', 'https://generativelanguage.googleapis.com', '/v1beta/models/{model}:embedContent'),
-  ('gemini-video-root', 'provider-custom', 'gemini:video', 'https://generativelanguage.googleapis.com', NULL),
-  ('gemini-video-versioned-old-default', 'provider-custom', 'gemini:video', 'https://generativelanguage.googleapis.com/v1beta', '/v1beta/models/{model}:predictLongRunning'),
   ('claude-path-root', 'provider-custom', 'claude:messages', 'https://proxy.example.com/anthropic', NULL),
   ('claude-old-default-path', 'provider-custom', 'claude:messages', 'https://proxy.example.com/anthropic', '/v1/messages');
 "#,
@@ -1519,18 +1514,6 @@ INSERT INTO provider_endpoints (id, provider_id, api_format, base_url, custom_pa
         ))
     );
     assert_eq!(
-        rows.get("video-root"),
-        Some(&("https://video.example.com/v1".to_string(), None))
-    );
-    assert_eq!(
-        rows.get("video-v1beta-old-default-path"),
-        Some(&("https://video.example.com/api/v1beta".to_string(), None))
-    );
-    assert_eq!(
-        rows.get("video-versioned-root"),
-        Some(&("https://ark.example.com/api/v3".to_string(), None))
-    );
-    assert_eq!(
         rows.get("google-versioned-segment-root"),
         Some(&(
             "https://generativelanguage.googleapis.com/v1beta/openai".to_string(),
@@ -1574,20 +1557,6 @@ INSERT INTO provider_endpoints (id, provider_id, api_format, base_url, custom_pa
     );
     assert_eq!(
         rows.get("gemini-embedding-old-default"),
-        Some(&(
-            "https://generativelanguage.googleapis.com/v1beta".to_string(),
-            None
-        ))
-    );
-    assert_eq!(
-        rows.get("gemini-video-root"),
-        Some(&(
-            "https://generativelanguage.googleapis.com/v1beta".to_string(),
-            None
-        ))
-    );
-    assert_eq!(
-        rows.get("gemini-video-versioned-old-default"),
         Some(&(
             "https://generativelanguage.googleapis.com/v1beta".to_string(),
             None

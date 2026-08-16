@@ -1276,23 +1276,6 @@ struct Args {
     #[arg(long, env = "AETHER_GATEWAY_STATIC_DIR")]
     static_dir: Option<String>,
 
-    #[arg(
-        long,
-        env = "AETHER_GATEWAY_VIDEO_TASK_POLLER_INTERVAL_MS",
-        default_value_t = 5000
-    )]
-    video_task_poller_interval_ms: u64,
-
-    #[arg(
-        long,
-        env = "AETHER_GATEWAY_VIDEO_TASK_POLLER_BATCH_SIZE",
-        default_value_t = 32
-    )]
-    video_task_poller_batch_size: usize,
-
-    #[arg(long, env = "AETHER_GATEWAY_VIDEO_TASK_STORE_PATH")]
-    video_task_store_path: Option<String>,
-
     #[arg(long, env = "AETHER_GATEWAY_MAX_IN_FLIGHT_REQUESTS")]
     max_in_flight_requests: Option<usize>,
 
@@ -1694,18 +1677,6 @@ fn validate_deployment_topology(
         ));
     }
 
-    if args
-        .video_task_store_path
-        .as_deref()
-        .map(str::trim)
-        .is_some_and(|value| !value.is_empty())
-    {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "AETHER_GATEWAY_VIDEO_TASK_STORE_PATH must be unset when AETHER_GATEWAY_DEPLOYMENT_TOPOLOGY=multi-node; use shared SQL-backed state instead",
-        ));
-    }
-
     Ok(())
 }
 
@@ -1862,9 +1833,6 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         frontdoor_rpm_key_ttl_seconds = args.rate_limit.key_ttl_seconds,
         frontdoor_rpm_fail_open = args.rate_limit.fail_open,
         frontdoor_rpm_allow_local_fallback = rate_limit_config.allow_local_fallback(),
-        video_task_poller_interval_ms = args.video_task_poller_interval_ms,
-        video_task_poller_batch_size = args.video_task_poller_batch_size,
-        video_task_store_path = args.video_task_store_path.as_deref().unwrap_or("-"),
         usage_queue_workers = usage_config.worker_count,
         usage_queue_workers_source = if args.usage.queue_workers.is_some() {
             "explicit"
@@ -1922,18 +1890,6 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         state = state.with_frontdoor_cors_config(cors_config);
     }
     state = state.with_frontdoor_user_rpm_config(rate_limit_config);
-    state = state.with_video_task_poller_config(
-        std::time::Duration::from_millis(args.video_task_poller_interval_ms.max(1)),
-        args.video_task_poller_batch_size.max(1),
-    );
-    if let Some(path) = args
-        .video_task_store_path
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        state = state.with_video_task_store_path(path)?;
-    }
     state = state.with_request_concurrency_limit(request_concurrency_limit);
     if let Some(limit) = args.distributed_request_limit.filter(|limit| *limit > 0) {
         let distributed_gate = state
@@ -1970,7 +1926,6 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     info!(
         has_data_backends = state.has_data_backends(),
-        has_video_task_data_reader = state.has_video_task_data_reader(),
         has_usage_data_writer = state.has_usage_data_writer(),
         has_usage_worker_backend = state.has_usage_worker_backend(),
         control_api_configured = true,
@@ -2457,9 +2412,6 @@ mod tests {
             apply_backfills: false,
             auto_prepare_database: false,
             static_dir: None,
-            video_task_poller_interval_ms: 5_000,
-            video_task_poller_batch_size: 32,
-            video_task_store_path: None,
             max_in_flight_requests: None,
             distributed_request_limit: None,
             distributed_request_redis_url: None,

@@ -168,7 +168,7 @@
           v-model="billingMode"
           @update:model-value="handleBillingModeChange"
         >
-          <TabsList class="grid w-full grid-cols-4">
+          <TabsList class="grid w-full grid-cols-3">
             <TabsTrigger value="token">
               Token
             </TabsTrigger>
@@ -177,9 +177,6 @@
             </TabsTrigger>
             <TabsTrigger value="image">
               图片
-            </TabsTrigger>
-            <TabsTrigger value="video">
-              视频
             </TabsTrigger>
           </TabsList>
 
@@ -215,112 +212,6 @@
               </p>
             </div>
           </TabsContent>
-
-          <TabsContent
-            value="video"
-            class="pt-2"
-          >
-            <div class="space-y-3 rounded-lg border bg-muted/20 p-4">
-              <div>
-                <div class="text-sm font-medium">
-                  视频计费（分辨率 × 时长）
-                </div>
-                <p class="mt-1 text-xs text-muted-foreground">
-                  根据输出分辨率配置每秒视频价格；未修改时继续继承全局模型。
-                </p>
-              </div>
-
-              <div class="flex items-center gap-1.5 flex-wrap">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  class="h-7 text-xs"
-                  @click="() => { fillVideoResolutionPricePreset('common'); configTouched = true }"
-                >
-                  通用
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  class="h-7 text-xs"
-                  @click="() => { fillVideoResolutionPricePreset('sora'); configTouched = true }"
-                >
-                  Sora
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  class="h-7 text-xs"
-                  @click="() => { fillVideoResolutionPricePreset('veo'); configTouched = true }"
-                >
-                  Veo
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  class="h-7 text-xs"
-                  @click="() => { addVideoResolutionPriceRow(); configTouched = true }"
-                >
-                  <Plus class="w-3.5 h-3.5 mr-0.5" />
-                  自定义
-                </Button>
-              </div>
-
-              <div
-                v-if="videoResolutionPrices.length > 0"
-                class="rounded-lg border border-border overflow-hidden"
-              >
-                <div class="grid grid-cols-[1fr_1fr_32px] gap-0 text-xs text-muted-foreground bg-muted/50 px-3 py-1.5 border-b border-border">
-                  <span>分辨率</span>
-                  <span>单价（$/秒）</span>
-                  <span />
-                </div>
-                <div class="divide-y divide-border">
-                  <div
-                    v-for="(row, idx) in videoResolutionPrices"
-                    :key="idx"
-                    class="grid grid-cols-[1fr_1fr_32px] gap-2 items-center px-3 py-1.5"
-                  >
-                    <Input
-                      v-model="row.resolution"
-                      class="h-7 text-sm"
-                      placeholder="如 720p"
-                      @update:model-value="() => { configTouched = true }"
-                    />
-                    <Input
-                      :model-value="row.price_per_second ?? ''"
-                      type="number"
-                      step="0.0001"
-                      min="0"
-                      class="h-7 text-sm"
-                      placeholder="0"
-                      @update:model-value="(v) => { row.price_per_second = parseNumberInput(v, { allowFloat: true }); configTouched = true }"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      class="h-7 w-7"
-                      title="删除"
-                      @click="() => { removeVideoResolutionPriceRow(idx); configTouched = true }"
-                    >
-                      <Trash2 class="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-              <div
-                v-else
-                class="rounded-lg border border-dashed py-8 text-center text-xs text-muted-foreground"
-              >
-                选择一个价格预设或添加自定义分辨率
-              </div>
-            </div>
-          </TabsContent>
         </Tabs>
       </section>
     </form>
@@ -349,7 +240,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { parseApiError } from '@/utils/errorParser'
-import { Loader2, Layers, SquarePen, Plus, Trash2 } from 'lucide-vue-next'
+import { Loader2, Layers, SquarePen } from 'lucide-vue-next'
 import {
   Dialog,
   Button,
@@ -368,7 +259,7 @@ import {
   TabsTrigger,
 } from '@/components/ui'
 import { useToast } from '@/composables/useToast'
-import { parseNumberInput, sortResolutionEntries } from '@/utils/form'
+import { parseNumberInput } from '@/utils/form'
 import { createModel, updateModel, getProviderModels } from '@/api/endpoints/models'
 import {
   createGlobalModel,
@@ -460,32 +351,6 @@ const originalProviderTieredPricing = ref<ProviderTieredPricingConfig | null>(nu
 const pricePerRequestModified = ref(false)
 const originalPricePerRequest = ref<number | undefined>(undefined)
 
-type VideoResolutionPriceRow = { resolution: string; price_per_second: number | undefined }
-
-const configTouched = ref(false)
-const videoResolutionPrices = ref<VideoResolutionPriceRow[]>([])
-
-const VIDEO_RESOLUTION_PRICE_PRESETS: Record<
-  'common' | 'sora' | 'veo',
-  VideoResolutionPriceRow[]
-> = {
-  common: [
-    { resolution: '480p', price_per_second: 0 },
-    { resolution: '720p', price_per_second: 0 },
-    { resolution: '1080p', price_per_second: 0 },
-    { resolution: '4k', price_per_second: 0 },
-  ],
-  sora: [
-    { resolution: '720x1080', price_per_second: 0 },
-    { resolution: '1024x1792', price_per_second: 0 },
-  ],
-  veo: [
-    { resolution: '720p', price_per_second: 0 },
-    { resolution: '1080p', price_per_second: 0 },
-    { resolution: '4k', price_per_second: 0 },
-  ],
-}
-
 const DEFAULT_MANUAL_GLOBAL_MODEL_PRICING: TieredPricingConfig = {
   tiers: [{ up_to: null, input_price_per_1m: 0, output_price_per_1m: 0 }],
 }
@@ -496,7 +361,6 @@ const form = ref({
   manual_global_model_name: '',
   manual_global_model_display_name: '',
   price_per_request: undefined as number | undefined,
-  config: {} as Record<string, unknown>,
   // 能力配置
   supports_vision: undefined as boolean | undefined,
   supports_function_calling: undefined as boolean | undefined,
@@ -521,8 +385,6 @@ watch(() => props.open, async (newOpen) => {
     resetForm()
     if (props.editingModel) {
       // 编辑模式：填充表单
-      // 使用有效配置（合并全局模型的默认值）供用户查看和编辑
-      const effectiveConfig = props.editingModel.effective_config || props.editingModel.config || {}
       form.value = {
         global_model_id: props.editingModel.global_model_id || '',
         provider_model_name: props.editingModel.provider_model_name || '',
@@ -530,7 +392,6 @@ watch(() => props.open, async (newOpen) => {
         manual_global_model_display_name: '',
         // 显示有效的按次计费价格（继承自全局模型）
         price_per_request: props.editingModel.effective_price_per_request ?? props.editingModel.price_per_request ?? undefined,
-        config: effectiveConfig ? JSON.parse(JSON.stringify(effectiveConfig)) : {},
         supports_vision: props.editingModel.supports_vision ?? undefined,
         supports_function_calling: props.editingModel.supports_function_calling ?? undefined,
         supports_streaming: props.editingModel.supports_streaming ?? undefined,
@@ -538,8 +399,6 @@ watch(() => props.open, async (newOpen) => {
         supports_image_generation: props.editingModel.supports_image_generation ?? undefined,
         is_active: props.editingModel.is_active
       }
-      // 从有效配置中加载视频费用
-      loadVideoPricingFromConfig(effectiveConfig)
       // Provider 可以只覆盖 processing_tiers。此时后端 effective_tiered_pricing
       // 仍是原始 partial JSON，需要取 GlobalModel 默认目录合成完整编辑视图。
       const providerPricing = props.editingModel.tiered_pricing
@@ -608,8 +467,6 @@ watch(() => form.value.global_model_id, (newId) => {
     form.value.price_per_request = selectedModel?.default_price_per_request ?? undefined
     originalPricePerRequest.value = form.value.price_per_request
     pricePerRequestModified.value = false
-    loadVideoPricingFromConfig(selectedModel?.config || {})
-    configTouched.value = false
     selectInitialBillingMode()
   }
 })
@@ -631,7 +488,6 @@ function resetForm() {
     manual_global_model_name: '',
     manual_global_model_display_name: '',
     price_per_request: undefined,
-    config: {},
     supports_vision: undefined,
     supports_function_calling: undefined,
     supports_streaming: undefined,
@@ -639,8 +495,6 @@ function resetForm() {
     supports_image_generation: undefined,
     is_active: true
   }
-  configTouched.value = false
-  videoResolutionPrices.value = []
   tieredPricing.value = null
   tieredPricingModified.value = false
   originalTieredPricing.value = ''
@@ -666,9 +520,7 @@ function handleBillingModeChange(mode: string) {
 }
 
 function selectInitialBillingMode() {
-  if (videoResolutionPrices.value.length > 0) {
-    billingMode.value = 'video'
-  } else if (isImageGenerationEnabled.value) {
+  if (isImageGenerationEnabled.value) {
     billingMode.value = 'image'
   } else if (form.value.price_per_request !== undefined) {
     billingMode.value = 'request'
@@ -723,143 +575,7 @@ function syncManualProviderName(value: string | number) {
   }
 }
 
-function getNested(obj: Record<string, unknown>, path: string): unknown {
-  if (!obj || typeof obj !== 'object') return undefined
-  const parts = path.split('.').filter(Boolean)
-  let cur: unknown = obj
-  for (const p of parts) {
-    if (!cur || typeof cur !== 'object') return undefined
-    cur = (cur as Record<string, unknown>)[p]
-  }
-  return cur
-}
-
-function setNested(obj: Record<string, unknown>, path: string, value: unknown) {
-  if (!obj || typeof obj !== 'object') return
-  const parts = path.split('.').filter(Boolean)
-  if (parts.length === 0) return
-  let cur: Record<string, unknown> = obj
-  for (let i = 0; i < parts.length - 1; i++) {
-    const p = parts[i]
-    if (!cur[p] || typeof cur[p] !== 'object') {
-      cur[p] = {}
-    }
-    cur = cur[p] as Record<string, unknown>
-  }
-  cur[parts[parts.length - 1]] = value
-}
-
-function deleteNested(obj: Record<string, unknown>, path: string) {
-  if (!obj || typeof obj !== 'object') return
-  const parts = path.split('.').filter(Boolean)
-  if (parts.length === 0) return
-  let cur: Record<string, unknown> = obj
-  for (let i = 0; i < parts.length - 1; i++) {
-    const p = parts[i]
-    if (!cur[p] || typeof cur[p] !== 'object') return
-    cur = cur[p] as Record<string, unknown>
-  }
-  delete cur[parts[parts.length - 1]]
-}
-
-function pruneEmptyBillingConfig(cfg: Record<string, unknown>) {
-  const billing = cfg.billing
-  if (!billing || typeof billing !== 'object') return
-  const billingObj = billing as Record<string, unknown>
-  const video = billingObj.video
-  if (video && typeof video === 'object' && Object.keys(video).length === 0) {
-    delete billingObj.video
-  }
-  if (Object.keys(billingObj).length === 0) {
-    delete cfg.billing
-  }
-}
-
-/**
- * Normalize resolution key:
- * - lowercase, remove spaces, × → x
- * - For WxH format, sort dimensions so smaller comes first (720x1080 = 1080x720)
- */
-function normalizeResolutionKey(raw: string): string {
-  let k = (raw || '').trim().toLowerCase().replace(/\s+/g, '').replace(/×/g, 'x')
-  // Check if it's WxH format (e.g., 1080x720)
-  const match = k.match(/^(\d+)x(\d+)$/)
-  if (match) {
-    const a = parseInt(match[1], 10)
-    const b = parseInt(match[2], 10)
-    // Sort: smaller dimension first
-    k = a <= b ? `${a}x${b}` : `${b}x${a}`
-  }
-  return k
-}
-
-function loadVideoPricingFromConfig(cfg: Record<string, unknown>) {
-  const raw = getNested(cfg, 'billing.video.price_per_second_by_resolution')
-  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-    // 按分辨率从低到高排序
-    const sortedEntries = sortResolutionEntries(Object.entries(raw))
-    videoResolutionPrices.value = sortedEntries.map(([k, v]) => ({
-      resolution: String(k),
-      price_per_second: typeof v === 'number' ? v : undefined,
-    }))
-  } else {
-    videoResolutionPrices.value = []
-  }
-}
-
-function applyVideoPricingToConfig(cfg: Record<string, unknown>) {
-  // Clean legacy keys
-  deleteNested(cfg, 'billing.video.price_per_second')
-  deleteNested(cfg, 'billing.video.resolution_multipliers')
-
-  // resolution/size prices (normalized: 1080x720 → 720x1080)
-  const map: Record<string, number> = {}
-  for (const row of videoResolutionPrices.value) {
-    const k = normalizeResolutionKey(row.resolution || '')
-    const v = row.price_per_second
-    if (!k) continue
-    if (typeof v !== 'number' || Number.isNaN(v)) continue
-    map[k] = v
-  }
-  if (Object.keys(map).length > 0) {
-    setNested(cfg, 'billing.video.price_per_second_by_resolution', map)
-  } else {
-    deleteNested(cfg, 'billing.video.price_per_second_by_resolution')
-  }
-  pruneEmptyBillingConfig(cfg)
-}
-
-function addVideoResolutionPriceRow() {
-  videoResolutionPrices.value.push({ resolution: '', price_per_second: undefined })
-}
-
-function removeVideoResolutionPriceRow(idx: number) {
-  videoResolutionPrices.value.splice(idx, 1)
-}
-
-function fillVideoResolutionPricePreset(preset: 'common' | 'sora' | 'veo') {
-  videoResolutionPrices.value = VIDEO_RESOLUTION_PRICE_PRESETS[preset].map(r => ({
-    resolution: r.resolution,
-    price_per_second: r.price_per_second,
-  }))
-}
-
-function _copyVideoPricingFromSelectedGlobal() {
-  const gm = availableGlobalModels.value.find(m => m.id === form.value.global_model_id)
-  const cfg = gm?.config || {}
-  if (cfg && typeof cfg === 'object') {
-    const raw = getNested(cfg, 'billing.video.price_per_second_by_resolution')
-    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-      videoResolutionPrices.value = Object.entries(raw).map(([k, v]) => ({
-        resolution: String(k),
-        price_per_second: typeof v === 'number' ? v : undefined,
-      }))
-    }
-  }
-  configTouched.value = true
-}
-
-async function createManualGlobalModel(finalTieredPricing: TieredPricingConfig | null, cleanConfig: Record<string, unknown> | undefined): Promise<GlobalModelResponse> {
+async function createManualGlobalModel(finalTieredPricing: TieredPricingConfig | null): Promise<GlobalModelResponse> {
   const modelName = form.value.manual_global_model_name.trim()
   const displayName = form.value.manual_global_model_display_name.trim() || modelName
   const supportedCapabilities = [
@@ -876,7 +592,6 @@ async function createManualGlobalModel(finalTieredPricing: TieredPricingConfig |
     default_price_per_request: form.value.price_per_request,
     default_tiered_pricing: finalTieredPricing || DEFAULT_MANUAL_GLOBAL_MODEL_PRICING,
     supported_capabilities: supportedCapabilities.length ? supportedCapabilities : undefined,
-    config: cleanConfig,
     is_active: true,
   })
 }
@@ -941,12 +656,6 @@ async function handleSubmit() {
       : null
     const supportsImageGeneration = form.value.supports_image_generation
 
-    // Apply billing (video) pricing into config.
-    applyVideoPricingToConfig(form.value.config)
-    const cleanConfig = form.value.config && Object.keys(form.value.config).length > 0
-      ? form.value.config
-      : undefined
-
     if (isEditing.value && props.editingModel) {
       // 编辑模式
       // 仅提交实际修改的 Provider 覆盖；未修改字段继续继承全局模型。
@@ -955,8 +664,6 @@ async function handleSubmit() {
         tieredPricingModified: tieredPricingModified.value,
         pricePerRequest: form.value.price_per_request,
         pricePerRequestModified: pricePerRequestModified.value,
-        cleanConfig,
-        configTouched: configTouched.value,
         supportsVision: form.value.supports_vision,
         supportsFunctionCalling: form.value.supports_function_calling,
         supportsStreaming: form.value.supports_streaming,
@@ -968,7 +675,7 @@ async function handleSubmit() {
     } else {
       // 添加模式：只有用户修改了配置才提交 tiered_pricing，否则保持继承关系
       const selectedModel = manualGlobalModelMode.value
-        ? await createManualGlobalModel(finalTieredPricing, cleanConfig)
+        ? await createManualGlobalModel(finalTieredPricing)
         : availableGlobalModels.value.find(m => m.id === form.value.global_model_id)
       if (!selectedModel) {
         showError('请选择模型，或切换到手动添加后填写模型ID', '错误')
@@ -981,8 +688,6 @@ async function handleSubmit() {
         tieredPricingModified: manualGlobalModelMode.value ? false : tieredPricingModified.value,
         pricePerRequest: manualGlobalModelMode.value ? undefined : form.value.price_per_request,
         pricePerRequestModified: manualGlobalModelMode.value ? false : pricePerRequestModified.value,
-        cleanConfig,
-        configTouched: manualGlobalModelMode.value ? false : configTouched.value,
         supportsVision: form.value.supports_vision,
         supportsFunctionCalling: form.value.supports_function_calling,
         supportsStreaming: form.value.supports_streaming,

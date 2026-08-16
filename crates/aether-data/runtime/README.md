@@ -5,8 +5,8 @@ migration/backfill/export workflows, and the application-facing backend
 handles. Concrete SQL drivers live in the adapter crates.
 
 It does not own the cross-crate DTO contracts. Shared repository records and
-errors that are consumed by scheduler, billing, admin, usage runtime, and video
-task crates live in the sibling `../contracts` crate (`aether-data-contracts`).
+errors that are consumed by scheduler, billing, admin, and usage runtime live in
+the sibling `../contracts` crate (`aether-data-contracts`).
 
 ## Directory Map
 

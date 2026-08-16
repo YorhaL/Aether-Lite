@@ -10,10 +10,8 @@ pub(crate) use aether_ai_serving::{
     ai_openai_responses_spec_metadata as local_openai_responses_spec_metadata,
     ai_requested_model_family_for_same_format_provider as requested_model_family_for_same_format_provider,
     ai_requested_model_family_for_standard_source as requested_model_family_for_standard_source,
-    ai_requested_model_family_for_video_create as requested_model_family_for_video_create,
     ai_same_format_provider_spec_metadata as local_same_format_provider_spec_metadata,
     ai_standard_spec_metadata as local_standard_spec_metadata,
-    ai_video_create_spec_metadata as local_video_create_spec_metadata,
     AiExecutionSurfaceSpecMetadata as LocalExecutionSurfaceSpecMetadata,
     AiRequestedModelFamily as RequestedModelFamily,
 };

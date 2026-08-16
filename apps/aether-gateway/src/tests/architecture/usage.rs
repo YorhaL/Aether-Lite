@@ -126,21 +126,8 @@ fn usage_runtime_paths_depend_on_shared_crates_not_app_runtime_shims() {
         "usage/reporting/context.rs should depend on aether_usage_runtime"
     );
     assert!(
-        usage_reporting_context.contains("resolve_video_task_report_lookup"),
-        "usage/reporting/context.rs should depend on shared video task report lookup helper"
-    );
-    for pattern in [
-        "build_locally_actionable_report_context_from_video_task",
-        "report_context_is_locally_actionable",
-    ] {
-        assert!(
-            usage_reporting_context.contains(pattern),
-            "usage/reporting/context.rs should depend on shared usage helper {pattern}"
-        );
-    }
-    assert!(
-        usage_reporting_context.contains("VideoTaskReportLookup::TaskIdOrExternal"),
-        "usage/reporting/context.rs should keep app-local external task fallback orchestration"
+        usage_reporting_context.contains("report_context_is_locally_actionable"),
+        "usage/reporting/context.rs should depend on shared usage helper"
     );
     for pattern in [
         "build_locally_actionable_report_context_from_request_candidate",
@@ -152,22 +139,6 @@ fn usage_runtime_paths_depend_on_shared_crates_not_app_runtime_shims() {
             "usage/reporting/context.rs should not own request-candidate resolver details {pattern}"
         );
     }
-    for pattern in [
-        "context\n        .get(\"local_task_id\")",
-        "context\n        .get(\"local_short_id\")",
-        "context\n        .get(\"task_id\")",
-        "VideoTaskLookupKey::ShortId(short_id)",
-        "fn insert_missing_string_value(",
-        "fn insert_missing_optional_string_value(",
-        "fn has_non_empty_str(",
-        "fn has_u64(",
-    ] {
-        assert!(
-            !usage_reporting_context.contains(pattern),
-            "usage/reporting/context.rs should not own video task report lookup parsing {pattern}"
-        );
-    }
-
     let usage_reporting_mod = read_workspace_file("apps/aether-gateway/src/usage/reporting/mod.rs");
     assert!(
         usage_reporting_mod.contains("aether_usage_runtime"),
@@ -203,7 +174,6 @@ fn usage_runtime_paths_depend_on_shared_crates_not_app_runtime_shims() {
         "fn report_request_id(",
         "fn should_handle_local_sync_report(",
         "fn should_handle_local_stream_report(",
-        "\"openai_video_delete_sync_success\" && payload.status_code == 404",
         "sync_codex_quota_from_response_headers(",
         "apply_local_gemini_file_mapping_report_effect(",
         "pub(crate) async fn store_local_gemini_file_mapping(",

@@ -20,7 +20,6 @@ use crate::repository::provider_catalog::ProviderCatalogReadRepository;
 use crate::repository::routing_profiles::RoutingGroupReadRepository;
 use crate::repository::usage::UsageReadRepository;
 use crate::repository::users::UserReadRepository;
-use crate::repository::video_tasks::VideoTaskReadRepository;
 use crate::repository::wallet::WalletReadRepository;
 
 #[derive(Clone, Default)]
@@ -40,7 +39,6 @@ pub struct DataReadRepositories {
     routing_groups: Option<Arc<dyn RoutingGroupReadRepository>>,
     usage: Option<Arc<dyn UsageReadRepository>>,
     users: Option<Arc<dyn UserReadRepository>>,
-    video_tasks: Option<Arc<dyn VideoTaskReadRepository>>,
     wallets: Option<Arc<dyn WalletReadRepository>>,
 }
 
@@ -65,7 +63,6 @@ impl fmt::Debug for DataReadRepositories {
             .field("has_routing_groups", &self.routing_groups.is_some())
             .field("has_usage", &self.usage.is_some())
             .field("has_users", &self.users.is_some())
-            .field("has_video_tasks", &self.video_tasks.is_some())
             .field("has_wallets", &self.wallets.is_some())
             .finish()
     }
@@ -140,9 +137,6 @@ impl DataReadRepositories {
         if self.users.is_none() {
             self.users = Some(PostgresBackend::user_read_repository(backend));
         }
-        if self.video_tasks.is_none() {
-            self.video_tasks = Some(PostgresBackend::video_task_read_repository(backend));
-        }
         if self.wallets.is_none() {
             self.wallets = Some(PostgresBackend::wallet_read_repository(backend));
         }
@@ -198,9 +192,6 @@ impl DataReadRepositories {
         }
         if self.users.is_none() {
             self.users = Some(SqliteBackend::user_read_repository(backend));
-        }
-        if self.video_tasks.is_none() {
-            self.video_tasks = Some(SqliteBackend::video_task_read_repository(backend));
         }
         if self.wallets.is_none() {
             self.wallets = Some(SqliteBackend::wallet_read_repository(backend));
@@ -268,10 +259,6 @@ impl DataReadRepositories {
         self.users.clone()
     }
 
-    pub fn video_tasks(&self) -> Option<Arc<dyn VideoTaskReadRepository>> {
-        self.video_tasks.clone()
-    }
-
     pub fn wallets(&self) -> Option<Arc<dyn WalletReadRepository>> {
         self.wallets.clone()
     }
@@ -292,7 +279,6 @@ impl DataReadRepositories {
             || self.routing_groups.is_some()
             || self.usage.is_some()
             || self.users.is_some()
-            || self.video_tasks.is_some()
             || self.wallets.is_some()
     }
 }

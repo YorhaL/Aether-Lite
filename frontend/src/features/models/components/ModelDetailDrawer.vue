@@ -303,44 +303,6 @@
                     <Label class="text-xs text-muted-foreground whitespace-nowrap">按次计费</Label>
                     <span class="text-sm font-mono">${{ model.default_price_per_request.toFixed(3) }}/次</span>
                   </div>
-                  <!-- 视频分辨率计费 -->
-                  <div
-                    v-if="hasVideoPricing"
-                    class="space-y-2"
-                  >
-                    <div class="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Video class="w-4 h-4" />
-                      <span>视频分辨率计费 ({{ videoPricingEntries.length }} 种)</span>
-                    </div>
-                    <div class="border rounded-lg overflow-hidden">
-                      <Table>
-                        <TableHeader>
-                          <TableRow class="bg-muted/30">
-                            <TableHead class="text-xs h-9">
-                              分辨率
-                            </TableHead>
-                            <TableHead class="text-xs h-9 text-right">
-                              单价 ($/秒)
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          <TableRow
-                            v-for="[res, price] in videoPricingEntries"
-                            :key="res"
-                            class="text-xs"
-                          >
-                            <TableCell class="py-2">
-                              {{ res }}
-                            </TableCell>
-                            <TableCell class="py-2 text-right font-mono">
-                              ${{ (price as number).toFixed(4) }}
-                            </TableCell>
-                          </TableRow>
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
                 </div>
 
                 <!-- 多阶梯计费展示 -->
@@ -423,44 +385,6 @@
                     <Label class="text-xs text-muted-foreground whitespace-nowrap">按次计费</Label>
                     <span class="text-sm font-mono">${{ model.default_price_per_request.toFixed(3) }}/次</span>
                   </div>
-                  <!-- 视频分辨率计费（多阶梯时也显示） -->
-                  <div
-                    v-if="hasVideoPricing"
-                    class="space-y-2"
-                  >
-                    <div class="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Video class="w-4 h-4" />
-                      <span>视频分辨率计费 ({{ videoPricingEntries.length }} 种)</span>
-                    </div>
-                    <div class="border rounded-lg overflow-hidden">
-                      <Table>
-                        <TableHeader>
-                          <TableRow class="bg-muted/30">
-                            <TableHead class="text-xs h-9">
-                              分辨率
-                            </TableHead>
-                            <TableHead class="text-xs h-9 text-right">
-                              单价 ($/秒)
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          <TableRow
-                            v-for="[res, price] in videoPricingEntries"
-                            :key="res"
-                            class="text-xs"
-                          >
-                            <TableCell class="py-2">
-                              {{ res }}
-                            </TableCell>
-                            <TableCell class="py-2 text-right font-mono">
-                              ${{ (price as number).toFixed(4) }}
-                            </TableCell>
-                          </TableRow>
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
                 </div>
               </div>
 
@@ -541,8 +465,7 @@ import {
   Power,
   Copy,
   Layers,
-  BarChart3,
-  Video
+  BarChart3
 } from 'lucide-vue-next'
 import { useEscapeKey } from '@/composables/useEscapeKey'
 import { useClipboard } from '@/composables/useClipboard'
@@ -658,19 +581,6 @@ function handleMappingsUpdate(_mappings: string[]) {
 // 暴露刷新方法给父组件
 defineExpose({
   refreshRoutingData
-})
-
-// 检测是否有视频分辨率计费配置
-const hasVideoPricing = computed(() => {
-  const priceByResolution = props.model?.config?.billing?.video?.price_per_second_by_resolution
-  return priceByResolution && typeof priceByResolution === 'object' && Object.keys(priceByResolution).length > 0
-})
-
-// 获取视频分辨率计费条目（按分辨率从低到高排序）
-const videoPricingEntries = computed(() => {
-  const priceByResolution = props.model?.config?.billing?.video?.price_per_second_by_resolution
-  if (!priceByResolution || typeof priceByResolution !== 'object') return []
-  return sortResolutionEntries(Object.entries(priceByResolution))
 })
 
 const IMAGE_OUTPUT_QUALITIES = ['low', 'medium', 'high'] as const

@@ -7,13 +7,6 @@ use crate::orchestration::{
 };
 use crate::AppState;
 
-fn sync_plan_kind_disables_local_candidate_failover(plan_kind: &str) -> bool {
-    matches!(
-        plan_kind,
-        "openai_video_delete_sync" | "openai_video_cancel_sync" | "gemini_video_cancel_sync"
-    )
-}
-
 fn openai_image_success_disables_local_success_failover(
     plan: &ExecutionPlan,
     status_code: u16,
@@ -50,15 +43,11 @@ pub(crate) async fn should_retry_next_local_candidate_sync(
 pub(crate) async fn analyze_local_candidate_failover_sync(
     state: &AppState,
     plan: &ExecutionPlan,
-    plan_kind: &str,
+    _plan_kind: &str,
     report_context: Option<&serde_json::Value>,
     result: &ExecutionResult,
     response_text: Option<&str>,
 ) -> LocalFailoverAnalysis {
-    if sync_plan_kind_disables_local_candidate_failover(plan_kind) {
-        return LocalFailoverAnalysis::use_default();
-    }
-
     if openai_image_success_disables_local_success_failover(plan, result.status_code) {
         return LocalFailoverAnalysis::use_default();
     }
@@ -115,21 +104,9 @@ pub(crate) fn should_fallback_to_control_sync(
     explicit_finalize: bool,
     mapped_error_finalize: bool,
 ) -> bool {
-    if explicit_finalize
-        && matches!(
-            plan_kind,
-            "openai_video_delete_sync" | "openai_video_cancel_sync" | "gemini_video_cancel_sync"
-        )
-    {
-        return false;
-    }
-
     if !matches!(
         plan_kind,
-        "openai_video_create_sync"
-            | "openai_video_remix_sync"
-            | "gemini_video_create_sync"
-            | "openai_chat_sync"
+        "openai_chat_sync"
             | "openai_responses_sync"
             | "openai_responses_compact_sync"
             | "claude_chat_sync"

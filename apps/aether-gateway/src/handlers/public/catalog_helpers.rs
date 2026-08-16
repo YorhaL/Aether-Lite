@@ -1940,7 +1940,6 @@ pub(crate) fn api_format_display_name(api_format: &str) -> String {
         "responses" => "Responses",
         "responses:compact" => "Responses Compact",
         "compact" => "Compact",
-        "video" => "Video",
         "image" => "Image",
         "files" => "Files",
         other => other,
