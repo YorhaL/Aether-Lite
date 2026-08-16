@@ -1,4 +1,4 @@
-import { Mail, Shield, AlertTriangle, BellRing } from 'lucide-vue-next'
+import { Mail, Shield, BellRing } from 'lucide-vue-next'
 import type { LucideIcon } from 'lucide-vue-next'
 
 export interface BuiltinTool {
@@ -26,12 +26,6 @@ export const BUILTIN_TOOLS: BuiltinTool[] = [
     description: '管理 IP 黑白名单，控制系统访问权限',
     href: '/admin/ip-security',
     icon: Shield,
-  },
-  {
-    name: '审计日志',
-    description: '查看系统操作日志，追踪安全事件与变更记录',
-    href: '/admin/audit-logs',
-    icon: AlertTriangle,
   },
 ]
 

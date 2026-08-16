@@ -1431,7 +1431,6 @@ import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 - [x] ActivityLogs.vue
 - [x] Announcements.vue
 - [x] ApiKeys.vue
-- [x] AuditLogs.vue
 - [x] MyApiKeys.vue
 - [x] Usage.vue
 - [x] ProviderList.vue

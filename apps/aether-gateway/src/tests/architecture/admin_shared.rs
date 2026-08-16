@@ -80,7 +80,6 @@ fn admin_wrapped_state_owns_api_key_capabilities() {
         "apps/aether-gateway/src/handlers/admin/users/api_keys/responses/toggle_lock.rs",
         "apps/aether-gateway/src/handlers/admin/users/api_keys/responses/list.rs",
         "apps/aether-gateway/src/handlers/admin/users/api_keys/responses/reveal.rs",
-        "apps/aether-gateway/src/handlers/admin/features/gemini_files/upload/stage.rs",
     ] {
         let contents = read_workspace_file(path);
         assert!(
@@ -689,7 +688,6 @@ fn admin_proxy_uses_single_admin_routes_entrypoint() {
         "model::maybe_build_local_admin_global_models_response(",
         "model::maybe_build_local_admin_model_catalog_response(",
         "features::maybe_build_local_admin_video_tasks_response(",
-        "features::maybe_build_local_admin_gemini_files_response(",
         "provider::maybe_build_local_admin_provider_models_response(",
         "provider::maybe_build_local_admin_providers_response(",
         "provider::maybe_build_local_admin_provider_query_response(",
@@ -776,7 +774,6 @@ fn admin_second_layer_route_seams_use_wrapped_request_types() {
         "apps/aether-gateway/src/handlers/admin/endpoint/rpm.rs",
         "apps/aether-gateway/src/handlers/admin/features/video_tasks/mod.rs",
         "apps/aether-gateway/src/handlers/admin/features/video_tasks/routes.rs",
-        "apps/aether-gateway/src/handlers/admin/features/gemini_files/mod.rs",
         "apps/aether-gateway/src/handlers/admin/model/catalog_routes.rs",
         "apps/aether-gateway/src/handlers/admin/model/global_models/routes/core/mod.rs",
         "apps/aether-gateway/src/handlers/admin/observability/stats/mod.rs",
@@ -862,10 +859,6 @@ fn admin_route_adjacent_owners_use_wrapped_state_types() {
         "apps/aether-gateway/src/handlers/admin/users/api_keys/responses/reveal.rs",
         "apps/aether-gateway/src/handlers/admin/users/api_keys/responses/toggle_lock.rs",
         "apps/aether-gateway/src/handlers/admin/users/api_keys/responses/update.rs",
-        "apps/aether-gateway/src/handlers/admin/features/gemini_files/read_routes.rs",
-        "apps/aether-gateway/src/handlers/admin/features/gemini_files/upload/mod.rs",
-        "apps/aether-gateway/src/handlers/admin/features/gemini_files/upload/request.rs",
-        "apps/aether-gateway/src/handlers/admin/features/gemini_files/upload/support.rs",
         "apps/aether-gateway/src/handlers/admin/model/global_models/routes/core/reads.rs",
         "apps/aether-gateway/src/handlers/admin/model/global_models/routes/core/writes.rs",
     ] {
@@ -906,10 +899,6 @@ fn admin_route_adjacent_owners_use_wrapped_state_types() {
         "apps/aether-gateway/src/handlers/admin/users/api_keys/responses/reveal.rs",
         "apps/aether-gateway/src/handlers/admin/users/api_keys/responses/toggle_lock.rs",
         "apps/aether-gateway/src/handlers/admin/users/api_keys/responses/update.rs",
-        "apps/aether-gateway/src/handlers/admin/features/gemini_files/read_routes.rs",
-        "apps/aether-gateway/src/handlers/admin/features/gemini_files/upload/mod.rs",
-        "apps/aether-gateway/src/handlers/admin/features/gemini_files/upload/request.rs",
-        "apps/aether-gateway/src/handlers/admin/features/gemini_files/upload/support.rs",
     ] {
         let contents = read_workspace_file(file);
         assert!(

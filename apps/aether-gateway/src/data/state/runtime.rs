@@ -1,15 +1,14 @@
 use super::{
     read_decision_trace, read_provider_transport_snapshot, read_request_candidate_trace,
-    AdjustWalletBalanceInput, AdminWalletListQuery, AnnouncementListQuery, AuditLogListQuery,
-    BackgroundTaskListQuery, BackgroundTaskSummary, BillingModelContextCacheKey,
-    BillingModelContextCacheState, BillingModelContextInflightState, CreateAnnouncementRecord,
-    DataLayerError, DatabaseMaintenanceSummary, DecisionTrace, GatewayDataState,
-    GatewayProviderTransportSnapshot, LocalVideoTaskReadResponse, RequestAuditBundle,
-    RequestCandidateTrace, StoredAdminAuditLogPage, StoredAdminWalletListPage, StoredAnnouncement,
-    StoredAnnouncementPage, StoredBackgroundTaskEvent, StoredBackgroundTaskRun,
-    StoredBackgroundTaskRunPage, StoredBillingModelContext, StoredProviderUsageSummary,
-    StoredRequestUsageAudit, StoredSuspiciousActivity, StoredUsageSettlement,
-    StoredUserAuditLogPage, StoredUserAuthRecord, StoredUserExportRow, StoredUserSummary,
+    AdjustWalletBalanceInput, AdminWalletListQuery, AnnouncementListQuery, BackgroundTaskListQuery,
+    BackgroundTaskSummary, BillingModelContextCacheKey, BillingModelContextCacheState,
+    BillingModelContextInflightState, CreateAnnouncementRecord, DataLayerError,
+    DatabaseMaintenanceSummary, DecisionTrace, GatewayDataState, GatewayProviderTransportSnapshot,
+    LocalVideoTaskReadResponse, RequestAuditBundle, RequestCandidateTrace,
+    StoredAdminWalletListPage, StoredAnnouncement, StoredAnnouncementPage,
+    StoredBackgroundTaskEvent, StoredBackgroundTaskRun, StoredBackgroundTaskRunPage,
+    StoredBillingModelContext, StoredProviderUsageSummary, StoredRequestUsageAudit,
+    StoredUsageSettlement, StoredUserAuthRecord, StoredUserExportRow, StoredUserSummary,
     StoredVideoTask, StoredWalletSnapshot, UpdateAnnouncementRecord, UpsertBackgroundTaskEvent,
     UpsertBackgroundTaskRun, UpsertUsageRecord, UpsertVideoTask, UsageSettlementInput,
     VideoTaskLookupKey, VideoTaskModelCount, VideoTaskQueryFilter, VideoTaskStatusCount,
@@ -354,91 +353,6 @@ impl GatewayDataState {
             Some(repository) => repository.find_by_id(announcement_id).await,
             None => Ok(None),
         }
-    }
-
-    pub(crate) async fn list_admin_audit_logs(
-        &self,
-        query: &AuditLogListQuery,
-    ) -> Result<StoredAdminAuditLogPage, DataLayerError> {
-        let Some(repository) = self
-            .backends
-            .as_ref()
-            .and_then(|backends| backends.read().audit_logs())
-        else {
-            return Ok(StoredAdminAuditLogPage {
-                items: Vec::new(),
-                total: 0,
-            });
-        };
-        repository.list_admin_audit_logs(query).await
-    }
-
-    pub(crate) async fn list_admin_suspicious_activities(
-        &self,
-        cutoff_unix_secs: u64,
-    ) -> Result<Vec<StoredSuspiciousActivity>, DataLayerError> {
-        let Some(repository) = self
-            .backends
-            .as_ref()
-            .and_then(|backends| backends.read().audit_logs())
-        else {
-            return Ok(Vec::new());
-        };
-        repository
-            .list_admin_suspicious_activities(cutoff_unix_secs)
-            .await
-    }
-
-    pub(crate) async fn read_admin_user_behavior_event_counts(
-        &self,
-        user_id: &str,
-        cutoff_unix_secs: u64,
-    ) -> Result<std::collections::BTreeMap<String, u64>, DataLayerError> {
-        let Some(repository) = self
-            .backends
-            .as_ref()
-            .and_then(|backends| backends.read().audit_logs())
-        else {
-            return Ok(std::collections::BTreeMap::new());
-        };
-        repository
-            .read_admin_user_behavior_event_counts(user_id, cutoff_unix_secs)
-            .await
-    }
-
-    pub(crate) async fn list_user_audit_logs(
-        &self,
-        user_id: &str,
-        query: &AuditLogListQuery,
-    ) -> Result<StoredUserAuditLogPage, DataLayerError> {
-        let Some(repository) = self
-            .backends
-            .as_ref()
-            .and_then(|backends| backends.read().audit_logs())
-        else {
-            return Ok(StoredUserAuditLogPage {
-                items: Vec::new(),
-                total: 0,
-            });
-        };
-        repository.list_user_audit_logs(user_id, query).await
-    }
-
-    pub(crate) async fn delete_audit_logs_before(
-        &self,
-        cutoff_unix_secs: u64,
-        limit: usize,
-    ) -> Result<usize, DataLayerError> {
-        let Some(repository) = self
-            .backends
-            .as_ref()
-            .and_then(|backends| backends.read().audit_logs())
-        else {
-            return Ok(0);
-        };
-        repository
-            .delete_audit_logs_before(cutoff_unix_secs, limit)
-            .await
     }
 
     pub(crate) async fn count_unread_active_announcements(

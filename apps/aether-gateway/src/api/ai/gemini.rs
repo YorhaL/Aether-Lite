@@ -4,7 +4,6 @@ pub(crate) fn normalized_signature(api_format: &str) -> Option<&'static str> {
         "gemini:interactions" => Some("gemini:interactions"),
         "gemini:embedding" => Some("gemini:embedding"),
         "gemini:video" => Some("gemini:video"),
-        "gemini:files" => Some("gemini:files"),
         _ => None,
     }
 }
@@ -15,7 +14,6 @@ pub(crate) fn local_path(api_format: &str) -> Option<&'static str> {
         "gemini:interactions" => Some("/v1/interactions"),
         "gemini:embedding" => Some("/v1beta/models/{model}:{action}"),
         "gemini:video" => Some("/v1beta/models/{model}:predictLongRunning"),
-        "gemini:files" => Some("/v1beta/files"),
         _ => None,
     }
 }

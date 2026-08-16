@@ -1066,7 +1066,6 @@ async fn gateway_handles_admin_system_unavailable_write_routes_locally_with_trus
         "/api/admin/system/purge/config",
         "/api/admin/system/purge/users",
         "/api/admin/system/purge/usage",
-        "/api/admin/system/purge/audit-logs",
         "/api/admin/system/purge/request-bodies",
         "/api/admin/system/purge/stats",
     ];

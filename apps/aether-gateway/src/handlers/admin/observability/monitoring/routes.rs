@@ -1,8 +1,4 @@
-use super::activity::{
-    build_admin_monitoring_audit_logs_response,
-    build_admin_monitoring_suspicious_activities_response,
-    build_admin_monitoring_system_status_response, build_admin_monitoring_user_behavior_response,
-};
+use super::activity::build_admin_monitoring_system_status_response;
 use super::cache::{
     build_admin_monitoring_cache_config_response, build_admin_monitoring_cache_metrics_response,
     build_admin_monitoring_cache_stats_response,
@@ -52,13 +48,6 @@ pub(crate) async fn maybe_build_local_admin_monitoring_response(
     };
 
     match route {
-        AdminMonitoringRoute::AuditLogs => Ok(Some(attach_admin_audit_response(
-            build_admin_monitoring_audit_logs_response(state, request_context).await?,
-            "admin_monitoring_audit_logs_viewed",
-            "view_admin_audit_logs",
-            "audit_log",
-            &admin_monitoring_audit_target_id(request_context),
-        ))),
         AdminMonitoringRoute::ResilienceStatus => Ok(Some(
             build_admin_monitoring_resilience_status_response(state).await?,
         )),
@@ -127,20 +116,6 @@ pub(crate) async fn maybe_build_local_admin_monitoring_response(
         AdminMonitoringRoute::SystemStatus => Ok(Some(
             build_admin_monitoring_system_status_response(state).await?,
         )),
-        AdminMonitoringRoute::SuspiciousActivities => Ok(Some(attach_admin_audit_response(
-            build_admin_monitoring_suspicious_activities_response(state, request_context).await?,
-            "admin_monitoring_suspicious_activities_viewed",
-            "view_suspicious_activities",
-            "suspicious_activity",
-            &admin_monitoring_audit_target_id(request_context),
-        ))),
-        AdminMonitoringRoute::UserBehavior => Ok(Some(attach_admin_audit_response(
-            build_admin_monitoring_user_behavior_response(state, request_context).await?,
-            "admin_monitoring_user_behavior_viewed",
-            "view_user_behavior",
-            "user",
-            &admin_monitoring_audit_target_id(request_context),
-        ))),
         AdminMonitoringRoute::TraceRequest => Ok(Some(attach_admin_audit_response(
             build_admin_monitoring_trace_request_response(state, request_context).await?,
             "admin_monitoring_request_trace_viewed",

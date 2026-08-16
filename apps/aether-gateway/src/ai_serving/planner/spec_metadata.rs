@@ -6,7 +6,6 @@ use crate::ai_serving::AiExecutionDecision;
 use crate::GatewayError;
 
 pub(crate) use aether_ai_serving::{
-    ai_gemini_files_spec_metadata as local_gemini_files_spec_metadata,
     ai_openai_image_spec_metadata as local_openai_image_spec_metadata,
     ai_openai_responses_spec_metadata as local_openai_responses_spec_metadata,
     ai_requested_model_family_for_same_format_provider as requested_model_family_for_same_format_provider,

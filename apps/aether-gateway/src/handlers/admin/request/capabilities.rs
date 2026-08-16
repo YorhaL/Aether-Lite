@@ -60,14 +60,6 @@ impl<'a> AdminAppState<'a> {
         self.app.has_usage_data_reader()
     }
 
-    pub(crate) fn has_gemini_file_mapping_data_reader(&self) -> bool {
-        self.app.has_gemini_file_mapping_data_reader()
-    }
-
-    pub(crate) fn has_gemini_file_mapping_data_writer(&self) -> bool {
-        self.app.has_gemini_file_mapping_data_writer()
-    }
-
     pub(crate) fn has_background_task_data_reader(&self) -> bool {
         self.app.has_background_task_data_reader()
     }

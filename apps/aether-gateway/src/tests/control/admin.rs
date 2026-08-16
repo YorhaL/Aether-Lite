@@ -1,7 +1,6 @@
 mod adaptive;
 mod api_keys;
 mod endpoints;
-mod gemini_files;
 mod health_access;
 mod ldap;
 mod models;

@@ -695,14 +695,8 @@
           </div>
 
           <div>
-            <div class="mb-2 flex items-center justify-between gap-3">
+            <div class="mb-2 flex items-center gap-3">
               <span class="text-xs font-medium text-muted-foreground">错误分类</span>
-              <RouterLink
-                to="/admin/audit-logs"
-                class="text-xs font-medium text-primary hover:underline"
-              >
-                审计
-              </RouterLink>
             </div>
             <div class="h-[154px]">
               <DoughnutChart
@@ -2041,7 +2035,6 @@ const opsLinks = [
   { label: '健康监控', to: '/admin/health-monitor', icon: ShieldCheck },
   { label: '使用记录', to: '/admin/usage', icon: ListChecks },
   { label: '缓存监控', to: '/admin/cache-monitoring', icon: Database },
-  { label: '审计日志', to: '/admin/audit-logs', icon: AlertTriangle },
   { label: '异步任务', to: '/admin/async-tasks', icon: RefreshCw },
 ]
 

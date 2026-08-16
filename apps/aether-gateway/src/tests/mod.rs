@@ -14,7 +14,6 @@ mod async_task;
 mod audit;
 mod concurrency;
 mod control;
-mod files;
 mod frontdoor;
 mod usage;
 mod video;

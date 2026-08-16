@@ -6,7 +6,6 @@ use aether_scheduler_core::{execution_error_details, SchedulerRequestCandidateSt
 use tracing::{debug, warn};
 
 use crate::clock::current_unix_ms;
-use crate::orchestration::{apply_local_report_effect, LocalReportEffect};
 use crate::request_candidate_runtime::record_report_request_candidate_status;
 use crate::task_runtime::{spawn_fire_and_forget, TASK_KEY_USAGE_SYNC_REPORT};
 use crate::{AppState, GatewayError};
@@ -250,7 +249,6 @@ async fn handle_local_sync_report(state: &AppState, payload: &GatewaySyncReportR
         },
     )
     .await;
-    apply_local_report_effect(state, LocalReportEffect::Sync { payload }).await;
 }
 
 async fn handle_local_stream_report(state: &AppState, payload: &GatewayStreamReportRequest) {
@@ -299,5 +297,4 @@ async fn handle_local_stream_report(state: &AppState, payload: &GatewayStreamRep
         },
     )
     .await;
-    apply_local_report_effect(state, LocalReportEffect::Stream { payload }).await;
 }

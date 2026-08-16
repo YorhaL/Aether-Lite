@@ -1,8 +1,3 @@
-pub const GEMINI_FILES_GET_PLAN_KIND: &str = "gemini_files_get";
-pub const GEMINI_FILES_UPLOAD_PLAN_KIND: &str = "gemini_files_upload";
-pub const GEMINI_FILES_LIST_PLAN_KIND: &str = "gemini_files_list";
-pub const GEMINI_FILES_DELETE_PLAN_KIND: &str = "gemini_files_delete";
-pub const GEMINI_FILES_DOWNLOAD_PLAN_KIND: &str = "gemini_files_download";
 pub const OPENAI_IMAGE_STREAM_PLAN_KIND: &str = "openai_image_stream";
 pub const OPENAI_IMAGE_SYNC_PLAN_KIND: &str = "openai_image_sync";
 pub const OPENAI_VIDEO_CONTENT_PLAN_KIND: &str = "openai_video_content";

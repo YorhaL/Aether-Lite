@@ -411,8 +411,6 @@ impl GatewayDataState {
                 billing_reader: None,
                 background_task_reader: None,
                 background_task_writer: None,
-                gemini_file_mapping_reader: None,
-                gemini_file_mapping_writer: None,
                 global_model_reader: None,
                 global_model_writer: None,
                 minimal_candidate_selection_reader: None,
@@ -456,7 +454,6 @@ impl GatewayDataState {
         let billing_reader = backends.read().billing();
         let background_task_reader = backends.read().background_tasks();
         let background_task_writer = backends.write().background_tasks();
-        let gemini_file_mapping_reader = backends.read().gemini_file_mappings();
         let global_model_reader = backends.read().global_models();
         let global_model_writer = backends.write().global_models();
         let minimal_candidate_selection_reader =
@@ -478,7 +475,6 @@ impl GatewayDataState {
             ) as Arc<dyn RequestCandidateReadRepository>
         });
         let request_candidate_writer = backends.write().request_candidates();
-        let gemini_file_mapping_writer = backends.write().gemini_file_mappings();
         let provider_catalog_reader = backends.read().provider_catalog().map(|repository| {
             Arc::new(
                 super::provider_catalog_cache::CachedProviderCatalogReadRepository::new(repository),
@@ -517,8 +513,6 @@ impl GatewayDataState {
             billing_reader,
             background_task_reader,
             background_task_writer,
-            gemini_file_mapping_reader,
-            gemini_file_mapping_writer,
             global_model_reader,
             global_model_writer,
             minimal_candidate_selection_reader,
@@ -608,27 +602,12 @@ impl GatewayDataState {
         self.background_task_writer.is_some()
     }
 
-    pub(crate) fn has_audit_log_reader(&self) -> bool {
-        self.backends
-            .as_ref()
-            .and_then(|backends| backends.read().audit_logs())
-            .is_some()
-    }
-
     pub(crate) fn has_management_token_reader(&self) -> bool {
         self.management_token_reader.is_some()
     }
 
     pub(crate) fn has_management_token_writer(&self) -> bool {
         self.management_token_writer.is_some()
-    }
-
-    pub(crate) fn has_gemini_file_mapping_reader(&self) -> bool {
-        self.gemini_file_mapping_reader.is_some()
-    }
-
-    pub(crate) fn has_gemini_file_mapping_writer(&self) -> bool {
-        self.gemini_file_mapping_writer.is_some()
     }
 
     pub(crate) fn has_global_model_reader(&self) -> bool {

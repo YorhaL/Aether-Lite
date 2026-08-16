@@ -110,10 +110,6 @@ pub(crate) async fn maybe_build_local_ai_public_response(
     request_context: &GatewayPublicRequestContext,
     request_body: Option<&Bytes>,
 ) -> Option<Response<Body>> {
-    if let Some(response) = maybe_build_local_ai_public_route_guard_response(request_context) {
-        return Some(response);
-    }
-
     let decision = request_context.control_decision.as_ref()?;
     if decision.route_class.as_deref() != Some("ai_public") {
         return None;
@@ -819,21 +815,6 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack
         .windows(needle.len())
         .position(|window| window == needle)
-}
-
-fn maybe_build_local_ai_public_route_guard_response(
-    request_context: &GatewayPublicRequestContext,
-) -> Option<Response<Body>> {
-    if request_context.request_path == "/upload/v1beta/files"
-        && request_context.request_method != http::Method::POST
-    {
-        return Some(build_ai_public_error_response(
-            http::StatusCode::METHOD_NOT_ALLOWED,
-            AI_PUBLIC_METHOD_NOT_ALLOWED_DETAIL,
-        ));
-    }
-
-    None
 }
 
 fn maybe_build_local_claude_count_tokens_validation_response(

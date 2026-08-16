@@ -227,25 +227,6 @@ fn classifies_dashboard_stats_as_public_support_route() {
 }
 
 #[test]
-fn classifies_user_monitoring_audit_logs_as_public_support_route() {
-    let headers = headers(&[]);
-    let uri: Uri = "/api/monitoring/my-audit-logs"
-        .parse()
-        .expect("uri should parse");
-    let decision =
-        classify_control_route(&http::Method::GET, &uri, &headers).expect("route should classify");
-
-    assert_eq!(decision.route_class.as_deref(), Some("public_support"));
-    assert_eq!(decision.route_family.as_deref(), Some("monitoring_user"));
-    assert_eq!(decision.route_kind.as_deref(), Some("audit_logs"));
-    assert_eq!(
-        decision.auth_endpoint_signature.as_deref(),
-        Some("user:monitoring")
-    );
-    assert!(!decision.is_execution_runtime_candidate());
-}
-
-#[test]
 fn classifies_announcement_unread_count_as_public_support_route() {
     let headers = headers(&[]);
     let uri: Uri = "/api/announcements/users/me/unread-count"

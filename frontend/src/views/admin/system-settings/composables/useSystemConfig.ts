@@ -45,7 +45,6 @@ export interface SystemConfig extends SystemAdmissionPolicyConfig {
   header_retention_days: number
   log_retention_days: number
   cleanup_batch_size: number
-  audit_log_retention_days: number
   request_candidates_retention_days: number
   request_candidates_cleanup_batch_size: number
 }
@@ -85,7 +84,6 @@ const CONFIG_KEYS = [
   'header_retention_days',
   'log_retention_days',
   'cleanup_batch_size',
-  'audit_log_retention_days',
   'request_candidates_retention_days',
   'request_candidates_cleanup_batch_size',
 ]
@@ -127,7 +125,6 @@ function createDefaultConfig(): SystemConfig {
     header_retention_days: 90,
     log_retention_days: 365,
     cleanup_batch_size: 1000,
-    audit_log_retention_days: 30,
     request_candidates_retention_days: 30,
     request_candidates_cleanup_batch_size: 5000,
   }
@@ -218,8 +215,6 @@ export function useSystemConfig() {
       systemConfig.value.header_retention_days !== originalConfig.value.header_retention_days ||
       systemConfig.value.log_retention_days !== originalConfig.value.log_retention_days ||
       systemConfig.value.cleanup_batch_size !== originalConfig.value.cleanup_batch_size ||
-      systemConfig.value.audit_log_retention_days !==
-      originalConfig.value.audit_log_retention_days ||
       systemConfig.value.request_candidates_retention_days !==
       originalConfig.value.request_candidates_retention_days ||
       systemConfig.value.request_candidates_cleanup_batch_size !==
@@ -563,11 +558,6 @@ export function useSystemConfig() {
           description: '每批次清理的记录数',
         },
         {
-          key: 'audit_log_retention_days',
-          value: systemConfig.value.audit_log_retention_days,
-          description: '审计日志保留天数',
-        },
-        {
           key: 'request_candidates_retention_days',
           value: systemConfig.value.request_candidates_retention_days,
           description: '请求候选记录保留天数',
@@ -592,8 +582,6 @@ export function useSystemConfig() {
         originalConfig.value.header_retention_days = systemConfig.value.header_retention_days
         originalConfig.value.log_retention_days = systemConfig.value.log_retention_days
         originalConfig.value.cleanup_batch_size = systemConfig.value.cleanup_batch_size
-        originalConfig.value.audit_log_retention_days =
-          systemConfig.value.audit_log_retention_days
         originalConfig.value.request_candidates_retention_days =
           systemConfig.value.request_candidates_retention_days
         originalConfig.value.request_candidates_cleanup_batch_size =

@@ -38,7 +38,6 @@ const STAGES: &[&str] = &[
     "stream_path_step_openai_responses",
     "stream_path_step_standard_family",
     "stream_path_step_same_format_provider",
-    "stream_path_step_gemini_files",
     "stream_path_step_remote_decision",
     "stream_candidate_next",
     "stream_candidate_source_next",

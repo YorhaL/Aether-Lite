@@ -242,16 +242,6 @@ pub(super) fn classify_admin_system_family_route(
             false,
         ))
     } else if method == http::Method::POST
-        && normalized_path == "/api/admin/system/purge/audit-logs"
-    {
-        Some(classified(
-            "admin_proxy",
-            "system_manage",
-            "purge_audit_logs",
-            "admin:system",
-            false,
-        ))
-    } else if method == http::Method::POST
         && normalized_path == "/api/admin/system/purge/request-bodies"
     {
         Some(classified(

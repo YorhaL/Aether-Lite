@@ -3,25 +3,6 @@ use http::Uri;
 use super::{classify_control_route, headers};
 
 #[test]
-fn classifies_admin_monitoring_audit_logs_as_admin_proxy_route() {
-    let headers = headers(&[]);
-    let uri: Uri = "/api/admin/monitoring/audit-logs"
-        .parse()
-        .expect("uri should parse");
-    let decision =
-        classify_control_route(&http::Method::GET, &uri, &headers).expect("route should classify");
-
-    assert_eq!(decision.route_class.as_deref(), Some("admin_proxy"));
-    assert_eq!(decision.route_family.as_deref(), Some("monitoring"));
-    assert_eq!(decision.route_kind.as_deref(), Some("audit_logs"));
-    assert_eq!(
-        decision.auth_endpoint_signature.as_deref(),
-        Some("admin:monitoring")
-    );
-    assert!(!decision.is_execution_runtime_candidate());
-}
-
-#[test]
 fn classifies_admin_monitoring_trace_request_as_admin_proxy_route() {
     let headers = headers(&[]);
     let uri: Uri = "/api/admin/monitoring/trace/request-1"
@@ -362,25 +343,6 @@ fn classifies_admin_monitoring_resilience_error_stats_as_admin_proxy_route() {
         decision.route_kind.as_deref(),
         Some("monitoring_resilience")
     );
-    assert_eq!(
-        decision.auth_endpoint_signature.as_deref(),
-        Some("admin:monitoring")
-    );
-    assert!(!decision.is_execution_runtime_candidate());
-}
-
-#[test]
-fn classifies_admin_monitoring_user_behavior_as_admin_proxy_route() {
-    let headers = headers(&[]);
-    let uri: Uri = "/api/admin/monitoring/user-behavior/user-1"
-        .parse()
-        .expect("uri should parse");
-    let decision =
-        classify_control_route(&http::Method::GET, &uri, &headers).expect("route should classify");
-
-    assert_eq!(decision.route_class.as_deref(), Some("admin_proxy"));
-    assert_eq!(decision.route_family.as_deref(), Some("monitoring"));
-    assert_eq!(decision.route_kind.as_deref(), Some("user_behavior"));
     assert_eq!(
         decision.auth_endpoint_signature.as_deref(),
         Some("admin:monitoring")

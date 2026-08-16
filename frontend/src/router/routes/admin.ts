@@ -144,11 +144,6 @@ export const adminRoutes: RouteRecordRaw[] = [
         meta: { module: 'oauth' }
       },
       {
-        path: 'audit-logs',
-        name: 'AuditLogs',
-        component: view(() => import('@/views/admin/AuditLogs.vue'))
-      },
-      {
         path: 'cache-monitoring',
         name: 'CacheMonitoring',
         component: view(() => import('@/views/admin/CacheMonitoring.vue'))
@@ -167,11 +162,6 @@ export const adminRoutes: RouteRecordRaw[] = [
         path: 'async-tasks',
         name: 'AsyncTasks',
         component: view(() => import('@/views/admin/AsyncTasks.vue'))
-      },
-      {
-        path: 'gemini-files',
-        name: 'GeminiFilesManagement',
-        component: view(() => import('@/views/admin/GeminiFilesManagement.vue'))
       },
       {
         path: 'video-tasks',

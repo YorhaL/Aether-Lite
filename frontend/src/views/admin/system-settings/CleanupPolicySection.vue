@@ -144,26 +144,6 @@
 
       <div>
         <Label
-          for="audit-log-retention-days"
-          class="block text-sm font-medium"
-        >
-          审计日志保留天数
-        </Label>
-        <Input
-          id="audit-log-retention-days"
-          :model-value="auditLogRetentionDays"
-          type="number"
-          placeholder="30"
-          class="mt-1"
-          @update:model-value="$emit('update:auditLogRetentionDays', Number($event))"
-        />
-        <p class="mt-1 text-xs text-muted-foreground">
-          超过后删除审计日志记录
-        </p>
-      </div>
-
-      <div>
-        <Label
           for="request-candidates-retention-days"
           class="block text-sm font-medium"
         >
@@ -214,7 +194,6 @@
         <p>3. <strong>统计阶段</strong>: 仅保留 tokens、成本等统计信息</p>
         <p>4. <strong>归档删除</strong>: 超过保留期限后完全删除记录</p>
         <p>5. <strong>候选记录</strong>: 独立按保留天数清理 request_candidates 审计记录，不再跟随 Key 删除联动</p>
-        <p>6. <strong>审计日志</strong>: 独立清理，记录用户登录、操作等安全事件</p>
       </div>
     </div>
 
@@ -352,7 +331,6 @@ defineProps<{
   headerRetentionDays: number
   logRetentionDays: number
   cleanupBatchSize: number
-  auditLogRetentionDays: number
   requestCandidatesRetentionDays: number
   requestCandidatesCleanupBatchSize: number
   loading: boolean
@@ -367,7 +345,6 @@ defineEmits<{
   'update:headerRetentionDays': [value: number]
   'update:logRetentionDays': [value: number]
   'update:cleanupBatchSize': [value: number]
-  'update:auditLogRetentionDays': [value: number]
   'update:requestCandidatesRetentionDays': [value: number]
   'update:requestCandidatesCleanupBatchSize': [value: number]
 }>()
@@ -413,13 +390,11 @@ async function loadCleanupRuns() {
 function cleanupKindLabel(kind: string): string {
   const labels: Record<string, string> = {
     usage_cleanup: '请求记录',
-    audit_cleanup: '审计日志',
     request_candidate_cleanup: '候选记录',
     request_bodies: '请求体',
     config_purge: '配置清空',
     users_purge: '用户清空',
     usage_purge: '使用记录清空',
-    audit_logs_purge: '审计日志清空',
     stats_purge: '统计聚合清空',
     system_cleanup: '系统清理',
   }
@@ -467,7 +442,6 @@ function summaryLabel(key: string): string {
     header_cleaned: '清头',
     keys_cleaned: 'Key',
     records_deleted: '删记录',
-    audit_logs_deleted: '删日志',
     request_candidates_deleted: '删候选',
   }
   return labels[key] || key

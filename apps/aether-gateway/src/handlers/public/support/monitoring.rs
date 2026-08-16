@@ -5,12 +5,9 @@ pub(super) use super::{
     resolve_authenticated_local_user, AppState, GatewayPublicRequestContext,
 };
 
-#[path = "monitoring/audit_logs.rs"]
-mod user_monitoring_audit_logs;
 #[path = "monitoring/rate_limit_status.rs"]
 mod user_monitoring_rate_limit_status;
 
-use self::user_monitoring_audit_logs::handle_user_audit_logs;
 use self::user_monitoring_rate_limit_status::handle_user_rate_limit_status;
 
 pub(super) async fn maybe_build_local_user_monitoring_response(
@@ -24,12 +21,6 @@ pub(super) async fn maybe_build_local_user_monitoring_response(
     }
 
     match decision.route_kind.as_deref() {
-        Some("audit_logs")
-            if request_context.request_method == http::Method::GET
-                && request_context.request_path == "/api/monitoring/my-audit-logs" =>
-        {
-            Some(handle_user_audit_logs(state, request_context, headers).await)
-        }
         Some("rate_limit_status")
             if request_context.request_method == http::Method::GET
                 && request_context.request_path == "/api/monitoring/rate-limit-status" =>
@@ -72,8 +63,8 @@ mod tests {
         let state = AppState::new().expect("gateway should build");
         let request_context = request_context(
             Method::GET,
-            "/api/monitoring/my-audit-logs/history",
-            "audit_logs",
+            "/api/monitoring/rate-limit-status/history",
+            "rate_limit_status",
         );
         let response =
             maybe_build_local_user_monitoring_response(&state, &request_context, &HeaderMap::new())
@@ -88,10 +79,10 @@ mod tests {
             serde_json::from_slice(&body).expect("json body should parse");
         assert_eq!(payload["detail"], "Route not found");
         assert_eq!(payload["route_family"], "monitoring_user");
-        assert_eq!(payload["route_kind"], "audit_logs");
+        assert_eq!(payload["route_kind"], "rate_limit_status");
         assert_eq!(
             payload["request_path"],
-            "/api/monitoring/my-audit-logs/history"
+            "/api/monitoring/rate-limit-status/history"
         );
     }
 }

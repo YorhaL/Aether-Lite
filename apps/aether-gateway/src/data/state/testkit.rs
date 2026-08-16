@@ -56,8 +56,6 @@ impl GatewayDataState {
             billing_reader: None,
             background_task_reader: None,
             background_task_writer: None,
-            gemini_file_mapping_reader: None,
-            gemini_file_mapping_writer: None,
             global_model_reader: None,
             global_model_writer: None,
             minimal_candidate_selection_reader: Some(candidate_selection_repository),

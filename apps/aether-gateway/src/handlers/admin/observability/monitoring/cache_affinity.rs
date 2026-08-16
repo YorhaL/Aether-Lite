@@ -112,7 +112,6 @@ fn is_known_admin_monitoring_api_format(value: &str) -> bool {
             | "claude:messages"
             | "gemini:generate_content"
             | "gemini:video"
-            | "gemini:files"
             | "gemini:embedding"
             | "jina:embedding"
             | "jina:rerank"

@@ -108,18 +108,6 @@ pub(crate) const ADMIN_MODULE_DEFINITIONS: &[AdminModuleDefinition] = &[
         admin_menu_group: None,
         admin_menu_order: 60,
     },
-    AdminModuleDefinition {
-        name: "gemini_files",
-        display_name: "文件缓存",
-        description: "管理 Gemini Files API 上传的文件，支持文件上传、查看和删除",
-        category: "integration",
-        env_key: "GEMINI_FILES_AVAILABLE",
-        default_available: true,
-        admin_route: Some("/admin/gemini-files"),
-        admin_menu_icon: Some("FileUp"),
-        admin_menu_group: Some("system"),
-        admin_menu_order: 60,
-    },
 ];
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -130,7 +118,6 @@ pub(crate) struct AdminSetModuleEnabledRequest {
 pub(crate) struct AdminModuleRuntimeState {
     oauth_providers: Vec<aether_data::repository::auth_modules::StoredOAuthProviderModuleConfig>,
     ldap_config: Option<aether_data::repository::auth_modules::StoredLdapModuleConfig>,
-    gemini_files_has_capable_key: bool,
     important_notification_configured: bool,
     s3_backup_configured: bool,
 }
@@ -193,41 +180,12 @@ pub(crate) async fn build_admin_module_runtime_state(
     let oauth_providers = state.list_enabled_oauth_module_providers().await?;
     let ldap_config = state.get_ldap_module_config().await?;
 
-    let provider_ids = state
-        .list_provider_catalog_providers(false)
-        .await
-        .ok()
-        .unwrap_or_default()
-        .into_iter()
-        .map(|provider| provider.id)
-        .collect::<Vec<_>>();
-    let gemini_files_has_capable_key = if provider_ids.is_empty() {
-        false
-    } else {
-        state
-            .list_provider_catalog_key_summaries_by_provider_ids(&provider_ids)
-            .await
-            .ok()
-            .unwrap_or_default()
-            .into_iter()
-            .any(|key| {
-                key.is_active
-                    && key
-                        .capabilities
-                        .as_ref()
-                        .and_then(|value| value.get("gemini_files"))
-                        .and_then(serde_json::Value::as_bool)
-                        == Some(true)
-            })
-    };
-
     let notification_configured = important_notification_configured(state.app()).await?;
     let backup_configured = s3_backup_configured(state.app()).await;
 
     Ok(AdminModuleRuntimeState {
         oauth_providers,
         ldap_config,
-        gemini_files_has_capable_key,
         important_notification_configured: notification_configured,
         s3_backup_configured: backup_configured,
     })
@@ -253,21 +211,14 @@ pub(crate) fn build_admin_module_validation_result(
             module_name: module.name,
             oauth_providers: &runtime.oauth_providers,
             ldap_config: runtime.ldap_config.as_ref(),
-            gemini_files_has_capable_key: runtime.gemini_files_has_capable_key,
             important_notification_configured: runtime.important_notification_configured,
             s3_backup_configured: runtime.s3_backup_configured,
         },
     )
 }
 
-pub(crate) fn build_admin_module_health(
-    module: &AdminModuleDefinition,
-    runtime: &AdminModuleRuntimeState,
-) -> &'static str {
-    admin_system_kernel::build_admin_module_health(
-        module.name,
-        runtime.gemini_files_has_capable_key,
-    )
+pub(crate) fn build_admin_module_health(module: &AdminModuleDefinition) -> &'static str {
+    admin_system_kernel::build_admin_module_health(module.name)
 }
 
 pub(crate) async fn build_admin_module_status_payload(
@@ -297,7 +248,7 @@ pub(crate) async fn build_admin_module_status_payload(
         (false, None)
     };
     let health = if available {
-        build_admin_module_health(module, runtime)
+        build_admin_module_health(module)
     } else {
         "unknown"
     };

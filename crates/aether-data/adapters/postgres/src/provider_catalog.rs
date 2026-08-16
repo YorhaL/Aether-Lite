@@ -1004,11 +1004,6 @@ WHERE id = $1
         }
 
         for key_id in key_ids {
-            sqlx::query("DELETE FROM gemini_file_mappings WHERE key_id = $1")
-                .bind(key_id)
-                .execute(&mut *tx)
-                .await
-                .map_postgres_err()?;
             sqlx::query("UPDATE video_tasks SET key_id = NULL WHERE key_id = $1")
                 .bind(key_id)
                 .execute(&mut *tx)

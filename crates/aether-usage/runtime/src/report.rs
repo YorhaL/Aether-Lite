@@ -6,8 +6,6 @@ use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const GEMINI_FILE_MAPPING_TTL_SECONDS: u64 = 60 * 60 * 48;
-const GEMINI_FILE_MAPPING_CACHE_PREFIX: &str = "gemini_files:key";
 pub const STREAM_MISSING_TERMINAL_EVENT_CATEGORY: &str = "stream_missing_terminal_event";
 pub const STREAM_TERMINAL_ERROR_CATEGORY: &str = "stream_terminal_error";
 pub const STREAM_MISSING_TERMINAL_EVENT_MESSAGE: &str =
@@ -67,13 +65,6 @@ pub struct InternalFinalizeRoute {
     pub public_path: &'static str,
     pub route_family: &'static str,
     pub route_kind: &'static str,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GeminiFileMappingEntry {
-    pub file_name: String,
-    pub display_name: Option<String>,
-    pub mime_type: Option<String>,
 }
 
 pub fn infer_internal_finalize_signature(payload: &GatewaySyncReportRequest) -> Option<String> {
@@ -187,50 +178,6 @@ pub fn resolve_internal_finalize_route(signature: &str) -> Option<InternalFinali
     }
 }
 
-pub fn normalize_gemini_file_name(file_name: &str) -> Option<String> {
-    let file_name = file_name.trim();
-    if file_name.is_empty() {
-        return None;
-    }
-    if file_name.starts_with("files/") {
-        Some(file_name.to_string())
-    } else {
-        Some(format!("files/{file_name}"))
-    }
-}
-
-pub fn gemini_file_mapping_cache_key(file_name: &str) -> String {
-    format!("{GEMINI_FILE_MAPPING_CACHE_PREFIX}:{file_name}")
-}
-
-pub fn extract_gemini_file_mapping_entries(
-    payload: &GatewaySyncReportRequest,
-) -> Vec<GeminiFileMappingEntry> {
-    let Some(body) = extract_sync_report_body_json(payload) else {
-        return Vec::new();
-    };
-    let Some(object) = body.as_object() else {
-        return Vec::new();
-    };
-
-    let mut entries = Vec::new();
-    maybe_push_gemini_file_mapping_entry(&mut entries, object);
-
-    if let Some(file_object) = object.get("file").and_then(Value::as_object) {
-        maybe_push_gemini_file_mapping_entry(&mut entries, file_object);
-    }
-
-    if let Some(files) = object.get("files").and_then(Value::as_array) {
-        for item in files {
-            if let Some(file_object) = item.as_object() {
-                maybe_push_gemini_file_mapping_entry(&mut entries, file_object);
-            }
-        }
-    }
-
-    entries
-}
-
 pub fn report_request_id(report_context: Option<&serde_json::Value>) -> &str {
     report_context
         .and_then(|context| context.get("request_id"))
@@ -277,8 +224,6 @@ pub fn is_local_ai_sync_report_kind(report_kind: &str) -> bool {
             | "openai_video_delete_sync_error"
             | "openai_video_cancel_sync_error"
             | "gemini_video_cancel_sync_error"
-            | "gemini_files_store_mapping"
-            | "gemini_files_delete_mapping"
     )
 }
 
@@ -742,67 +687,6 @@ pub fn should_handle_local_stream_report(
         && is_local_ai_stream_report_kind(report_kind)
 }
 
-fn maybe_push_gemini_file_mapping_entry(
-    entries: &mut Vec<GeminiFileMappingEntry>,
-    object: &serde_json::Map<String, Value>,
-) {
-    let file_name = object
-        .get("name")
-        .and_then(Value::as_str)
-        .and_then(normalize_gemini_file_name);
-    let Some(file_name) = file_name else {
-        return;
-    };
-
-    if entries.iter().any(|entry| entry.file_name == file_name) {
-        return;
-    }
-
-    entries.push(GeminiFileMappingEntry {
-        file_name,
-        display_name: object
-            .get("displayName")
-            .or_else(|| object.get("display_name"))
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned),
-        mime_type: object
-            .get("mimeType")
-            .or_else(|| object.get("mime_type"))
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned),
-    });
-}
-
-fn extract_sync_report_body_json(payload: &GatewaySyncReportRequest) -> Option<Value> {
-    if let Some(body_json) = payload.body_json.as_ref() {
-        return Some(body_json.clone());
-    }
-    if let Some(client_body_json) = payload.client_body_json.as_ref() {
-        return Some(client_body_json.clone());
-    }
-    if !content_type_starts_with(&payload.headers, "application/json") {
-        return None;
-    }
-
-    let body_base64 = payload.body_base64.as_deref()?;
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(body_base64)
-        .ok()?;
-    serde_json::from_slice(&bytes).ok()
-}
-
-fn content_type_starts_with(headers: &BTreeMap<String, String>, expected_prefix: &str) -> bool {
-    headers
-        .iter()
-        .find(|(key, _)| key.eq_ignore_ascii_case("content-type"))
-        .map(|(_, value)| value.trim().to_ascii_lowercase())
-        .is_some_and(|value| value.starts_with(expected_prefix))
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -813,13 +697,11 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        extract_gemini_file_mapping_entries, gemini_file_mapping_cache_key,
         infer_internal_finalize_signature, is_local_ai_stream_report_kind,
-        is_local_ai_sync_report_kind, normalize_gemini_file_name, report_request_id,
-        resolve_internal_finalize_route, should_handle_local_stream_report,
-        should_handle_local_sync_report, stream_report_represents_failure,
-        sync_report_represents_failure, GatewayStreamReportRequest, GatewaySyncReportRequest,
-        GeminiFileMappingEntry, InternalFinalizeRoute,
+        is_local_ai_sync_report_kind, report_request_id, resolve_internal_finalize_route,
+        should_handle_local_stream_report, should_handle_local_sync_report,
+        stream_report_represents_failure, sync_report_represents_failure,
+        GatewayStreamReportRequest, GatewaySyncReportRequest, InternalFinalizeRoute,
     };
 
     fn sample_sync_report(report_kind: &str, status_code: u16) -> GatewaySyncReportRequest {
@@ -890,7 +772,6 @@ mod tests {
         assert!(is_local_ai_sync_report_kind(
             "gemini_embedding_sync_success"
         ));
-        assert!(is_local_ai_sync_report_kind("gemini_files_delete_mapping"));
         assert!(!is_local_ai_sync_report_kind("unknown_sync_kind"));
     }
 
@@ -1139,109 +1020,6 @@ mod tests {
             })
         );
         assert_eq!(resolve_internal_finalize_route("unknown:kind"), None);
-    }
-
-    #[test]
-    fn normalizes_gemini_file_names() {
-        assert_eq!(
-            normalize_gemini_file_name("abc123"),
-            Some("files/abc123".to_string())
-        );
-        assert_eq!(
-            normalize_gemini_file_name("files/abc123"),
-            Some("files/abc123".to_string())
-        );
-        assert_eq!(normalize_gemini_file_name("   "), None);
-    }
-
-    #[test]
-    fn builds_gemini_file_mapping_cache_keys() {
-        assert_eq!(
-            gemini_file_mapping_cache_key("files/abc123"),
-            "gemini_files:key:files/abc123"
-        );
-    }
-
-    #[test]
-    fn extracts_gemini_file_mapping_entries_from_supported_shapes() {
-        let payload = GatewaySyncReportRequest {
-            trace_id: "trace-123".to_string(),
-            report_kind: "gemini_files_store_mapping".to_string(),
-            report_context: None,
-            status_code: 200,
-            headers: BTreeMap::new(),
-            body_json: Some(json!({
-                "name": "abc123",
-                "displayName": "root-name",
-                "file": {
-                    "name": "files/def456",
-                    "mimeType": "image/png"
-                },
-                "files": [
-                    {
-                        "name": "abc123",
-                        "display_name": "deduped"
-                    },
-                    {
-                        "name": "ghi789",
-                        "display_name": "third"
-                    }
-                ]
-            })),
-            client_body_json: None,
-            body_base64: None,
-            telemetry: None,
-        };
-
-        let entries = extract_gemini_file_mapping_entries(&payload);
-        assert_eq!(
-            entries,
-            vec![
-                GeminiFileMappingEntry {
-                    file_name: "files/abc123".to_string(),
-                    display_name: Some("root-name".to_string()),
-                    mime_type: None,
-                },
-                GeminiFileMappingEntry {
-                    file_name: "files/def456".to_string(),
-                    display_name: None,
-                    mime_type: Some("image/png".to_string()),
-                },
-                GeminiFileMappingEntry {
-                    file_name: "files/ghi789".to_string(),
-                    display_name: Some("third".to_string()),
-                    mime_type: None,
-                }
-            ]
-        );
-    }
-
-    #[test]
-    fn extracts_gemini_file_mapping_entries_from_base64_json_body() {
-        let encoded_body = base64::engine::general_purpose::STANDARD.encode(
-            serde_json::to_vec(&json!({
-                "name": "base64-file"
-            }))
-            .expect("json should encode"),
-        );
-        let payload = GatewaySyncReportRequest {
-            trace_id: "trace-123".to_string(),
-            report_kind: "gemini_files_store_mapping".to_string(),
-            report_context: None,
-            status_code: 200,
-            headers: BTreeMap::from([(
-                "content-type".to_string(),
-                "application/json; charset=utf-8".to_string(),
-            )]),
-            body_json: None,
-            client_body_json: None,
-            body_base64: Some(encoded_body),
-            telemetry: None,
-        };
-
-        let entries = extract_gemini_file_mapping_entries(&payload);
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].file_name, "files/base64-file");
     }
 
     #[test]

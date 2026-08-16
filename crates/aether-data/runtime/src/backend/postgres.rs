@@ -7,7 +7,6 @@ use crate::repository::admission::{
 use crate::repository::announcements::{
     AnnouncementReadRepository, AnnouncementWriteRepository, SqlxAnnouncementReadRepository,
 };
-use crate::repository::audit::{AuditLogReadRepository, PostgresAuditLogReadRepository};
 use crate::repository::auth::{
     AuthApiKeyReadRepository, AuthApiKeyWriteRepository, SqlxAuthApiKeySnapshotReadRepository,
 };
@@ -25,10 +24,6 @@ use crate::repository::candidate_selection::{
 use crate::repository::candidates::{
     RequestCandidateReadRepository, RequestCandidateWriteRepository,
     SqlxRequestCandidateReadRepository,
-};
-use crate::repository::gemini_file_mappings::{
-    GeminiFileMappingReadRepository, GeminiFileMappingWriteRepository,
-    SqlxGeminiFileMappingRepository,
 };
 use crate::repository::global_models::{
     GlobalModelReadRepository, GlobalModelWriteRepository, SqlxGlobalModelReadRepository,
@@ -106,10 +101,6 @@ impl PostgresBackend {
         Arc::new(SqlxAnnouncementReadRepository::new(self.pool_clone()))
     }
 
-    pub fn audit_log_read_repository(&self) -> Arc<dyn AuditLogReadRepository> {
-        Arc::new(PostgresAuditLogReadRepository::new(self.pool_clone()))
-    }
-
     pub fn announcement_write_repository(&self) -> Arc<dyn AnnouncementWriteRepository> {
         Arc::new(SqlxAnnouncementReadRepository::new(self.pool_clone()))
     }
@@ -152,16 +143,6 @@ impl PostgresBackend {
 
     pub fn request_candidate_write_repository(&self) -> Arc<dyn RequestCandidateWriteRepository> {
         Arc::new(SqlxRequestCandidateReadRepository::new(self.pool_clone()))
-    }
-
-    pub fn gemini_file_mapping_read_repository(&self) -> Arc<dyn GeminiFileMappingReadRepository> {
-        Arc::new(SqlxGeminiFileMappingRepository::new(self.pool_clone()))
-    }
-
-    pub fn gemini_file_mapping_write_repository(
-        &self,
-    ) -> Arc<dyn GeminiFileMappingWriteRepository> {
-        Arc::new(SqlxGeminiFileMappingRepository::new(self.pool_clone()))
     }
 
     pub fn global_model_read_repository(&self) -> Arc<dyn GlobalModelReadRepository> {

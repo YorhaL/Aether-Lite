@@ -11,7 +11,6 @@ mod effects;
 mod health;
 mod policy;
 mod recovery;
-mod report_effects;
 
 pub(crate) use self::adaptive::{
     project_local_adaptive_rate_limit, project_local_adaptive_success,
@@ -48,11 +47,6 @@ pub(crate) use self::recovery::{
     analyze_local_failover, analyze_local_transport_error, apply_provider_failure_disposition,
     recover_local_failover_decision, LocalFailoverAnalysis, LocalFailoverDecision,
     LocalTransportFailoverAnalysis,
-};
-#[cfg(test)]
-pub(crate) use self::report_effects::clear_local_report_effect_caches_for_tests;
-pub(crate) use self::report_effects::{
-    apply_local_report_effect, store_local_gemini_file_mapping, LocalReportEffect,
 };
 
 pub(crate) async fn resolve_local_failover_analysis_for_attempt(

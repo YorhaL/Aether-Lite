@@ -297,7 +297,6 @@ pub(crate) fn admin_proxy_local_requires_buffered_body(
                 | (Some("users_manage"), http::Method::PATCH, Some("lock_user_api_key"))
                 | (Some("usage_manage"), http::Method::POST, Some("replay"))
                 | (Some("wallets_manage"), http::Method::POST, Some("adjust_balance"))
-                | (Some("gemini_files_manage"), http::Method::POST, Some("upload"))
                 | (Some("ldap_manage"), http::Method::PUT, Some("set_config"))
                 | (Some("ldap_manage"), http::Method::POST, Some("test_connection"))
                 | (Some("global_models_manage"), http::Method::POST, Some("create_global_model"))

@@ -130,7 +130,6 @@ import {
   Layers3,
   Trash2,
   BarChart3,
-  Shield,
   FileText,
   PieChart,
 } from 'lucide-vue-next'
@@ -246,15 +245,6 @@ const purgeItems: PurgeItem[] = [
     icon: markRaw(BarChart3),
     confirmMessage: '确定要后台清空全部使用记录吗？所有请求统计数据将被永久删除，操作不可逆。',
     action: () => adminApi.purgeUsage(),
-  },
-  {
-    key: 'audit-logs',
-    title: '清空审计日志',
-    description: '后台删除全部审计日志记录',
-    buttonText: '清空日志',
-    icon: markRaw(Shield),
-    confirmMessage: '确定要后台清空全部审计日志吗？所有安全事件记录将被永久删除，操作不可逆。',
-    action: () => adminApi.purgeAuditLogs(),
   },
   {
     key: 'request-bodies',

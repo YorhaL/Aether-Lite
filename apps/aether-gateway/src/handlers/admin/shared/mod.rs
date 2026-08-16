@@ -1,9 +1,7 @@
-mod paths;
 mod payloads;
 mod proxy_errors;
 mod usage_counter;
 
-pub(crate) use self::paths::*;
 pub(crate) use self::payloads::*;
 pub(crate) use self::proxy_errors::build_proxy_error_response;
 pub(crate) use self::usage_counter::build_admin_usage_counter_health_payload;

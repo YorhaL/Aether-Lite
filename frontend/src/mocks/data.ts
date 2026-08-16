@@ -1066,21 +1066,6 @@ const MOCK_MODULE_DEFINITIONS: Array<Omit<ModuleStatus, 'active' | 'health'> & {
     admin_menu_group: null,
     admin_menu_order: 60,
   },
-  {
-    name: 'gemini_files',
-    display_name: '文件缓存',
-    description: '管理 Gemini Files API 上传的文件，支持文件上传、查看和删除',
-    category: 'integration',
-    available: true,
-    enabled: false,
-    config_validated: false,
-    config_error: '至少启用一个具有「Gemini 文件 API」能力的 Key',
-    admin_route: '/admin/gemini-files',
-    admin_menu_icon: 'FileUp',
-    admin_menu_group: 'system',
-    admin_menu_order: 60,
-    health: 'degraded',
-  },
 ]
 
 export const MOCK_MODULE_STATUSES: Record<string, ModuleStatus> = Object.fromEntries(

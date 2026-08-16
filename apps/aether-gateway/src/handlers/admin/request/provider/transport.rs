@@ -70,19 +70,6 @@ impl<'a> AdminAppState<'a> {
         )
     }
 
-    pub(crate) fn build_gemini_files_passthrough_url(
-        &self,
-        upstream_base_url: &str,
-        path: &str,
-        query: Option<&str>,
-    ) -> Option<String> {
-        crate::provider_transport::url::build_gemini_files_passthrough_url(
-            upstream_base_url,
-            path,
-            query,
-        )
-    }
-
     pub(crate) fn resolve_transport_profile(
         &self,
         transport: &AdminGatewayProviderTransportSnapshot,

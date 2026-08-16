@@ -1,7 +1,7 @@
 use aether_ai_formats::api::{
-    LocalGeminiFilesSpec, LocalOpenAiImageSpec, LocalOpenAiResponsesSpec,
-    LocalSameFormatProviderFamily, LocalSameFormatProviderSpec, LocalStandardSourceFamily,
-    LocalStandardSpec, LocalVideoCreateFamily, LocalVideoCreateSpec,
+    LocalOpenAiImageSpec, LocalOpenAiResponsesSpec, LocalSameFormatProviderFamily,
+    LocalSameFormatProviderSpec, LocalStandardSourceFamily, LocalStandardSpec,
+    LocalVideoCreateFamily, LocalVideoCreateSpec,
 };
 use serde_json::Value;
 
@@ -60,18 +60,6 @@ pub const fn ai_openai_responses_spec_metadata(
         api_format: spec.api_format,
         decision_kind: spec.decision_kind,
         report_kind: Some(spec.report_kind),
-        require_streaming: spec.require_streaming,
-        requested_model_family: None,
-    }
-}
-
-pub const fn ai_gemini_files_spec_metadata(
-    spec: LocalGeminiFilesSpec,
-) -> AiExecutionSurfaceSpecMetadata {
-    AiExecutionSurfaceSpecMetadata {
-        api_format: "gemini:files",
-        decision_kind: spec.decision_kind,
-        report_kind: spec.report_kind,
         require_streaming: spec.require_streaming,
         requested_model_family: None,
     }

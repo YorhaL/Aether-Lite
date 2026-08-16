@@ -27,14 +27,6 @@ pub(crate) const PUBLIC_CAPABILITY_DEFINITIONS: &[PublicCapabilityDefinition] = 
         match_mode: "compatible",
         config_mode: "request_param",
     },
-    PublicCapabilityDefinition {
-        name: "gemini_files",
-        display_name: "Gemini 文件 API",
-        short_name: "文件API",
-        description: "支持 Gemini Files API（文件上传/管理），仅 Google 官方 API 支持",
-        match_mode: "exclusive",
-        config_mode: "request_param",
-    },
 ];
 
 pub(crate) fn serialize_public_capability(

@@ -18,7 +18,6 @@ mod sqlite;
 
 const ADMIN_CONFIG_PURGE_TABLES: &[&str] = &[
     "api_key_provider_mappings",
-    "gemini_file_mappings",
     "provider_usage_tracking",
     "billing_rules",
     "dimension_collectors",

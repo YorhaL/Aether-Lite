@@ -8,8 +8,6 @@ mod auth;
 mod background_tasks;
 mod billing;
 mod candidate_queries;
-mod gemini_files;
-mod monitoring;
 mod security;
 mod usage_queries;
 mod user_preferences;

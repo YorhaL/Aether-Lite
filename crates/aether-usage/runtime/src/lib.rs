@@ -24,17 +24,15 @@ pub use event::{now_ms, UsageEvent, UsageEventData, UsageEventType, USAGE_EVENT_
 pub use queue::UsageQueue;
 pub use record::build_upsert_usage_record_from_event;
 pub use report::{
-    extract_gemini_file_mapping_entries, gemini_file_mapping_cache_key,
     infer_internal_finalize_signature, is_local_ai_stream_report_kind,
-    is_local_ai_sync_report_kind, normalize_gemini_file_name, report_request_id,
-    resolve_internal_finalize_route, should_handle_local_stream_report,
-    should_handle_local_sync_report, stream_capture_terminal_state,
-    stream_report_missing_terminal_event, stream_report_represents_failure,
-    stream_report_requires_observed_terminal_event, sync_report_represents_failure,
-    GatewayStreamReportRequest, GatewaySyncReportRequest, GeminiFileMappingEntry,
-    InternalFinalizeRoute, StreamCapturedTerminalState, GEMINI_FILE_MAPPING_TTL_SECONDS,
-    STREAM_MISSING_TERMINAL_EVENT_CATEGORY, STREAM_MISSING_TERMINAL_EVENT_MESSAGE,
-    STREAM_TERMINAL_ERROR_CATEGORY, STREAM_TERMINAL_ERROR_MESSAGE,
+    is_local_ai_sync_report_kind, report_request_id, resolve_internal_finalize_route,
+    should_handle_local_stream_report, should_handle_local_sync_report,
+    stream_capture_terminal_state, stream_report_missing_terminal_event,
+    stream_report_represents_failure, stream_report_requires_observed_terminal_event,
+    sync_report_represents_failure, GatewayStreamReportRequest, GatewaySyncReportRequest,
+    InternalFinalizeRoute, StreamCapturedTerminalState, STREAM_MISSING_TERMINAL_EVENT_CATEGORY,
+    STREAM_MISSING_TERMINAL_EVENT_MESSAGE, STREAM_TERMINAL_ERROR_CATEGORY,
+    STREAM_TERMINAL_ERROR_MESSAGE,
 };
 pub use report_context::{
     build_locally_actionable_report_context_from_request_candidate,

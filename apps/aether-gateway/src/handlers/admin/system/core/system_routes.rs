@@ -731,12 +731,6 @@ fn admin_system_purge_task_for_route_kind(
             "usage",
             "all",
         )),
-        Some("purge_audit_logs") => Some((
-            crate::maintenance::AdminCleanupTaskKind::AuditLogs,
-            "purge_audit_logs_async",
-            "audit_logs",
-            "all",
-        )),
         Some("purge_request_bodies") | Some("purge_request_bodies_task") => Some((
             crate::maintenance::AdminCleanupTaskKind::RequestBodies,
             "purge_request_bodies_async",
@@ -760,7 +754,6 @@ async fn build_admin_system_cleanup_payload(
     let started_at = Instant::now();
     let summary = state.run_admin_system_cleanup_once().await?;
     let cleaned = json!({
-        "audit_logs": summary.audit_logs_deleted,
         "request_candidates": summary.request_candidates_deleted,
         "pending_failed": summary.pending_failed,
         "pending_recovered": summary.pending_recovered,
@@ -772,8 +765,7 @@ async fn build_admin_system_cleanup_payload(
         "usage_records_deleted": summary.usage.records_deleted,
     });
     let total = summary
-        .audit_logs_deleted
-        .saturating_add(summary.request_candidates_deleted)
+        .request_candidates_deleted
         .saturating_add(summary.pending_failed)
         .saturating_add(summary.pending_recovered)
         .saturating_add(summary.usage.body_externalized)

@@ -112,9 +112,7 @@ use crate::stage_metrics::{
 };
 use crate::usage::submit_stream_report;
 use crate::usage::{GatewayStreamReportRequest, GatewaySyncReportRequest};
-use crate::{
-    AppState, GatewayError, GEMINI_FILES_DOWNLOAD_PLAN_KIND, OPENAI_VIDEO_CONTENT_PLAN_KIND,
-};
+use crate::{AppState, GatewayError, OPENAI_VIDEO_CONTENT_PLAN_KIND};
 use aether_gateway_frontdoor::short_request_id;
 
 const OPENAI_IMAGE_STREAM_PLAN_KIND: &str = "openai_image_stream";
@@ -449,9 +447,6 @@ fn wrap_non_json_binary_stream_error_for_client(
     }
 
     let body = match plan_kind {
-        GEMINI_FILES_DOWNLOAD_PLAN_KIND => json!({
-            "error": String::from_utf8_lossy(error_body).to_string(),
-        }),
         OPENAI_VIDEO_CONTENT_PLAN_KIND => json!({
             "error": {
                 "type": "upstream_error",

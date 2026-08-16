@@ -15,7 +15,6 @@ export const API_FORMATS = {
   GEMINI_GENERATE_CONTENT: 'gemini:generate_content',
   GEMINI_INTERACTIONS: 'gemini:interactions',
   GEMINI_VIDEO: 'gemini:video',
-  GEMINI_FILES: 'gemini:files',
   GEMINI_EMBEDDING: 'gemini:embedding',
   JINA_EMBEDDING: 'jina:embedding',
   JINA_RERANK: 'jina:rerank',
@@ -39,7 +38,6 @@ export const API_FORMAT_LABELS: Record<string, string> = {
   [API_FORMATS.GEMINI_GENERATE_CONTENT]: 'Gemini Generate Content',
   [API_FORMATS.GEMINI_INTERACTIONS]: 'Gemini Interactions',
   [API_FORMATS.GEMINI_VIDEO]: 'Gemini Video',
-  [API_FORMATS.GEMINI_FILES]: 'Gemini Files',
   [API_FORMATS.GEMINI_EMBEDDING]: 'Gemini Embedding',
   [API_FORMATS.JINA_EMBEDDING]: 'Jina Embedding',
   [API_FORMATS.JINA_RERANK]: 'Jina Rerank',
@@ -59,7 +57,6 @@ export const API_FORMAT_LABELS: Record<string, string> = {
   GEMINI_GENERATE_CONTENT: 'Gemini Generate Content',
   GEMINI_INTERACTIONS: 'Gemini Interactions',
   GEMINI_VIDEO: 'Gemini Video',
-  GEMINI_FILES: 'Gemini Files',
   GEMINI_EMBEDDING: 'Gemini Embedding',
   JINA_EMBEDDING: 'Jina Embedding',
   JINA_RERANK: 'Jina Rerank',
@@ -81,7 +78,6 @@ export const API_FORMAT_SHORT: Record<string, string> = {
   [API_FORMATS.GEMINI_GENERATE_CONTENT]: 'G',
   [API_FORMATS.GEMINI_INTERACTIONS]: 'GI',
   [API_FORMATS.GEMINI_VIDEO]: 'GV',
-  [API_FORMATS.GEMINI_FILES]: 'GF',
   [API_FORMATS.GEMINI_EMBEDDING]: 'GE',
   [API_FORMATS.JINA_EMBEDDING]: 'JE',
   [API_FORMATS.JINA_RERANK]: 'JR',
@@ -101,7 +97,6 @@ export const API_FORMAT_SHORT: Record<string, string> = {
   GEMINI_GENERATE_CONTENT: 'G',
   GEMINI_INTERACTIONS: 'GI',
   GEMINI_VIDEO: 'GV',
-  GEMINI_FILES: 'GF',
   GEMINI_EMBEDDING: 'GE',
   JINA_EMBEDDING: 'JE',
   JINA_RERANK: 'JR',
@@ -124,7 +119,6 @@ export const API_FORMAT_ORDER: string[] = [
   API_FORMATS.GEMINI_INTERACTIONS,
   API_FORMATS.GEMINI_EMBEDDING,
   API_FORMATS.GEMINI_VIDEO,
-  API_FORMATS.GEMINI_FILES,
   API_FORMATS.JINA_EMBEDDING,
   API_FORMATS.JINA_RERANK,
   API_FORMATS.DOUBAO_EMBEDDING,
@@ -152,7 +146,6 @@ export const API_FORMAT_KIND_LABELS: Record<string, string> = {
   interactions: 'Interactions',
   image: 'Image',
   video: 'Video',
-  files: 'Files',
   embedding: 'Embedding',
   rerank: 'Rerank',
 }
@@ -199,8 +192,6 @@ export function normalizeApiFormatAlias(format: string | null | undefined): stri
       return API_FORMATS.GEMINI_INTERACTIONS
     case 'GEMINI_VIDEO':
       return API_FORMATS.GEMINI_VIDEO
-    case 'GEMINI_FILES':
-      return API_FORMATS.GEMINI_FILES
     case 'GEMINI_EMBEDDING':
       return API_FORMATS.GEMINI_EMBEDDING
     case 'JINA_EMBEDDING':

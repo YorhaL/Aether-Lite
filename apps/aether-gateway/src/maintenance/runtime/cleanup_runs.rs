@@ -36,7 +36,6 @@ pub(crate) enum AdminCleanupTaskKind {
     Users,
     RequestBodies,
     Usage,
-    AuditLogs,
     Stats,
 }
 
@@ -47,7 +46,6 @@ impl AdminCleanupTaskKind {
             Self::Users => "users_purge",
             Self::RequestBodies => "request_bodies",
             Self::Usage => "usage_purge",
-            Self::AuditLogs => "audit_logs_purge",
             Self::Stats => "stats_purge",
         }
     }
@@ -58,7 +56,6 @@ impl AdminCleanupTaskKind {
             Self::Config => Some(AdminSystemPurgeTarget::Config),
             Self::Users => Some(AdminSystemPurgeTarget::Users),
             Self::Usage => Some(AdminSystemPurgeTarget::Usage),
-            Self::AuditLogs => Some(AdminSystemPurgeTarget::AuditLogs),
             Self::Stats => Some(AdminSystemPurgeTarget::Stats),
         }
     }
@@ -72,7 +69,6 @@ impl AdminCleanupTaskKind {
                 batch_size.unwrap_or(1)
             ),
             Self::Usage => "使用记录后台清空已开始".to_string(),
-            Self::AuditLogs => "审计日志后台清空已开始".to_string(),
             Self::Stats => "统计聚合后台清空和重建已开始".to_string(),
         }
     }
@@ -83,7 +79,6 @@ impl AdminCleanupTaskKind {
             Self::Users => "非管理员用户后台清空失败",
             Self::RequestBodies => "请求/响应体后台清理失败",
             Self::Usage => "使用记录后台清空失败",
-            Self::AuditLogs => "审计日志后台清空失败",
             Self::Stats => "统计聚合后台清空或重建失败",
         }
     }
@@ -159,7 +154,6 @@ pub(crate) async fn start_admin_system_purge_task(
             ));
         }
         AdminCleanupTaskKind::Usage
-        | AdminCleanupTaskKind::AuditLogs
         | AdminCleanupTaskKind::Config
         | AdminCleanupTaskKind::Users
         | AdminCleanupTaskKind::Stats => {
@@ -402,7 +396,6 @@ async fn run_admin_system_purge_task_once(
         AdminCleanupTaskKind::Config => format!("系统配置后台清空完成，影响 {deleted_total} 行"),
         AdminCleanupTaskKind::Users => format!("非管理员用户后台清空完成，影响 {deleted_total} 行"),
         AdminCleanupTaskKind::Usage => format!("使用记录后台清空完成，影响 {deleted_total} 行"),
-        AdminCleanupTaskKind::AuditLogs => format!("审计日志后台清空完成，影响 {deleted_total} 行"),
         AdminCleanupTaskKind::RequestBodies | AdminCleanupTaskKind::Stats => unreachable!(),
     };
     Ok((
@@ -427,8 +420,7 @@ fn initial_task_summary(kind: AdminCleanupTaskKind, batch_size: Option<usize>) -
         }),
         AdminCleanupTaskKind::Config
         | AdminCleanupTaskKind::Users
-        | AdminCleanupTaskKind::Usage
-        | AdminCleanupTaskKind::AuditLogs => json!({
+        | AdminCleanupTaskKind::Usage => json!({
             "deleted": {},
         }),
     }

@@ -2041,7 +2041,7 @@ async fn gateway_handles_admin_keys_grouped_by_format_locally_with_trusted_admin
     key_a.success_count = Some(9);
     key_a.created_at_unix_ms = Some(1_711_000_000);
     key_a.updated_at_unix_secs = Some(1_711_000_100);
-    key_a.capabilities = Some(json!({"cache_1h": true, "gemini_files": false}));
+    key_a.capabilities = Some(json!({"cache_1h": true}));
     key_a.global_priority_by_format = Some(json!({"openai:chat": 3}));
     key_a.health_by_format = Some(json!({"openai:chat": {"health_score": 0.8}}));
     key_a.circuit_breaker_by_format = Some(json!({"openai:chat": {"open": false}}));

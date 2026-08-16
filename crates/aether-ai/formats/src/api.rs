@@ -18,9 +18,7 @@ pub use crate::contracts::{
     GEMINI_CLI_STREAM_SUCCESS_REPORT_KIND, GEMINI_CLI_SYNC_ERROR_REPORT_KIND,
     GEMINI_CLI_SYNC_FINALIZE_REPORT_KIND, GEMINI_CLI_SYNC_PLAN_KIND,
     GEMINI_CLI_SYNC_SUCCESS_REPORT_KIND, GEMINI_EMBEDDING_SYNC_PLAN_KIND,
-    GEMINI_EMBEDDING_SYNC_SUCCESS_REPORT_KIND, GEMINI_FILES_DELETE_PLAN_KIND,
-    GEMINI_FILES_DOWNLOAD_PLAN_KIND, GEMINI_FILES_GET_PLAN_KIND, GEMINI_FILES_LIST_PLAN_KIND,
-    GEMINI_FILES_UPLOAD_PLAN_KIND, GEMINI_INTERACTIONS_STREAM_PLAN_KIND,
+    GEMINI_EMBEDDING_SYNC_SUCCESS_REPORT_KIND, GEMINI_INTERACTIONS_STREAM_PLAN_KIND,
     GEMINI_INTERACTIONS_STREAM_SUCCESS_REPORT_KIND, GEMINI_INTERACTIONS_SYNC_ERROR_REPORT_KIND,
     GEMINI_INTERACTIONS_SYNC_FINALIZE_REPORT_KIND, GEMINI_INTERACTIONS_SYNC_PLAN_KIND,
     GEMINI_INTERACTIONS_SYNC_SUCCESS_REPORT_KIND, GEMINI_VIDEO_CANCEL_SYNC_PLAN_KIND,
@@ -88,15 +86,9 @@ pub use crate::formats::{
         resolve_stream_spec as resolve_claude_stream_spec,
         resolve_sync_spec as resolve_claude_sync_spec,
     },
-    gemini::{
-        files::spec::{
-            resolve_stream_spec as resolve_gemini_files_stream_spec,
-            resolve_sync_spec as resolve_gemini_files_sync_spec, LocalGeminiFilesSpec,
-        },
-        generate_content::{
-            resolve_stream_spec as resolve_gemini_stream_spec,
-            resolve_sync_spec as resolve_gemini_sync_spec,
-        },
+    gemini::generate_content::{
+        resolve_stream_spec as resolve_gemini_stream_spec,
+        resolve_sync_spec as resolve_gemini_sync_spec,
     },
     openai::{
         embedding::spec::resolve_sync_spec as resolve_openai_embedding_sync_spec,

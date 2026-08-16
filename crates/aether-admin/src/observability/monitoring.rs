@@ -14,10 +14,7 @@ use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdminMonitoringRoute {
-    AuditLogs,
     SystemStatus,
-    SuspiciousActivities,
-    UserBehavior,
     ResilienceStatus,
     ResilienceErrorStats,
     ResilienceCircuitHistory,
@@ -54,78 +51,6 @@ pub fn admin_monitoring_not_found_response(detail: &'static str) -> Response<Bod
         Json(json!({ "detail": detail })),
     )
         .into_response()
-}
-
-pub fn build_admin_monitoring_audit_logs_payload_response(
-    items: Vec<Value>,
-    total: usize,
-    limit: usize,
-    offset: usize,
-    username: Option<String>,
-    event_type: Option<String>,
-    days: i64,
-) -> Response<Body> {
-    let count = items.len();
-    Json(json!({
-        "items": items,
-        "meta": {
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-            "count": count,
-        },
-        "filters": {
-            "username": username,
-            "event_type": event_type,
-            "days": days,
-        },
-    }))
-    .into_response()
-}
-
-pub fn build_admin_monitoring_suspicious_activities_payload_response(
-    activities: Vec<Value>,
-    hours: i64,
-) -> Response<Body> {
-    let count = activities.len();
-    Json(json!({
-        "activities": activities,
-        "count": count,
-        "time_range_hours": hours,
-    }))
-    .into_response()
-}
-
-pub fn build_admin_monitoring_user_behavior_payload_response(
-    user_id: String,
-    days: i64,
-    event_counts: BTreeMap<String, u64>,
-    failed_requests: u64,
-    success_requests: u64,
-    suspicious_activities: u64,
-) -> Response<Body> {
-    let total_requests = success_requests.saturating_add(failed_requests);
-    let success_rate = if total_requests == 0 {
-        0.0
-    } else {
-        success_requests as f64 / total_requests as f64
-    };
-
-    Json(json!({
-        "user_id": user_id,
-        "period_days": days,
-        "event_counts": event_counts,
-        "failed_requests": failed_requests,
-        "success_requests": success_requests,
-        "success_rate": success_rate,
-        "suspicious_activities": suspicious_activities,
-        "analysis_time": chrono::Utc::now().to_rfc3339(),
-    }))
-    .into_response()
-}
-
-pub fn admin_monitoring_user_behavior_user_id_from_path(request_path: &str) -> Option<String> {
-    path_identifier_from_path(request_path, "/api/admin/monitoring/user-behavior/")
 }
 
 pub fn admin_monitoring_trace_request_id_from_path(request_path: &str) -> Option<String> {
@@ -982,11 +907,7 @@ pub fn match_admin_monitoring_route(
 
     match *method {
         http::Method::GET => match path {
-            "/api/admin/monitoring/audit-logs" => Some(AdminMonitoringRoute::AuditLogs),
             "/api/admin/monitoring/system-status" => Some(AdminMonitoringRoute::SystemStatus),
-            "/api/admin/monitoring/suspicious-activities" => {
-                Some(AdminMonitoringRoute::SuspiciousActivities)
-            }
             "/api/admin/monitoring/resilience-status" => {
                 Some(AdminMonitoringRoute::ResilienceStatus)
             }
@@ -1001,9 +922,6 @@ pub fn match_admin_monitoring_route(
                 Some(AdminMonitoringRoute::CacheModelMappingStats)
             }
             "/api/admin/monitoring/cache/redis-keys" => Some(AdminMonitoringRoute::CacheRedisKeys),
-            _ if matches_dynamic_segments(path, "/api/admin/monitoring/user-behavior/", 1) => {
-                Some(AdminMonitoringRoute::UserBehavior)
-            }
             _ if matches_dynamic_segments(
                 path,
                 "/api/admin/monitoring/trace/stats/provider/",

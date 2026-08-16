@@ -18,10 +18,7 @@ use aether_data::repository::announcements::{
     AnnouncementListQuery, AnnouncementReadRepository, AnnouncementWriteRepository,
     CreateAnnouncementRecord, StoredAnnouncement, StoredAnnouncementPage, UpdateAnnouncementRecord,
 };
-use aether_data::repository::audit::{
-    AuditLogListQuery, RequestAuditBundle, StoredAdminAuditLogPage, StoredSuspiciousActivity,
-    StoredUserAuditLogPage,
-};
+use aether_data::repository::audit::RequestAuditBundle;
 use aether_data::repository::auth::{
     AuthApiKeyLookupKey, AuthApiKeyReadRepository, AuthApiKeyWriteRepository,
     StoredAuthApiKeyExportRecord, StoredAuthApiKeySnapshot,
@@ -29,11 +26,6 @@ use aether_data::repository::auth::{
 use aether_data::repository::auth_modules::{
     AuthModuleReadRepository, AuthModuleWriteRepository, StoredLdapModuleConfig,
     StoredOAuthProviderModuleConfig,
-};
-use aether_data::repository::gemini_file_mappings::{
-    GeminiFileMappingListQuery, GeminiFileMappingReadRepository, GeminiFileMappingStats,
-    GeminiFileMappingWriteRepository, StoredGeminiFileMapping, StoredGeminiFileMappingListPage,
-    UpsertGeminiFileMappingRecord,
 };
 use aether_data::repository::management_tokens::{
     CreateManagementTokenRecord, ManagementTokenListQuery, ManagementTokenReadRepository,
@@ -123,8 +115,6 @@ pub(crate) struct GatewayDataState {
     billing_reader: Option<Arc<dyn BillingReadRepository>>,
     background_task_reader: Option<Arc<dyn BackgroundTaskReadRepository>>,
     background_task_writer: Option<Arc<dyn BackgroundTaskWriteRepository>>,
-    gemini_file_mapping_reader: Option<Arc<dyn GeminiFileMappingReadRepository>>,
-    gemini_file_mapping_writer: Option<Arc<dyn GeminiFileMappingWriteRepository>>,
     global_model_reader: Option<Arc<dyn GlobalModelReadRepository>>,
     global_model_writer: Option<Arc<dyn GlobalModelWriteRepository>>,
     minimal_candidate_selection_reader: Option<Arc<dyn MinimalCandidateSelectionReadRepository>>,
@@ -247,14 +237,6 @@ impl fmt::Debug for GatewayDataState {
             .field(
                 "has_background_task_writer",
                 &self.background_task_writer.is_some(),
-            )
-            .field(
-                "has_gemini_file_mapping_reader",
-                &self.gemini_file_mapping_reader.is_some(),
-            )
-            .field(
-                "has_gemini_file_mapping_writer",
-                &self.gemini_file_mapping_writer.is_some(),
             )
             .field(
                 "has_global_model_reader",

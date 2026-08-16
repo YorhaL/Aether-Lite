@@ -1,13 +1,11 @@
 use super::{
-    ApiKeyLastUsedDelta, DataLayerError, GatewayDataState, GeminiFileMappingListQuery,
-    GeminiFileMappingStats, ProviderCatalogKeyAdaptiveStateUpdate,
+    ApiKeyLastUsedDelta, DataLayerError, GatewayDataState, ProviderCatalogKeyAdaptiveStateUpdate,
     ProviderCatalogKeyHealthStateUpdate, ProviderCatalogKeyListQuery,
     ProviderCatalogKeyRuntimeMetadataUpdate, ProviderCatalogKeyStatusSnapshotUpdate,
-    PublicHealthStatusCount, PublicHealthTimelineBucket, StoredGeminiFileMapping,
-    StoredGeminiFileMappingListPage, StoredProviderCatalogEndpoint, StoredProviderCatalogKey,
-    StoredProviderCatalogKeyMaintenanceSummary, StoredProviderCatalogKeyPage,
-    StoredProviderCatalogKeyStats, StoredProviderCatalogProvider, StoredRequestCandidate,
-    UpsertGeminiFileMappingRecord, UpsertRequestCandidateRecord,
+    PublicHealthStatusCount, PublicHealthTimelineBucket, StoredProviderCatalogEndpoint,
+    StoredProviderCatalogKey, StoredProviderCatalogKeyMaintenanceSummary,
+    StoredProviderCatalogKeyPage, StoredProviderCatalogKeyStats, StoredProviderCatalogProvider,
+    StoredRequestCandidate, UpsertRequestCandidateRecord,
 };
 
 impl GatewayDataState {
@@ -156,74 +154,6 @@ impl GatewayDataState {
         match &self.auth_api_key_writer {
             Some(repository) => repository.touch_last_used_at(api_key_id).await,
             None => Ok(false),
-        }
-    }
-
-    pub(crate) async fn upsert_gemini_file_mapping(
-        &self,
-        record: UpsertGeminiFileMappingRecord,
-    ) -> Result<Option<StoredGeminiFileMapping>, DataLayerError> {
-        match &self.gemini_file_mapping_writer {
-            Some(repository) => repository.upsert(record).await.map(Some),
-            None => Ok(None),
-        }
-    }
-
-    pub(crate) async fn list_gemini_file_mappings(
-        &self,
-        query: &GeminiFileMappingListQuery,
-    ) -> Result<StoredGeminiFileMappingListPage, DataLayerError> {
-        match &self.gemini_file_mapping_reader {
-            Some(repository) => repository.list_mappings(query).await,
-            None => Ok(StoredGeminiFileMappingListPage {
-                items: Vec::new(),
-                total: 0,
-            }),
-        }
-    }
-
-    pub(crate) async fn summarize_gemini_file_mappings(
-        &self,
-        now_unix_secs: u64,
-    ) -> Result<GeminiFileMappingStats, DataLayerError> {
-        match &self.gemini_file_mapping_reader {
-            Some(repository) => repository.summarize_mappings(now_unix_secs).await,
-            None => Ok(GeminiFileMappingStats {
-                total_mappings: 0,
-                active_mappings: 0,
-                expired_mappings: 0,
-                by_mime_type: Vec::new(),
-            }),
-        }
-    }
-
-    pub(crate) async fn delete_gemini_file_mapping_by_file_name(
-        &self,
-        file_name: &str,
-    ) -> Result<bool, DataLayerError> {
-        match &self.gemini_file_mapping_writer {
-            Some(repository) => repository.delete_by_file_name(file_name).await,
-            None => Ok(false),
-        }
-    }
-
-    pub(crate) async fn delete_gemini_file_mapping_by_id(
-        &self,
-        mapping_id: &str,
-    ) -> Result<Option<StoredGeminiFileMapping>, DataLayerError> {
-        match &self.gemini_file_mapping_writer {
-            Some(repository) => repository.delete_by_id(mapping_id).await,
-            None => Ok(None),
-        }
-    }
-
-    pub(crate) async fn delete_expired_gemini_file_mappings(
-        &self,
-        now_unix_secs: u64,
-    ) -> Result<usize, DataLayerError> {
-        match &self.gemini_file_mapping_writer {
-            Some(repository) => repository.delete_expired_before(now_unix_secs).await,
-            None => Ok(0),
         }
     }
 

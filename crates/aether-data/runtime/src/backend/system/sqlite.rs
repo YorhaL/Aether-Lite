@@ -723,9 +723,6 @@ WHERE request_count <> 0
             )
             .await?;
         }
-        AdminSystemPurgeTarget::AuditLogs => {
-            sqlite_delete_table(tx, "audit_logs", summary).await?;
-        }
         AdminSystemPurgeTarget::RequestBodies => {
             sqlite_delete_table(tx, "usage_body_blobs", summary).await?;
             sqlite_execute_if_table_has_columns(
@@ -830,7 +827,6 @@ async fn purge_sqlite_non_admin_users(
             "user_id",
             "request_candidate_user_refs_cleared",
         ),
-        ("audit_logs", "user_id", "audit_log_user_refs_cleared"),
         ("video_tasks", "user_id", "video_task_user_refs_cleared"),
         ("wallets", "user_id", "wallet_user_refs_cleared"),
         (
@@ -855,7 +851,6 @@ async fn purge_sqlite_non_admin_users(
             "request_candidates",
             "request_candidate_api_key_refs_cleared",
         ),
-        ("audit_logs", "audit_log_api_key_refs_cleared"),
         ("video_tasks", "video_task_api_key_refs_cleared"),
         ("wallets", "wallet_api_key_refs_cleared"),
     ] {

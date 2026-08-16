@@ -117,7 +117,6 @@
             :header-retention-days="systemConfig.header_retention_days"
             :log-retention-days="systemConfig.log_retention_days"
             :cleanup-batch-size="systemConfig.cleanup_batch_size"
-            :audit-log-retention-days="systemConfig.audit_log_retention_days"
             :request-candidates-retention-days="systemConfig.request_candidates_retention_days"
             :request-candidates-cleanup-batch-size="systemConfig.request_candidates_cleanup_batch_size"
             :loading="systemConfigLoading || cleanupConfigLoading"
@@ -129,7 +128,6 @@
             @update:header-retention-days="systemConfig.header_retention_days = $event"
             @update:log-retention-days="systemConfig.log_retention_days = $event"
             @update:cleanup-batch-size="systemConfig.cleanup_batch_size = $event"
-            @update:audit-log-retention-days="systemConfig.audit_log_retention_days = $event"
             @update:request-candidates-retention-days="systemConfig.request_candidates_retention_days = $event"
             @update:request-candidates-cleanup-batch-size="systemConfig.request_candidates_cleanup_batch_size = $event"
           />

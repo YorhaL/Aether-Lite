@@ -11,10 +11,6 @@ use std::sync::Arc;
 #[test]
 fn admin_monitoring_matches_typical_routes() {
     assert_eq!(
-        match_admin_monitoring_route(&http::Method::GET, "/api/admin/monitoring/audit-logs"),
-        Some(AdminMonitoringRoute::AuditLogs)
-    );
-    assert_eq!(
         match_admin_monitoring_route(&http::Method::GET, "/api/admin/monitoring/trace/request-1"),
         Some(AdminMonitoringRoute::TraceRequest)
     );
@@ -28,13 +24,6 @@ fn admin_monitoring_matches_typical_routes() {
             "/api/admin/monitoring/resilience-status"
         ),
         Some(AdminMonitoringRoute::ResilienceStatus)
-    );
-    assert_eq!(
-        match_admin_monitoring_route(
-            &http::Method::GET,
-            "/api/admin/monitoring/user-behavior/user-1"
-        ),
-        Some(AdminMonitoringRoute::UserBehavior)
     );
     assert_eq!(
         match_admin_monitoring_route(
@@ -86,85 +75,6 @@ async fn admin_monitoring_model_mapping_delete_returns_empty_runtime_payload_wit
     let payload: serde_json::Value = serde_json::from_slice(&body).expect("json body should parse");
     assert_eq!(payload["status"], json!("ok"));
     assert_eq!(payload["deleted_count"], json!(0));
-}
-
-#[tokio::test]
-async fn admin_monitoring_user_behavior_returns_empty_local_payload_without_postgres() {
-    let state = AppState::new().expect("state should build");
-    let context = request_context(
-        http::Method::GET,
-        "/api/admin/monitoring/user-behavior/user-123?days=30",
-    );
-
-    let response = local_monitoring_response(&state, &context)
-        .await
-        .expect("handler should not error")
-        .expect("user behavior route should be handled locally");
-
-    assert_eq!(response.status(), http::StatusCode::OK);
-    let body = to_bytes(response.into_body(), usize::MAX)
-        .await
-        .expect("body should read");
-    let payload: serde_json::Value = serde_json::from_slice(&body).expect("json body should parse");
-    assert_eq!(payload["user_id"], json!("user-123"));
-    assert_eq!(payload["period_days"], json!(30));
-    assert_eq!(payload["event_counts"], json!({}));
-    assert_eq!(payload["failed_requests"], json!(0));
-    assert_eq!(payload["success_requests"], json!(0));
-    assert_eq!(payload["success_rate"], json!(0.0));
-    assert_eq!(payload["suspicious_activities"], json!(0));
-    assert!(payload["analysis_time"].as_str().is_some());
-}
-
-#[tokio::test]
-async fn admin_monitoring_audit_logs_returns_empty_local_payload_without_postgres() {
-    let state = AppState::new().expect("state should build");
-    let context = request_context(
-        http::Method::GET,
-        "/api/admin/monitoring/audit-logs?username=alice&event_type=login_failed&days=14&limit=20&offset=5",
-    );
-
-    let response = local_monitoring_response(&state, &context)
-        .await
-        .expect("handler should not error")
-        .expect("monitoring route should be handled locally");
-
-    assert_eq!(response.status(), http::StatusCode::OK);
-    let body = to_bytes(response.into_body(), usize::MAX)
-        .await
-        .expect("body should read");
-    let payload: serde_json::Value = serde_json::from_slice(&body).expect("json body should parse");
-    assert_eq!(payload["items"], json!([]));
-    assert_eq!(payload["meta"]["total"], json!(0));
-    assert_eq!(payload["meta"]["limit"], json!(20));
-    assert_eq!(payload["meta"]["offset"], json!(5));
-    assert_eq!(payload["meta"]["count"], json!(0));
-    assert_eq!(payload["filters"]["username"], json!("alice"));
-    assert_eq!(payload["filters"]["event_type"], json!("login_failed"));
-    assert_eq!(payload["filters"]["days"], json!(14));
-}
-
-#[tokio::test]
-async fn admin_monitoring_suspicious_activities_returns_empty_local_payload_without_postgres() {
-    let state = AppState::new().expect("state should build");
-    let context = request_context(
-        http::Method::GET,
-        "/api/admin/monitoring/suspicious-activities?hours=48",
-    );
-
-    let response = local_monitoring_response(&state, &context)
-        .await
-        .expect("handler should not error")
-        .expect("monitoring route should be handled locally");
-
-    assert_eq!(response.status(), http::StatusCode::OK);
-    let body = to_bytes(response.into_body(), usize::MAX)
-        .await
-        .expect("body should read");
-    let payload: serde_json::Value = serde_json::from_slice(&body).expect("json body should parse");
-    assert_eq!(payload["activities"], json!([]));
-    assert_eq!(payload["count"], json!(0));
-    assert_eq!(payload["time_range_hours"], json!(48));
 }
 
 #[tokio::test]

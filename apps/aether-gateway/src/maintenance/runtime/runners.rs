@@ -8,69 +8,12 @@ use crate::data::GatewayDataState;
 use crate::{AppState, GatewayError};
 
 use super::{
-    cleanup_audit_logs_once, cleanup_expired_gemini_file_mappings_once,
     cleanup_request_candidates_once, cleanup_stale_pending_requests_once, now_unix_secs,
     perform_db_maintenance_once, perform_manual_usage_cleanup_once, perform_stats_aggregation_once,
     perform_stats_hourly_aggregation_once, perform_usage_cleanup_once, record_admin_cleanup_run,
     record_completed_cleanup_run, record_failed_cleanup_run, summarize_database_pool,
     AdminCleanupRunRecord, ManualUsageCleanupOptions,
 };
-
-pub(super) async fn run_audit_cleanup_once(data: &GatewayDataState) -> Result<(), DataLayerError> {
-    let started_at_unix_secs = now_unix_secs();
-    let started_at = Instant::now();
-    let deleted = match cleanup_audit_logs_once(data).await {
-        Ok(deleted) => deleted,
-        Err(err) => {
-            record_failed_cleanup_run(
-                data,
-                "audit_cleanup",
-                "auto",
-                started_at_unix_secs,
-                started_at,
-                &err,
-            )
-            .await;
-            return Err(err);
-        }
-    };
-    record_completed_cleanup_run(
-        data,
-        "audit_cleanup",
-        "auto",
-        started_at_unix_secs,
-        started_at,
-        json!({ "audit_logs_deleted": deleted }),
-        format!("审计日志自动清理完成，删除 {deleted} 行"),
-    )
-    .await;
-    if deleted > 0 {
-        info!(
-            event_name = "audit_cleanup_completed",
-            log_type = "ops",
-            worker = "audit_cleanup",
-            deleted,
-            "gateway deleted expired audit logs"
-        );
-    }
-    Ok(())
-}
-
-pub(super) async fn run_gemini_file_mapping_cleanup_once(
-    data: &GatewayDataState,
-) -> Result<(), DataLayerError> {
-    let deleted = cleanup_expired_gemini_file_mappings_once(data).await?;
-    if deleted > 0 {
-        info!(
-            event_name = "gemini_file_mapping_cleanup_completed",
-            log_type = "ops",
-            worker = "gemini_file_mapping_cleanup",
-            deleted,
-            "gateway deleted expired gemini file mappings"
-        );
-    }
-    Ok(())
-}
 
 pub(super) async fn run_db_maintenance_once(data: &GatewayDataState) -> Result<(), DataLayerError> {
     let summary = perform_db_maintenance_once(data).await?;

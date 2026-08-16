@@ -81,12 +81,6 @@ pub(crate) const ADMIN_MONITORING_REDIS_CACHE_CATEGORIES: &[(&str, &str, &str, &
         "用户活动热力图缓存",
     ),
     (
-        "gemini_files",
-        "Gemini 文件映射",
-        "gemini_files:*",
-        "Gemini Files API 文件-Key 映射缓存",
-    ),
-    (
         "concurrency_lock",
         "并发锁",
         "concurrency:*",

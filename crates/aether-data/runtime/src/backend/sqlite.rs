@@ -6,7 +6,6 @@ use crate::repository::admission::{
 use crate::repository::announcements::{
     AnnouncementReadRepository, AnnouncementWriteRepository, SqliteAnnouncementRepository,
 };
-use crate::repository::audit::{AuditLogReadRepository, SqliteAuditLogReadRepository};
 use crate::repository::auth::{
     AuthApiKeyReadRepository, AuthApiKeyWriteRepository, SqliteAuthApiKeyReadRepository,
 };
@@ -24,10 +23,6 @@ use crate::repository::candidate_selection::{
 use crate::repository::candidates::{
     RequestCandidateReadRepository, RequestCandidateWriteRepository,
     SqliteRequestCandidateRepository,
-};
-use crate::repository::gemini_file_mappings::{
-    GeminiFileMappingReadRepository, GeminiFileMappingWriteRepository,
-    SqliteGeminiFileMappingRepository,
 };
 use crate::repository::global_models::{
     GlobalModelReadRepository, GlobalModelWriteRepository, SqliteGlobalModelReadRepository,
@@ -103,10 +98,6 @@ impl SqliteBackend {
         Arc::new(SqliteAnnouncementRepository::new(self.pool_clone()))
     }
 
-    pub fn audit_log_read_repository(&self) -> Arc<dyn AuditLogReadRepository> {
-        Arc::new(SqliteAuditLogReadRepository::new(self.pool_clone()))
-    }
-
     pub fn announcement_write_repository(&self) -> Arc<dyn AnnouncementWriteRepository> {
         Arc::new(SqliteAnnouncementRepository::new(self.pool_clone()))
     }
@@ -157,16 +148,6 @@ impl SqliteBackend {
         Arc::new(SqliteMinimalCandidateSelectionReadRepository::new(
             self.pool_clone(),
         ))
-    }
-
-    pub fn gemini_file_mapping_read_repository(&self) -> Arc<dyn GeminiFileMappingReadRepository> {
-        Arc::new(SqliteGeminiFileMappingRepository::new(self.pool_clone()))
-    }
-
-    pub fn gemini_file_mapping_write_repository(
-        &self,
-    ) -> Arc<dyn GeminiFileMappingWriteRepository> {
-        Arc::new(SqliteGeminiFileMappingRepository::new(self.pool_clone()))
     }
 
     pub fn global_model_read_repository(&self) -> Arc<dyn GlobalModelReadRepository> {
@@ -323,12 +304,12 @@ mod tests {
             .expect("sqlite migrations should run");
 
         let summary = backend
-            .run_table_maintenance(&["usage", "request_candidates", "audit_logs"])
+            .run_table_maintenance(&["usage", "request_candidates"])
             .await
             .expect("sqlite table maintenance should run");
 
-        assert_eq!(summary.attempted, 3);
-        assert_eq!(summary.succeeded, 3);
+        assert_eq!(summary.attempted, 2);
+        assert_eq!(summary.succeeded, 2);
     }
 
     #[tokio::test]

@@ -11,7 +11,6 @@ use crate::repository::auth::AuthApiKeyWriteRepository;
 use crate::repository::auth_modules::AuthModuleWriteRepository;
 use crate::repository::background_tasks::BackgroundTaskWriteRepository;
 use crate::repository::candidates::RequestCandidateWriteRepository;
-use crate::repository::gemini_file_mappings::GeminiFileMappingWriteRepository;
 use crate::repository::global_models::GlobalModelWriteRepository;
 use crate::repository::management_tokens::ManagementTokenWriteRepository;
 use crate::repository::oauth_providers::OAuthProviderWriteRepository;
@@ -30,7 +29,6 @@ pub struct DataWriteRepositories {
     auth_modules: Option<Arc<dyn AuthModuleWriteRepository>>,
     background_tasks: Option<Arc<dyn BackgroundTaskWriteRepository>>,
     request_candidates: Option<Arc<dyn RequestCandidateWriteRepository>>,
-    gemini_file_mappings: Option<Arc<dyn GeminiFileMappingWriteRepository>>,
     global_models: Option<Arc<dyn GlobalModelWriteRepository>>,
     management_tokens: Option<Arc<dyn ManagementTokenWriteRepository>>,
     oauth_providers: Option<Arc<dyn OAuthProviderWriteRepository>>,
@@ -51,10 +49,6 @@ impl fmt::Debug for DataWriteRepositories {
             .field("has_auth_modules", &self.auth_modules.is_some())
             .field("has_background_tasks", &self.background_tasks.is_some())
             .field("has_request_candidates", &self.request_candidates.is_some())
-            .field(
-                "has_gemini_file_mappings",
-                &self.gemini_file_mappings.is_some(),
-            )
             .field("has_global_models", &self.global_models.is_some())
             .field("has_management_tokens", &self.management_tokens.is_some())
             .field("has_oauth_providers", &self.oauth_providers.is_some())
@@ -108,11 +102,6 @@ impl DataWriteRepositories {
             self.request_candidates =
                 Some(PostgresBackend::request_candidate_write_repository(backend));
         }
-        if self.gemini_file_mappings.is_none() {
-            self.gemini_file_mappings = Some(
-                PostgresBackend::gemini_file_mapping_write_repository(backend),
-            );
-        }
         if self.global_models.is_none() {
             self.global_models = Some(PostgresBackend::global_model_write_repository(backend));
         }
@@ -165,10 +154,6 @@ impl DataWriteRepositories {
         if self.request_candidates.is_none() {
             self.request_candidates =
                 Some(SqliteBackend::request_candidate_write_repository(backend));
-        }
-        if self.gemini_file_mappings.is_none() {
-            self.gemini_file_mappings =
-                Some(SqliteBackend::gemini_file_mapping_write_repository(backend));
         }
         if self.global_models.is_none() {
             self.global_models = Some(SqliteBackend::global_model_write_repository(backend));
@@ -227,10 +212,6 @@ impl DataWriteRepositories {
         self.request_candidates.clone()
     }
 
-    pub fn gemini_file_mappings(&self) -> Option<Arc<dyn GeminiFileMappingWriteRepository>> {
-        self.gemini_file_mappings.clone()
-    }
-
     pub fn global_models(&self) -> Option<Arc<dyn GlobalModelWriteRepository>> {
         self.global_models.clone()
     }
@@ -270,7 +251,6 @@ impl DataWriteRepositories {
             || self.auth_modules.is_some()
             || self.background_tasks.is_some()
             || self.request_candidates.is_some()
-            || self.gemini_file_mappings.is_some()
             || self.global_models.is_some()
             || self.management_tokens.is_some()
             || self.oauth_providers.is_some()

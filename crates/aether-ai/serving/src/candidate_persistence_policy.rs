@@ -6,7 +6,6 @@ pub enum AiCandidatePersistencePolicyKind {
     OpenAiChatDecision,
     OpenAiResponsesDecision,
     ImageDecision,
-    GeminiFilesDecision,
     VideoDecision,
 }
 
@@ -58,11 +57,6 @@ pub fn ai_candidate_persistence_policy_spec(
                 "gateway local openai image decision request candidate upsert failed",
             skipped_error_context:
                 "gateway local openai image decision failed to persist skipped candidate",
-            record_runtime_miss_diagnostic: false,
-        },
-        AiCandidatePersistencePolicyKind::GeminiFilesDecision => AiCandidatePersistencePolicySpec {
-            available_error_context: "gateway local gemini files request candidate upsert failed",
-            skipped_error_context: "gateway local gemini files failed to persist skipped candidate",
             record_runtime_miss_diagnostic: false,
         },
         AiCandidatePersistencePolicyKind::VideoDecision => AiCandidatePersistencePolicySpec {

@@ -2,7 +2,6 @@
 
 mod admission;
 mod announcements;
-mod audit;
 mod auth;
 mod auth_modules;
 mod background_tasks;
@@ -10,7 +9,6 @@ mod billing;
 mod candidate_selection;
 mod candidates;
 mod error;
-mod gemini_file_mappings;
 mod global_models;
 mod lease;
 mod management_tokens;
@@ -30,14 +28,12 @@ mod wallet;
 pub use admission::PostgresAdmissionPolicyRepository;
 pub use aether_data_contracts::{DataLayerError, PostgresPoolConfig};
 pub use announcements::SqlxAnnouncementReadRepository;
-pub use audit::PostgresAuditLogReadRepository;
 pub use auth::SqlxAuthApiKeySnapshotReadRepository;
 pub use auth_modules::{SqlxAuthModuleReadRepository, SqlxAuthModuleRepository};
 pub use background_tasks::SqlxBackgroundTaskRepository;
 pub use billing::SqlxBillingReadRepository;
 pub use candidate_selection::SqlxMinimalCandidateSelectionReadRepository;
 pub use candidates::SqlxRequestCandidateReadRepository;
-pub use gemini_file_mappings::SqlxGeminiFileMappingRepository;
 pub use global_models::SqlxGlobalModelReadRepository;
 pub use lease::{
     build_postgres_lease_claim_sql, build_postgres_lease_release_sql,

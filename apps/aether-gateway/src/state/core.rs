@@ -44,9 +44,7 @@ use super::super::router::RequestAdmissionError;
 use super::super::{control::GatewayControlDecision, error::GatewayError};
 use super::super::{provider_transport, usage};
 
-use crate::maintenance::spawn_audit_cleanup_worker;
 use crate::maintenance::spawn_db_maintenance_worker;
-use crate::maintenance::spawn_gemini_file_mapping_cleanup_worker;
 use crate::maintenance::spawn_pending_cleanup_worker;
 use crate::maintenance::spawn_pool_monitor_worker;
 use crate::maintenance::spawn_request_candidate_cleanup_worker;
@@ -1525,14 +1523,6 @@ impl AppState {
         self.data.has_auth_api_key_reader()
     }
 
-    pub fn has_gemini_file_mapping_data_reader(&self) -> bool {
-        self.data.has_gemini_file_mapping_reader()
-    }
-
-    pub fn has_gemini_file_mapping_data_writer(&self) -> bool {
-        self.data.has_gemini_file_mapping_writer()
-    }
-
     pub fn has_redis_data_backend(&self) -> bool {
         self.runtime_state.is_redis()
     }
@@ -1729,10 +1719,6 @@ impl AppState {
             ),
         );
         supervise_worker(
-            crate::task_runtime::TASK_KEY_AUDIT_CLEANUP,
-            spawn_audit_cleanup_worker(background_state.clone()),
-        );
-        supervise_worker(
             crate::task_runtime::TASK_KEY_DB_MAINTENANCE,
             spawn_db_maintenance_worker(background_state.clone()),
         );
@@ -1759,10 +1745,6 @@ impl AppState {
         supervise_worker(
             crate::task_runtime::TASK_KEY_REQUEST_CANDIDATE_CLEANUP,
             spawn_request_candidate_cleanup_worker(background_state.clone()),
-        );
-        supervise_worker(
-            crate::task_runtime::TASK_KEY_GEMINI_FILES_CLEANUP,
-            spawn_gemini_file_mapping_cleanup_worker(background_state.clone()),
         );
         supervise_worker(
             crate::task_runtime::TASK_KEY_MODEL_FETCH_WORKER,

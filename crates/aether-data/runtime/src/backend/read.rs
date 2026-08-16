@@ -7,14 +7,12 @@ use super::PostgresBackend;
 use super::SqliteBackend;
 use crate::repository::admission::AdmissionPolicyReadRepository;
 use crate::repository::announcements::AnnouncementReadRepository;
-use crate::repository::audit::AuditLogReadRepository;
 use crate::repository::auth::AuthApiKeyReadRepository;
 use crate::repository::auth_modules::AuthModuleReadRepository;
 use crate::repository::background_tasks::BackgroundTaskReadRepository;
 use crate::repository::billing::BillingReadRepository;
 use crate::repository::candidate_selection::MinimalCandidateSelectionReadRepository;
 use crate::repository::candidates::RequestCandidateReadRepository;
-use crate::repository::gemini_file_mappings::GeminiFileMappingReadRepository;
 use crate::repository::global_models::GlobalModelReadRepository;
 use crate::repository::management_tokens::ManagementTokenReadRepository;
 use crate::repository::oauth_providers::OAuthProviderReadRepository;
@@ -29,12 +27,10 @@ use crate::repository::wallet::WalletReadRepository;
 pub struct DataReadRepositories {
     admission_policies: Option<Arc<dyn AdmissionPolicyReadRepository>>,
     announcements: Option<Arc<dyn AnnouncementReadRepository>>,
-    audit_logs: Option<Arc<dyn AuditLogReadRepository>>,
     auth_api_keys: Option<Arc<dyn AuthApiKeyReadRepository>>,
     auth_modules: Option<Arc<dyn AuthModuleReadRepository>>,
     background_tasks: Option<Arc<dyn BackgroundTaskReadRepository>>,
     billing: Option<Arc<dyn BillingReadRepository>>,
-    gemini_file_mappings: Option<Arc<dyn GeminiFileMappingReadRepository>>,
     global_models: Option<Arc<dyn GlobalModelReadRepository>>,
     management_tokens: Option<Arc<dyn ManagementTokenReadRepository>>,
     oauth_providers: Option<Arc<dyn OAuthProviderReadRepository>>,
@@ -54,14 +50,9 @@ impl fmt::Debug for DataReadRepositories {
             .field("has_admission_policies", &self.admission_policies.is_some())
             .field("has_auth_api_keys", &self.auth_api_keys.is_some())
             .field("has_announcements", &self.announcements.is_some())
-            .field("has_audit_logs", &self.audit_logs.is_some())
             .field("has_auth_modules", &self.auth_modules.is_some())
             .field("has_background_tasks", &self.background_tasks.is_some())
             .field("has_billing", &self.billing.is_some())
-            .field(
-                "has_gemini_file_mappings",
-                &self.gemini_file_mappings.is_some(),
-            )
             .field("has_global_models", &self.global_models.is_some())
             .field("has_management_tokens", &self.management_tokens.is_some())
             .field("has_oauth_providers", &self.oauth_providers.is_some())
@@ -106,9 +97,6 @@ impl DataReadRepositories {
         if self.announcements.is_none() {
             self.announcements = Some(PostgresBackend::announcement_read_repository(backend));
         }
-        if self.audit_logs.is_none() {
-            self.audit_logs = Some(PostgresBackend::audit_log_read_repository(backend));
-        }
         if self.auth_api_keys.is_none() {
             self.auth_api_keys = Some(PostgresBackend::auth_api_key_read_repository(backend));
         }
@@ -120,11 +108,6 @@ impl DataReadRepositories {
         }
         if self.billing.is_none() {
             self.billing = Some(PostgresBackend::billing_read_repository(backend));
-        }
-        if self.gemini_file_mappings.is_none() {
-            self.gemini_file_mappings = Some(PostgresBackend::gemini_file_mapping_read_repository(
-                backend,
-            ));
         }
         if self.global_models.is_none() {
             self.global_models = Some(PostgresBackend::global_model_read_repository(backend));
@@ -174,9 +157,6 @@ impl DataReadRepositories {
         if self.announcements.is_none() {
             self.announcements = Some(SqliteBackend::announcement_read_repository(backend));
         }
-        if self.audit_logs.is_none() {
-            self.audit_logs = Some(SqliteBackend::audit_log_read_repository(backend));
-        }
         if self.auth_api_keys.is_none() {
             self.auth_api_keys = Some(SqliteBackend::auth_api_key_read_repository(backend));
         }
@@ -188,10 +168,6 @@ impl DataReadRepositories {
         }
         if self.billing.is_none() {
             self.billing = Some(SqliteBackend::billing_read_repository(backend));
-        }
-        if self.gemini_file_mappings.is_none() {
-            self.gemini_file_mappings =
-                Some(SqliteBackend::gemini_file_mapping_read_repository(backend));
         }
         if self.global_models.is_none() {
             self.global_models = Some(SqliteBackend::global_model_read_repository(backend));
@@ -242,10 +218,6 @@ impl DataReadRepositories {
         self.announcements.clone()
     }
 
-    pub fn audit_logs(&self) -> Option<Arc<dyn AuditLogReadRepository>> {
-        self.audit_logs.clone()
-    }
-
     pub fn auth_modules(&self) -> Option<Arc<dyn AuthModuleReadRepository>> {
         self.auth_modules.clone()
     }
@@ -256,10 +228,6 @@ impl DataReadRepositories {
 
     pub fn billing(&self) -> Option<Arc<dyn BillingReadRepository>> {
         self.billing.clone()
-    }
-
-    pub fn gemini_file_mappings(&self) -> Option<Arc<dyn GeminiFileMappingReadRepository>> {
-        self.gemini_file_mappings.clone()
     }
 
     pub fn global_models(&self) -> Option<Arc<dyn GlobalModelReadRepository>> {
@@ -312,11 +280,9 @@ impl DataReadRepositories {
         self.admission_policies.is_some()
             || self.auth_api_keys.is_some()
             || self.announcements.is_some()
-            || self.audit_logs.is_some()
             || self.auth_modules.is_some()
             || self.background_tasks.is_some()
             || self.billing.is_some()
-            || self.gemini_file_mappings.is_some()
             || self.global_models.is_some()
             || self.management_tokens.is_some()
             || self.oauth_providers.is_some()

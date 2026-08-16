@@ -251,21 +251,12 @@ pub(super) fn classify_public_support_route(
             "user:dashboard",
             false,
         ))
-    } else if method == http::Method::GET
-        && matches!(
-            normalized_path,
-            "/api/monitoring/my-audit-logs" | "/api/monitoring/rate-limit-status"
-        )
+    } else if method == http::Method::GET && normalized_path == "/api/monitoring/rate-limit-status"
     {
-        let route_kind = match normalized_path {
-            "/api/monitoring/my-audit-logs" => "audit_logs",
-            "/api/monitoring/rate-limit-status" => "rate_limit_status",
-            _ => "audit_logs",
-        };
         Some(classified(
             "public_support",
             "monitoring_user",
-            route_kind,
+            "rate_limit_status",
             "user:monitoring",
             false,
         ))

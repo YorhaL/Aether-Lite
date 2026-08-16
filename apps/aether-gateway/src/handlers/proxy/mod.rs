@@ -83,8 +83,6 @@ const CLAUDE_MESSAGES_LOCAL_EXECUTION_RUNTIME_MISS_DETAIL: &str =
     "当前 Claude Messages 请求无法在本地执行：没有匹配到可用的执行路径";
 const GEMINI_PUBLIC_LOCAL_EXECUTION_RUNTIME_MISS_DETAIL: &str =
     "当前 Gemini Public 请求无法在本地执行：没有匹配到可用的执行路径";
-const GEMINI_FILES_LOCAL_EXECUTION_RUNTIME_MISS_DETAIL: &str =
-    "当前 Gemini Files 请求无法在本地执行：没有匹配到可用的执行路径";
 const LOCAL_ROUTE_NOT_FOUND_DETAIL: &str = "Route not found";
 const LOCAL_EXECUTION_LOOP_DETECTED_DETAIL: &str =
     "Gateway detected an execution runtime request loop back into the local frontdoor";
@@ -1815,9 +1813,6 @@ fn local_execution_runtime_miss_route_label(
         "/v1/alpha/search" => "OpenAI Search",
         "/v1/messages" => "Claude Messages",
         path if path.starts_with("/v1/videos") => "OpenAI Video",
-        path if path.starts_with("/upload/v1beta/files") || path.starts_with("/v1beta/files") => {
-            "Gemini Files"
-        }
         path if decision.route_family.as_deref() == Some("gemini")
             && (path.starts_with("/v1beta/models/") || path.starts_with("/v1/models/")) =>
         {
@@ -1859,9 +1854,6 @@ fn local_execution_runtime_miss_route_detail(
         "/v1/messages" => Some(CLAUDE_MESSAGES_LOCAL_EXECUTION_RUNTIME_MISS_DETAIL),
         path if path.starts_with("/v1/videos") => {
             Some(OPENAI_VIDEO_LOCAL_EXECUTION_RUNTIME_MISS_DETAIL)
-        }
-        path if path.starts_with("/upload/v1beta/files") || path.starts_with("/v1beta/files") => {
-            Some(GEMINI_FILES_LOCAL_EXECUTION_RUNTIME_MISS_DETAIL)
         }
         path if decision.route_family.as_deref() == Some("gemini")
             && (path.starts_with("/v1beta/models/") || path.starts_with("/v1/models/")) =>

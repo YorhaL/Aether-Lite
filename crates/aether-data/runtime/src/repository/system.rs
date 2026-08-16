@@ -105,7 +105,6 @@ pub enum AdminSystemPurgeTarget {
     Config,
     Users,
     Usage,
-    AuditLogs,
     RequestBodies,
     Stats,
 }

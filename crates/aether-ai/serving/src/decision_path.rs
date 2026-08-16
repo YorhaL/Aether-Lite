@@ -5,14 +5,12 @@ pub enum AiSyncDecisionStep {
     VideoTaskFollowUp,
     LocalVideo,
     LocalSameFormatProvider,
-    LocalGeminiFiles,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AiStreamDecisionStep {
     LocalVideoContent,
     LocalSameFormatProvider,
-    LocalGeminiFiles,
 }
 
 #[async_trait]
@@ -49,7 +47,6 @@ where
         AiSyncDecisionStep::VideoTaskFollowUp,
         AiSyncDecisionStep::LocalVideo,
         AiSyncDecisionStep::LocalSameFormatProvider,
-        AiSyncDecisionStep::LocalGeminiFiles,
     ] {
         if !port.sync_decision_step_enabled(step) {
             continue;
@@ -71,7 +68,6 @@ where
     for step in [
         AiStreamDecisionStep::LocalVideoContent,
         AiStreamDecisionStep::LocalSameFormatProvider,
-        AiStreamDecisionStep::LocalGeminiFiles,
     ] {
         if let Some(decision) = port.build_stream_decision_step(step).await? {
             return Ok(Some(decision));
@@ -141,21 +137,15 @@ mod tests {
         assert_eq!(decision, None);
         assert_eq!(
             port.calls.lock().unwrap().as_slice(),
-            [
-                "VideoTaskFollowUp",
-                "LocalVideo",
-                "LocalSameFormatProvider",
-                "LocalGeminiFiles",
-            ]
+            ["VideoTaskFollowUp", "LocalVideo", "LocalSameFormatProvider",]
         );
     }
 
     #[tokio::test]
     async fn sync_decision_path_skips_disabled_steps_and_stops_at_first_decision() {
         let port = TestSyncDecisionPort {
-            disabled: BTreeSet::from([AiSyncDecisionStep::LocalGeminiFiles]),
+            disabled: BTreeSet::from([AiSyncDecisionStep::LocalVideo]),
             outcomes: Mutex::new(VecDeque::from([
-                None,
                 None,
                 Some("provider_decision"),
                 Some("should_not_run"),
@@ -168,27 +158,23 @@ mod tests {
         assert_eq!(decision, Some("provider_decision"));
         assert_eq!(
             port.calls.lock().unwrap().as_slice(),
-            ["VideoTaskFollowUp", "LocalVideo", "LocalSameFormatProvider"]
+            ["VideoTaskFollowUp", "LocalSameFormatProvider"]
         );
     }
 
     #[tokio::test]
     async fn stream_decision_path_stops_at_first_decision() {
         let port = TestStreamDecisionPort {
-            outcomes: Mutex::new(VecDeque::from([None, None, Some("files_decision")])),
+            outcomes: Mutex::new(VecDeque::from([None, Some("provider_decision")])),
             calls: Mutex::default(),
         };
 
         let decision = run_ai_stream_decision_path(&port).await.unwrap();
 
-        assert_eq!(decision, Some("files_decision"));
+        assert_eq!(decision, Some("provider_decision"));
         assert_eq!(
             port.calls.lock().unwrap().as_slice(),
-            [
-                "LocalVideoContent",
-                "LocalSameFormatProvider",
-                "LocalGeminiFiles"
-            ]
+            ["LocalVideoContent", "LocalSameFormatProvider"]
         );
     }
 }

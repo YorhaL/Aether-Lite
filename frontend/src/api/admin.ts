@@ -1460,10 +1460,6 @@ export const adminApi = {
     const response = await apiClient.post<CleanupTaskResponse>('/api/admin/system/purge/usage')
     return response.data
   },
-  async purgeAuditLogs(): Promise<CleanupTaskResponse> {
-    const response = await apiClient.post<CleanupTaskResponse>('/api/admin/system/purge/audit-logs')
-    return response.data
-  },
   purgeRequestBodies: () => purge<CleanupTaskResponse>('request-bodies'),
   async purgeRequestBodiesAsync(): Promise<CleanupTaskResponse> {
     const response = await apiClient.post<CleanupTaskResponse>('/api/admin/system/purge/request-bodies/task')

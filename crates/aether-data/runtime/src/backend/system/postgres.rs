@@ -584,9 +584,6 @@ WHERE request_count <> 0
             )
             .await?;
         }
-        AdminSystemPurgeTarget::AuditLogs => {
-            pg_delete_table(tx, "audit_logs", summary).await?;
-        }
         AdminSystemPurgeTarget::RequestBodies => {
             pg_delete_table(tx, "usage_body_blobs", summary).await?;
             pg_execute_if_table_has_columns(
@@ -695,22 +692,6 @@ WHERE user_id IN ({non_admin_users})
         &format!(
             r#"
 UPDATE public.request_candidates
-SET user_id = CASE WHEN user_id IN ({non_admin_users}) THEN NULL ELSE user_id END,
-    api_key_id = CASE WHEN api_key_id IN ({non_admin_keys}) THEN NULL ELSE api_key_id END
-WHERE user_id IN ({non_admin_users})
-   OR api_key_id IN ({non_admin_keys})
-"#
-        ),
-        summary,
-    )
-    .await?;
-    pg_execute_if_table(
-        tx,
-        "audit_logs",
-        "audit_log_user_refs_cleared",
-        &format!(
-            r#"
-UPDATE public.audit_logs
 SET user_id = CASE WHEN user_id IN ({non_admin_users}) THEN NULL ELSE user_id END,
     api_key_id = CASE WHEN api_key_id IN ({non_admin_keys}) THEN NULL ELSE api_key_id END
 WHERE user_id IN ({non_admin_users})

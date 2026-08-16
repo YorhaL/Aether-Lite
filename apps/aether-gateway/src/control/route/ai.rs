@@ -170,14 +170,6 @@ pub(super) fn classify_ai_public_route(
             "gemini:video",
             true,
         ))
-    } else if is_gemini_files_method(method, normalized_path) {
-        Some(classified(
-            "ai_public",
-            "gemini",
-            "files",
-            "gemini:files",
-            true,
-        ))
     } else {
         None
     }
@@ -200,10 +192,4 @@ fn claude_request_auth_channel(headers: &http::HeaderMap) -> &'static str {
 fn is_gemini_operation_method(method: &http::Method, normalized_path: &str) -> bool {
     method == http::Method::GET
         || (method == http::Method::POST && normalized_path.ends_with(":cancel"))
-}
-
-fn is_gemini_files_method(method: &http::Method, normalized_path: &str) -> bool {
-    (method == http::Method::POST && normalized_path == "/upload/v1beta/files")
-        || ((method == http::Method::GET || method == http::Method::DELETE)
-            && normalized_path.starts_with("/v1beta/files"))
 }

@@ -1201,7 +1201,6 @@ pub struct AdminModuleValidationInput<'a> {
     pub module_name: &'a str,
     pub oauth_providers: &'a [StoredOAuthProviderModuleConfig],
     pub ldap_config: Option<&'a StoredLdapModuleConfig>,
-    pub gemini_files_has_capable_key: bool,
     pub important_notification_configured: bool,
     pub s3_backup_configured: bool,
 }
@@ -1213,7 +1212,6 @@ pub fn build_admin_module_validation_result(
         module_name,
         oauth_providers,
         ldap_config,
-        gemini_files_has_capable_key,
         important_notification_configured,
         s3_backup_configured,
     } = input;
@@ -1301,35 +1299,15 @@ pub fn build_admin_module_validation_result(
                 (false, Some("请先完成 S3 备份配置".to_string()))
             }
         }
-        "gemini_files" => {
-            if gemini_files_has_capable_key {
-                (true, None)
-            } else {
-                (
-                    false,
-                    Some("至少启用一个具有「Gemini 文件 API」能力的 Key".to_string()),
-                )
-            }
-        }
         "management_tokens" | "model_directives" => (true, None),
         _ => (true, None),
     }
 }
 
-pub fn build_admin_module_health(
-    module_name: &str,
-    gemini_files_has_capable_key: bool,
-) -> &'static str {
+pub fn build_admin_module_health(module_name: &str) -> &'static str {
     match module_name {
         "management_tokens" | "model_directives" | "important_notification" | "s3_backup" => {
             "healthy"
-        }
-        "gemini_files" => {
-            if gemini_files_has_capable_key {
-                "healthy"
-            } else {
-                "degraded"
-            }
         }
         _ => "unknown",
     }
@@ -1581,7 +1559,6 @@ pub fn admin_system_config_default_value(key: &str) -> Option<serde_json::Value>
         "cyber_continue_failover" => Some(json!(false)),
         "enable_model_directives" => Some(json!(false)),
         "model_directives" => Some(aether_ai_formats::default_model_directives_config()),
-        "audit_log_retention_days" => Some(json!(30)),
         "enable_db_maintenance" => Some(json!(true)),
         "smtp_host" => Some(serde_json::Value::Null),
         "smtp_port" => Some(json!(587)),

@@ -270,32 +270,6 @@ pub fn build_openai_compatible_models_url(upstream_base_url: &str) -> Option<Str
     Some(url)
 }
 
-pub fn build_gemini_files_passthrough_url(
-    upstream_base_url: &str,
-    path: &str,
-    query: Option<&str>,
-) -> Option<String> {
-    let (trimmed_base_url, base_query) = split_base_url_query(upstream_base_url);
-    let trimmed_base_url = trimmed_base_url.trim_end_matches('/');
-    let trimmed_path = path.trim();
-    if trimmed_base_url.is_empty() || trimmed_path.is_empty() {
-        return None;
-    }
-
-    let (trimmed_path, path_query) = split_path_query(trimmed_path);
-    let normalized_base_url = if trimmed_base_url.ends_with("/v1beta")
-        && (trimmed_path.starts_with("/v1beta/") || trimmed_path.starts_with("/upload/v1beta/"))
-    {
-        trimmed_base_url.trim_end_matches("/v1beta")
-    } else {
-        trimmed_base_url
-    };
-
-    let mut url = format!("{normalized_base_url}{trimmed_path}");
-    append_merged_query(&mut url, base_query, path_query, query, &["key"]);
-    Some(url)
-}
-
 fn split_base_url_query(base_url: &str) -> (&str, Option<&str>) {
     let trimmed = base_url.trim();
     trimmed
@@ -414,10 +388,9 @@ fn merge_query_string(
 mod tests {
     use super::{
         build_claude_count_tokens_url, build_claude_messages_url, build_gemini_content_url,
-        build_gemini_files_passthrough_url, build_gemini_video_predict_long_running_url,
-        build_openai_chat_url, build_openai_compatible_models_url, build_openai_image_url,
-        build_openai_responses_url, build_openai_search_url, build_passthrough_path_url,
-        normalize_gemini_content_action_path,
+        build_gemini_video_predict_long_running_url, build_openai_chat_url,
+        build_openai_compatible_models_url, build_openai_image_url, build_openai_responses_url,
+        build_openai_search_url, build_passthrough_path_url, normalize_gemini_content_action_path,
     };
 
     #[test]
@@ -684,21 +657,6 @@ mod tests {
             )
             .as_deref(),
             Some("https://api.openai.example/v1/chat/completions?tenant=demo&trace=1&variant=chat")
-        );
-    }
-
-    #[test]
-    fn merges_base_url_query_for_gemini_files_passthrough_urls() {
-        assert_eq!(
-            build_gemini_files_passthrough_url(
-                "https://generativelanguage.googleapis.com/v1beta?alt=media",
-                "/upload/v1beta/files?uploadType=resumable",
-                Some("key=secret&pageSize=10")
-            )
-            .as_deref(),
-            Some(
-                "https://generativelanguage.googleapis.com/upload/v1beta/files?alt=media&pageSize=10&uploadType=resumable"
-            )
         );
     }
 
