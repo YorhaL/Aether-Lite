@@ -5,8 +5,6 @@ use std::sync::Mutex as StdMutex;
 use std::time::{Duration, Instant};
 
 use aether_data::repository::users::StoredUserGroup;
-use aether_data_contracts::repository::billing::UserDailyQuotaAvailabilityRecord;
-use aether_data_contracts::repository::quota::StoredProviderQuotaSnapshot;
 use aether_data_contracts::repository::usage::UsageCounterHealthSnapshot;
 use aether_runtime::ConcurrencyGate;
 use aether_runtime_state::{RuntimeSemaphore, RuntimeState};
@@ -16,8 +14,8 @@ use tokio::sync::{Mutex as TokioMutex, RwLock as TokioRwLock, Semaphore};
 use super::super::async_task::{VideoTaskPollerConfig, VideoTaskService};
 use super::super::cache::{
     AuthApiKeyFeatureCacheKey, AuthApiKeyIdentityCacheKey, AuthApiKeyLastUsedCache,
-    AuthContextCache, AuthSnapshotCache, DashboardResponseCache, DirectPlanBypassCache,
-    JsonValueCache, SchedulerAffinityCache, SystemConfigCache, ValueCache,
+    AuthContextCache, AuthSnapshotCache, DashboardResponseCache, JsonValueCache,
+    SchedulerAffinityCache, SystemConfigCache, ValueCache,
 };
 use super::super::daily_usage_limit::FrontdoorDailyUsageLimiter;
 use super::super::data::GatewayDataState;
@@ -28,8 +26,6 @@ use super::super::request_candidate_queue::RequestCandidateQueueRuntime;
 use super::super::task_runtime::TaskSupervisorMetrics;
 use super::super::{provider_transport, usage};
 use super::{
-    AdminBillingCollectorRecord, AdminBillingRuleRecord, AdminPaymentCallbackRecord,
-    AdminWalletPaymentOrderRecord, AdminWalletRefundRecord, AdminWalletTransactionRecord,
     CachedProviderTransportSnapshot, FrontdoorCorsConfig, LocalExecutionRuntimeMissDiagnostic,
     LocalProviderDeleteTaskState, ProviderTransportSnapshotCacheKey,
     ProviderTransportSnapshotFlight,
@@ -400,18 +396,13 @@ pub struct AppState {
     pub(crate) auth_api_key_force_capabilities_cache:
         Arc<JsonValueCache<AuthApiKeyIdentityCacheKey>>,
     pub(crate) auth_api_key_feature_settings_cache: Arc<JsonValueCache<AuthApiKeyFeatureCacheKey>>,
-    pub(crate) auth_daily_quota_availability_cache:
-        Arc<ValueCache<String, UserDailyQuotaAvailabilityRecord>>,
     pub(crate) auth_wallet_snapshot_cache:
         Arc<ValueCache<String, aether_data::repository::wallet::StoredWalletSnapshot>>,
     pub(crate) auth_request_cost_upper_bound_cache: Arc<ValueCache<String, f64>>,
-    pub(crate) provider_quota_snapshot_cache: Arc<ValueCache<String, StoredProviderQuotaSnapshot>>,
     pub(crate) user_groups_for_user_cache: Arc<ValueCache<String, Vec<StoredUserGroup>>>,
     pub(crate) routing_group_selection_cache:
         Arc<ValueCache<String, crate::routing::GatewayRoutingGroupSelection>>,
     pub(crate) auth_api_key_last_used_cache: Arc<AuthApiKeyLastUsedCache>,
-    pub(crate) oauth_refresh: Arc<provider_transport::LocalOAuthRefreshCoordinator>,
-    pub(crate) direct_plan_bypass_cache: Arc<DirectPlanBypassCache>,
     pub(crate) scheduler_affinity_cache: Arc<SchedulerAffinityCache>,
     pub(crate) scheduler_affinity_epoch: Arc<AtomicU64>,
     pub(crate) dashboard_response_cache: Arc<DashboardResponseCache>,
@@ -436,7 +427,7 @@ pub struct AppState {
     pub(crate) request_candidate_queue: Option<Arc<RequestCandidateQueueRuntime>>,
     pub(crate) frontdoor_cors: Option<Arc<FrontdoorCorsConfig>>,
     pub(crate) frontdoor_limiters: Arc<FrontdoorLimiters>,
-    pub(crate) tunnel: crate::tunnel::EmbeddedTunnelState,
+    pub(crate) gateway_instance_id: Arc<str>,
     pub(crate) provider_transport_snapshot_cache:
         Arc<DashMap<ProviderTransportSnapshotCacheKey, CachedProviderTransportSnapshot>>,
     pub(crate) provider_transport_snapshot_cache_generation: Arc<AtomicU64>,
@@ -451,12 +442,6 @@ pub struct AppState {
     pub(crate) turnstile_siteverify_url_override: Option<String>,
     #[cfg(test)]
     pub(crate) turnstile_siteverify_timeout_override: Option<Duration>,
-    #[cfg(test)]
-    pub(crate) provider_oauth_state_store: Option<Arc<StdMutex<HashMap<String, String>>>>,
-    #[cfg(test)]
-    pub(crate) provider_oauth_device_session_store: Option<Arc<StdMutex<HashMap<String, String>>>>,
-    #[cfg(test)]
-    pub(crate) provider_oauth_batch_task_store: Option<Arc<StdMutex<HashMap<String, String>>>>,
     #[cfg(test)]
     pub(crate) auth_session_store:
         Option<Arc<StdMutex<HashMap<String, crate::data::state::StoredUserSessionRecord>>>>,
@@ -476,24 +461,6 @@ pub struct AppState {
         Arc<StdMutex<HashMap<String, aether_data::repository::wallet::StoredWalletSnapshot>>>,
     >,
     #[cfg(test)]
-    pub(crate) admin_wallet_payment_order_store:
-        Option<Arc<StdMutex<HashMap<String, AdminWalletPaymentOrderRecord>>>>,
-    #[cfg(test)]
-    pub(crate) admin_payment_callback_store:
-        Option<Arc<StdMutex<HashMap<String, AdminPaymentCallbackRecord>>>>,
-    #[cfg(test)]
-    pub(crate) admin_wallet_transaction_store:
-        Option<Arc<StdMutex<HashMap<String, AdminWalletTransactionRecord>>>>,
-    #[cfg(test)]
-    pub(crate) admin_wallet_refund_store:
-        Option<Arc<StdMutex<HashMap<String, AdminWalletRefundRecord>>>>,
-    #[cfg(test)]
-    pub(crate) admin_billing_rule_store:
-        Option<Arc<StdMutex<HashMap<String, AdminBillingRuleRecord>>>>,
-    #[cfg(test)]
-    pub(crate) admin_billing_collector_store:
-        Option<Arc<StdMutex<HashMap<String, AdminBillingCollectorRecord>>>>,
-    #[cfg(test)]
     pub(crate) admin_security_blacklist_store: Option<Arc<StdMutex<HashMap<String, String>>>>,
     #[cfg(test)]
     pub(crate) admin_security_whitelist_store:
@@ -503,8 +470,6 @@ pub struct AppState {
         Option<Arc<StdMutex<HashMap<String, String>>>>,
     #[cfg(test)]
     pub(crate) admin_monitoring_redis_key_store: Option<Arc<StdMutex<HashMap<String, String>>>>,
-    #[cfg(test)]
-    pub(crate) provider_oauth_token_url_overrides: Arc<StdMutex<HashMap<String, String>>>,
 }
 
 #[cfg(test)]

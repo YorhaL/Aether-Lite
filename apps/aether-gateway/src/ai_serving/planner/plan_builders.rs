@@ -12,28 +12,10 @@ pub(crate) use crate::ai_serving::{
 };
 use crate::{AiExecutionDecision, GatewayError};
 
-#[path = "standard/gemini/plan_builders.rs"]
-mod gemini_builders;
-#[path = "standard/openai/plan_builders.rs"]
-mod openai_builders;
 #[path = "passthrough/plan_builders.rs"]
 mod passthrough_builders;
-#[path = "standard/plan_builders.rs"]
-mod standard_builders;
-
-pub(crate) use gemini_builders::{
-    build_gemini_stream_plan_from_decision, build_gemini_sync_plan_from_decision,
-};
-pub(crate) use openai_builders::{
-    build_openai_chat_stream_plan_from_decision, build_openai_chat_sync_plan_from_decision,
-    build_openai_responses_stream_plan_from_decision,
-    build_openai_responses_sync_plan_from_decision,
-};
 pub(crate) use passthrough_builders::{
     build_passthrough_stream_plan_from_decision, build_passthrough_sync_plan_from_decision,
-};
-pub(crate) use standard_builders::{
-    build_standard_stream_plan_from_decision, build_standard_sync_plan_from_decision,
 };
 
 pub(super) fn augment_sync_report_context(

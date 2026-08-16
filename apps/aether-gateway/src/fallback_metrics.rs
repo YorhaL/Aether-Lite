@@ -27,12 +27,10 @@ impl GatewayFallbackMetricKind {
 
     fn help(self) -> &'static str {
         match self {
-            Self::DecisionRemote => {
-                "Number of requests that fell back to Python decision endpoints."
-            }
-            Self::PlanFallback => "Number of requests that fell back to Python plan endpoints.",
+            Self::DecisionRemote => "Number of requests that used remote decision fallback.",
+            Self::PlanFallback => "Number of requests that used fallback execution plans.",
             Self::ControlExecuteFallback => {
-                "Number of requests that fell back to Python control execution."
+                "Number of requests that used control execution fallback."
             }
             Self::LocalExecutionRuntimeMiss => {
                 "Number of requests that were terminated locally after execution runtime miss because no proxy fallback exists."

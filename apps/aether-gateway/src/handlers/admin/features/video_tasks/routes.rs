@@ -226,16 +226,11 @@ pub(super) async fn maybe_build_local_admin_video_tasks_response(
                 "provider_api_format".to_string(),
                 json!(task.provider_api_format),
             );
-            payload.insert("format_converted".to_string(), json!(task.format_converted));
             payload.insert("model".to_string(), json!(task.model));
             payload.insert("prompt".to_string(), json!(task.prompt));
             payload.insert(
                 "original_request_body".to_string(),
                 json!(task.original_request_body),
-            );
-            payload.insert(
-                "converted_request_body".to_string(),
-                serde_json::Value::Null,
             );
             payload.insert("duration_seconds".to_string(), json!(task.duration_seconds));
             payload.insert("resolution".to_string(), json!(task.resolution));
@@ -332,9 +327,7 @@ pub(super) async fn maybe_build_local_admin_video_tasks_response(
             ));
         };
         return Ok(Some(attach_admin_audit_response(
-            state
-                .build_video_task_video_response(task_id, source)
-                .await?,
+            state.build_video_task_video_response(source).await?,
             "admin_video_task_video_viewed",
             "view_video_task_video",
             "video_task_video",

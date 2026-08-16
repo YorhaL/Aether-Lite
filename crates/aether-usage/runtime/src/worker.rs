@@ -28,17 +28,6 @@ pub trait UsageEventRecorder: Send + Sync {
 }
 
 #[async_trait]
-pub trait ManualProxyNodeCounter: Send + Sync {
-    async fn increment_manual_proxy_node_requests(
-        &self,
-        node_id: &str,
-        total_delta: i64,
-        failed_delta: i64,
-        latency_ms: Option<i64>,
-    ) -> Result<(), DataLayerError>;
-}
-
-#[async_trait]
 pub trait UsageRecordWriter: Send + Sync {
     /// Native batch support is opt-in; the default preserves one-row writes for other backends.
     fn supports_first_byte_usage_batch(&self) -> bool {
@@ -741,8 +730,8 @@ mod tests {
 
     use super::{
         build_usage_queue_worker_with_record_gate, usage_event_record_error_is_permanent,
-        write_event_record, ManualProxyNodeCounter, UsageEventRecorder, UsageQueueWorker,
-        UsageRecordWriter, UsageWorkerControl,
+        write_event_record, UsageEventRecorder, UsageQueueWorker, UsageRecordWriter,
+        UsageWorkerControl,
     };
     use crate::runtime::UsageWorkerRecordConcurrencyGate;
     use crate::UsageBillingEventEnricher;
@@ -756,7 +745,6 @@ mod tests {
         records: Mutex<Vec<UpsertUsageRecord>>,
         settlements: Mutex<Vec<UsageSettlementInput>>,
         enrich_calls: Mutex<Vec<String>>,
-        manual_proxy_counter_calls: AtomicUsize,
     }
 
     #[derive(Default)]
@@ -927,7 +915,6 @@ mod tests {
                     record.endpoint_api_format,
                     record.provider_api_family,
                     record.provider_endpoint_kind,
-                    record.has_format_conversion.unwrap_or(false),
                     record.is_stream.unwrap_or(false),
                     record.input_tokens.unwrap_or_default() as i32,
                     record.output_tokens.unwrap_or_default() as i32,
@@ -967,21 +954,6 @@ mod tests {
                 .expect("settlements lock")
                 .push(input);
             Ok(None)
-        }
-    }
-
-    #[async_trait]
-    impl ManualProxyNodeCounter for TestUsageStore {
-        async fn increment_manual_proxy_node_requests(
-            &self,
-            _node_id: &str,
-            _total_delta: i64,
-            _failed_delta: i64,
-            _latency_ms: Option<i64>,
-        ) -> Result<(), aether_data_contracts::DataLayerError> {
-            self.manual_proxy_counter_calls
-                .fetch_add(1, Ordering::AcqRel);
-            Ok(())
         }
     }
 
@@ -1045,19 +1017,6 @@ mod tests {
             _input: UsageSettlementInput,
         ) -> Result<Option<StoredUsageSettlement>, DataLayerError> {
             Ok(None)
-        }
-    }
-
-    #[async_trait]
-    impl ManualProxyNodeCounter for SlowUsageStore {
-        async fn increment_manual_proxy_node_requests(
-            &self,
-            _node_id: &str,
-            _total_delta: i64,
-            _failed_delta: i64,
-            _latency_ms: Option<i64>,
-        ) -> Result<(), DataLayerError> {
-            Ok(())
         }
     }
 
@@ -1145,28 +1104,6 @@ mod tests {
         let settlements = store.settlements.lock().expect("settlements lock");
         assert_eq!(settlements.len(), 1);
         assert_eq!(settlements[0].request_id, "req-worker-123");
-    }
-
-    #[tokio::test]
-    async fn replayable_usage_write_does_not_duplicate_transport_owned_proxy_counter() {
-        let store = TestUsageStore::default();
-        let mut event = sample_event();
-        event.data.request_metadata = Some(serde_json::json!({
-            "proxy": {"mode": "manual", "node_id": "manual-node-1"}
-        }));
-
-        write_event_record(&store, &event)
-            .await
-            .expect("first usage write should succeed");
-        write_event_record(&store, &event)
-            .await
-            .expect("replayed usage write should succeed");
-
-        assert_eq!(
-            store.manual_proxy_counter_calls.load(Ordering::Acquire),
-            0,
-            "proxy traffic belongs to the transport attempt, not the replayable usage worker"
-        );
     }
 
     #[tokio::test]

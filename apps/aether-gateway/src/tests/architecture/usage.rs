@@ -246,7 +246,6 @@ fn handlers_do_not_depend_on_raw_state_records() {
         &[
             "StoredUserSessionRecord",
             "StoredUserPreferenceRecord",
-            "AdminPaymentCallbackRecord",
         ],
     );
 
@@ -254,7 +253,6 @@ fn handlers_do_not_depend_on_raw_state_records() {
     for pattern in [
         "pub(crate) struct GatewayUserSessionView",
         "pub(crate) struct GatewayUserPreferenceView",
-        "pub(crate) struct GatewayAdminPaymentCallbackView",
     ] {
         assert!(
             state_types.contains(pattern),

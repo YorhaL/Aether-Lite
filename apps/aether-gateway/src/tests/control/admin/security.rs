@@ -203,7 +203,7 @@ async fn send_admin_security_request(
     let client = reqwest::Client::new();
     let mut request = client
         .request(method, format!("{gateway_url}{path}"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123");
@@ -224,7 +224,7 @@ async fn send_admin_security_request(
 
 fn trusted_admin_headers() -> HeaderMap {
     let mut headers = HeaderMap::new();
-    headers.insert(GATEWAY_HEADER, HeaderValue::from_static("rust-phase3b"));
+    headers.insert(GATEWAY_HEADER, HeaderValue::from_static("aether"));
     headers.insert(
         TRUSTED_ADMIN_USER_ID_HEADER,
         HeaderValue::from_static("admin-user-123"),

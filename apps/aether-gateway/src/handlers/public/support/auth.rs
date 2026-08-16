@@ -1,5 +1,5 @@
 pub(super) use super::{
-    build_unhandled_public_support_response, decrypt_catalog_secret_with_fallbacks,
+    build_public_support_route_not_found_response, decrypt_catalog_secret_with_fallbacks,
     escape_admin_email_template_html, ldap_module_config_is_valid, module_available_from_env,
     read_admin_email_template_payload, render_admin_email_template_html, system_config_bool,
     system_config_string, AppState, GatewayError, GatewayPublicRequestContext,
@@ -204,8 +204,8 @@ async fn handle_auth_login(
                     }
                 };
             let _ = &ldap_user.display_name;
-            let initial_gift = match state
-                .read_system_config_json_value("default_user_initial_gift_usd")
+            let initial_balance = match state
+                .read_system_config_json_value("default_user_initial_balance_usd")
                 .await
             {
                 Ok(value) => system_config_f64(value.as_ref(), 10.0),
@@ -224,7 +224,7 @@ async fn handle_auth_login(
                     Some(ldap_user.ldap_dn),
                     Some(ldap_user.ldap_username),
                     auth_now(),
-                    initial_gift,
+                    initial_balance,
                     false,
                 )
                 .await
@@ -302,7 +302,9 @@ pub(super) async fn maybe_build_local_auth_response(
         Some("logout") if request_context.request_path == "/api/auth/logout" => {
             Some(handle_auth_logout(state, request_context, headers).await)
         }
-        _ => Some(build_unhandled_public_support_response(request_context)),
+        _ => Some(build_public_support_route_not_found_response(
+            request_context,
+        )),
     }
 }
 
@@ -330,7 +332,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn auth_unhandled_route_returns_local_not_implemented_response() {
+    async fn auth_unhandled_route_returns_not_found_response() {
         let state = AppState::new().expect("gateway should build");
         let request_context = request_context(Method::POST, "/api/auth/login/history", "login");
         let response = maybe_build_local_auth_response(
@@ -343,16 +345,13 @@ mod tests {
         .await
         .expect("auth handler should return response");
 
-        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
         let body = to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("body should read");
         let payload: serde_json::Value =
             serde_json::from_slice(&body).expect("json body should parse");
-        assert_eq!(
-            payload["detail"],
-            "public support route not implemented in rust frontdoor"
-        );
+        assert_eq!(payload["detail"], "Route not found");
         assert_eq!(payload["route_family"], "auth");
         assert_eq!(payload["route_kind"], "login");
         assert_eq!(payload["request_path"], "/api/auth/login/history");

@@ -3,7 +3,6 @@ pub use crate::candidate_materialization::AiCandidateMaterializationPort;
 pub use crate::candidate_persistence::{
     AiAvailableCandidatePersistencePort, AiSkippedCandidatePersistencePort,
 };
-pub use crate::candidate_preselection::AiCandidatePreselectionPort;
 pub use crate::candidate_ranking::AiCandidateRankingPort;
 pub use crate::candidate_resolution::AiCandidateResolutionPort;
 pub use crate::decision_input::AiAuthenticatedDecisionInputPort;

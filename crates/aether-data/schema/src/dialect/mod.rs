@@ -1,13 +1,11 @@
 use crate::{Column, DefaultValue, DriverColumnOverride, LogicalType, ReferentialAction};
 
-pub mod mysql;
 pub mod postgres;
 pub mod sqlite;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Dialect {
     Postgres,
-    Mysql,
     Sqlite,
 }
 
@@ -15,7 +13,6 @@ impl Dialect {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Postgres => "postgres",
-            Self::Mysql => "mysql",
             Self::Sqlite => "sqlite",
         }
     }
@@ -91,30 +88,6 @@ fn postgres_type(column: &Column) -> String {
         LogicalType::Timestamp => "timestamp with time zone".to_string(),
         LogicalType::Json => "jsonb".to_string(),
         LogicalType::Bytes => "bytea".to_string(),
-    }
-}
-
-fn mysql_type(column: &Column) -> String {
-    let override_ = column.driver.mysql.as_ref();
-    if let Some(sql_type) = override_type(override_) {
-        return sql_type.to_string();
-    }
-    match column.logical_type {
-        LogicalType::TextId | LogicalType::Text => match column.length {
-            Some(length) => format!("VARCHAR({length})"),
-            None => "TEXT".to_string(),
-        },
-        LogicalType::LongText => "LONGTEXT".to_string(),
-        LogicalType::Bool => "TINYINT(1)".to_string(),
-        LogicalType::Int32 => "INT".to_string(),
-        LogicalType::Int64 | LogicalType::UnixSeconds | LogicalType::UnixMillis => {
-            "BIGINT".to_string()
-        }
-        LogicalType::Float64 => "DOUBLE".to_string(),
-        LogicalType::DecimalMoney => "DECIMAL(20,8)".to_string(),
-        LogicalType::Timestamp => "BIGINT".to_string(),
-        LogicalType::Json => "JSON".to_string(),
-        LogicalType::Bytes => "LONGBLOB".to_string(),
     }
 }
 

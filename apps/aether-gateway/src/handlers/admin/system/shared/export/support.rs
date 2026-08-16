@@ -1,9 +1,9 @@
 use super::super::configs::is_sensitive_admin_system_config_key;
 use crate::api::ai::admin_endpoint_signature_parts;
+use crate::handlers::admin::provider::write::normalize::retain_supported_provider_config;
 use crate::handlers::admin::request::AdminAppState;
 use crate::handlers::shared::decrypt_catalog_secret_with_fallbacks;
 pub(crate) use aether_admin::system::ADMIN_SYSTEM_CONFIG_EXPORT_VERSION;
-use aether_admin::system::ADMIN_SYSTEM_PROVIDER_OPS_SENSITIVE_CREDENTIAL_FIELDS;
 use aether_data_contracts::repository::provider_catalog::StoredProviderCatalogEndpoint;
 
 pub(crate) const ADMIN_SYSTEM_EXPORT_PAGE_LIMIT: usize = 10_000;
@@ -47,30 +47,11 @@ pub(super) fn collect_admin_system_export_provider_endpoint_formats(
     )
 }
 
-pub(super) fn decrypt_admin_system_export_provider_config(
-    state: &AdminAppState<'_>,
+pub(super) fn admin_system_export_provider_config(
     config: Option<&serde_json::Value>,
 ) -> Option<serde_json::Value> {
-    let mut decrypted = config.cloned()?;
-    let Some(credentials) = decrypted
-        .get_mut("provider_ops")
-        .and_then(serde_json::Value::as_object_mut)
-        .and_then(|provider_ops| provider_ops.get_mut("connector"))
-        .and_then(serde_json::Value::as_object_mut)
-        .and_then(|connector| connector.get_mut("credentials"))
-        .and_then(serde_json::Value::as_object_mut)
-    else {
-        return Some(decrypted);
-    };
-
-    for field in ADMIN_SYSTEM_PROVIDER_OPS_SENSITIVE_CREDENTIAL_FIELDS {
-        let Some(serde_json::Value::String(ciphertext)) = credentials.get(*field).cloned() else {
-            continue;
-        };
-        if let Some(plaintext) = decrypt_admin_system_export_secret(state, &ciphertext) {
-            credentials.insert((*field).to_string(), serde_json::Value::String(plaintext));
-        }
-    }
-
-    Some(decrypted)
+    let mut config = config.cloned()?;
+    let object = config.as_object_mut()?;
+    retain_supported_provider_config(object);
+    (!object.is_empty()).then_some(config)
 }

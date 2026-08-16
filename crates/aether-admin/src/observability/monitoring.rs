@@ -9,15 +9,8 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct AdminMonitoringKeyAccountDisplay {
-    pub label: Option<String>,
-    pub oauth_plan_type: Option<String>,
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdminMonitoringRoute {
@@ -271,18 +264,6 @@ pub fn build_admin_monitoring_trace_request_payload_response(
     trace: &DecisionTrace,
     usage: Option<&StoredRequestUsageAudit>,
 ) -> Response<Body> {
-    build_admin_monitoring_trace_request_payload_response_with_key_accounts(
-        trace,
-        usage,
-        &BTreeMap::new(),
-    )
-}
-
-pub fn build_admin_monitoring_trace_request_payload_response_with_key_accounts(
-    trace: &DecisionTrace,
-    usage: Option<&StoredRequestUsageAudit>,
-    key_accounts: &BTreeMap<String, AdminMonitoringKeyAccountDisplay>,
-) -> Response<Body> {
     let usage_candidate_id =
         usage.and_then(|item| resolve_admin_monitoring_usage_candidate_id(trace, item));
     let candidates = trace
@@ -293,11 +274,7 @@ pub fn build_admin_monitoring_trace_request_payload_response_with_key_accounts(
                 .as_deref()
                 .filter(|candidate_id| *candidate_id == item.candidate.id.as_str())
                 .and(usage);
-            build_admin_monitoring_trace_request_candidate_payload_with_key_accounts(
-                item,
-                matched_usage,
-                key_accounts,
-            )
+            build_admin_monitoring_trace_request_candidate_payload(item, matched_usage)
         })
         .collect::<Vec<_>>();
     Json(json!({
@@ -317,23 +294,7 @@ pub fn build_admin_monitoring_trace_request_candidate_payload(
     item: &DecisionTraceCandidate,
     usage: Option<&StoredRequestUsageAudit>,
 ) -> Value {
-    build_admin_monitoring_trace_request_candidate_payload_with_key_accounts(
-        item,
-        usage,
-        &BTreeMap::new(),
-    )
-}
-
-pub fn build_admin_monitoring_trace_request_candidate_payload_with_key_accounts(
-    item: &DecisionTraceCandidate,
-    usage: Option<&StoredRequestUsageAudit>,
-    key_accounts: &BTreeMap<String, AdminMonitoringKeyAccountDisplay>,
-) -> Value {
     let candidate = &item.candidate;
-    let key_account = candidate
-        .key_id
-        .as_deref()
-        .and_then(|key_id| key_accounts.get(key_id));
     json!({
         "id": candidate.id,
         "request_id": candidate.request_id,
@@ -343,22 +304,17 @@ pub fn build_admin_monitoring_trace_request_candidate_payload_with_key_accounts(
         "provider_name": item.provider_name,
         "provider_website": item.provider_website,
         "provider_priority": item.provider_priority,
-        "provider_keep_priority_on_conversion": item.provider_keep_priority_on_conversion,
-        "provider_enable_format_conversion": item.provider_enable_format_conversion,
         "endpoint_id": candidate.endpoint_id,
         "endpoint_name": item.endpoint_api_format,
         "endpoint_api_family": item.endpoint_api_family,
         "endpoint_kind": item.endpoint_kind,
-        "endpoint_format_acceptance_config": item.endpoint_format_acceptance_config,
         "key_id": candidate.key_id,
         "key_name": item.provider_key_name,
-        "key_account_label": key_account.and_then(|item| item.label.clone()),
         "key_preview": serde_json::Value::Null,
         "key_auth_type": item.provider_key_auth_type,
         "key_api_formats": item.provider_key_api_formats,
         "key_internal_priority": item.provider_key_internal_priority,
         "key_global_priority_by_format": item.provider_key_global_priority_by_format,
-        "key_oauth_plan_type": key_account.and_then(|item| item.oauth_plan_type.clone()),
         "key_capabilities": item.provider_key_capabilities,
         "required_capabilities": candidate.required_capabilities,
         "status": candidate.status,
@@ -487,9 +443,6 @@ fn build_admin_monitoring_trace_candidate_ranking(existing: Option<&Value>) -> V
     if let Some(promoted_by) = json_string_field(object, "promoted_by") {
         ranking.insert("promoted_by".to_string(), Value::String(promoted_by));
     }
-    if let Some(demoted_by) = json_string_field(object, "demoted_by") {
-        ranking.insert("demoted_by".to_string(), Value::String(demoted_by));
-    }
 
     if ranking.is_empty() {
         Value::Null
@@ -542,25 +495,6 @@ fn build_admin_monitoring_trace_candidate_extra_data(
                 merge_admin_monitoring_trace_response(extra_object, "upstream_response", response);
             }
         }
-
-        if let Some(proxy_value) = extra_object.get_mut("proxy") {
-            if let Some(proxy_object) = proxy_value.as_object_mut() {
-                let proxy_timing = parse_admin_monitoring_usage_proxy_timing(usage);
-                let proxy_ttfb_ms = proxy_timing
-                    .as_ref()
-                    .and_then(|timing| timing.get("ttfb_ms"))
-                    .and_then(Value::as_u64)
-                    .or(usage.first_byte_time_ms);
-                if let Some(ttfb_ms) = proxy_ttfb_ms {
-                    proxy_object
-                        .entry("ttfb_ms".to_string())
-                        .or_insert_with(|| json!(ttfb_ms));
-                }
-                if let Some(timing) = proxy_timing {
-                    proxy_object.entry("timing".to_string()).or_insert(timing);
-                }
-            }
-        }
     }
 
     match extra_data {
@@ -598,55 +532,10 @@ fn admin_monitoring_trace_response_data(
 }
 
 fn admin_monitoring_trace_response_body(
-    headers: Option<&Value>,
+    _headers: Option<&Value>,
     body: Option<&Value>,
 ) -> Option<Value> {
-    let body = body?;
-    admin_monitoring_decode_connect_json_error_body(headers, body).or_else(|| Some(body.clone()))
-}
-
-fn admin_monitoring_decode_connect_json_error_body(
-    headers: Option<&Value>,
-    body: &Value,
-) -> Option<Value> {
-    if !admin_monitoring_headers_indicate_connect_json(headers) {
-        return None;
-    }
-
-    let body_base64 = match body {
-        Value::String(value) => Some(value.as_str()),
-        Value::Object(object) => object
-            .get("encoding")
-            .and_then(Value::as_str)
-            .is_some_and(|value| value.eq_ignore_ascii_case("base64"))
-            .then(|| object.get("data").and_then(Value::as_str))
-            .flatten(),
-        _ => None,
-    }?
-    .trim();
-    if body_base64.is_empty() {
-        return None;
-    }
-
-    let body_bytes = BASE64_STANDARD.decode(body_base64).ok()?;
-    aether_ai_formats::api::extract_provider_private_stream_error_body(None, &body_bytes)
-}
-
-fn admin_monitoring_headers_indicate_connect_json(headers: Option<&Value>) -> bool {
-    headers
-        .and_then(Value::as_object)
-        .and_then(|object| {
-            object.iter().find_map(|(key, value)| {
-                key.eq_ignore_ascii_case("content-type")
-                    .then(|| value.as_str())
-                    .flatten()
-            })
-        })
-        .map(str::trim)
-        .is_some_and(|value| {
-            let value = value.to_ascii_lowercase();
-            value.contains("application/connect+json") || value.contains("+connect+json")
-        })
+    body.cloned()
 }
 
 fn merge_admin_monitoring_trace_response(
@@ -770,37 +659,6 @@ fn json_i64_field(object: &serde_json::Map<String, Value>, key: &str) -> Option<
     }
 }
 
-fn parse_admin_monitoring_usage_proxy_timing(usage: &StoredRequestUsageAudit) -> Option<Value> {
-    admin_monitoring_header_value(usage.response_headers.as_ref(), "x-proxy-timing")
-        .or_else(|| {
-            admin_monitoring_header_value(usage.client_response_headers.as_ref(), "x-proxy-timing")
-        })
-        .and_then(|raw| parse_admin_monitoring_proxy_timing_value(&raw))
-}
-
-fn admin_monitoring_header_value(headers: Option<&Value>, name: &str) -> Option<String> {
-    headers
-        .and_then(Value::as_object)
-        .and_then(|object| {
-            object
-                .iter()
-                .find(|(key, _)| key.eq_ignore_ascii_case(name))
-                .map(|(_, value)| value)
-        })
-        .and_then(|value| match value {
-            Value::String(text) => Some(text.trim().to_string()),
-            Value::Object(object) => Some(Value::Object(object.clone()).to_string()),
-            _ => None,
-        })
-        .filter(|value| !value.is_empty())
-}
-
-fn parse_admin_monitoring_proxy_timing_value(raw: &str) -> Option<Value> {
-    serde_json::from_str::<Value>(raw)
-        .ok()
-        .filter(Value::is_object)
-}
-
 #[allow(clippy::too_many_arguments)]
 pub fn build_admin_monitoring_system_status_payload_response(
     timestamp: chrono::DateTime<chrono::Utc>,
@@ -813,9 +671,6 @@ pub fn build_admin_monitoring_system_status_payload_response(
     today_requests: usize,
     today_tokens: u64,
     today_cost: f64,
-    proxy_connections: usize,
-    nodes: usize,
-    active_streams: usize,
     path_prefixes: &[&str],
     recent_errors: usize,
     usage_counter: Value,
@@ -838,11 +693,6 @@ pub fn build_admin_monitoring_system_status_payload_response(
             "requests": today_requests,
             "tokens": today_tokens,
             "cost_usd": format!("${today_cost:.4}"),
-        },
-        "tunnel": {
-            "proxy_connections": proxy_connections,
-            "nodes": nodes,
-            "active_streams": active_streams,
         },
         "internal_gateway": {
             "status": "rust_native_control_plane",

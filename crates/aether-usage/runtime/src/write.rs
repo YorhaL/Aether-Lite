@@ -92,7 +92,6 @@ pub struct LifecycleUsageSeed {
     pub endpoint_api_format: Option<String>,
     pub provider_api_family: Option<String>,
     pub provider_endpoint_kind: Option<String>,
-    pub has_format_conversion: Option<bool>,
     pub is_stream: bool,
     routing: UsageRoutingSeed,
     body_states: UsageBodyStatesSeed,
@@ -124,7 +123,6 @@ pub struct TerminalUsageContextSeed {
     pub provider_endpoint_id: Option<String>,
     pub provider_api_key_id: Option<String>,
     pub request_type: String,
-    pub has_format_conversion: bool,
     pub is_stream: bool,
     pub request_headers: Option<Value>,
     pub request_body: Option<Value>,
@@ -190,7 +188,6 @@ pub struct TerminalUsageSeed {
     pub provider_endpoint_id: Option<String>,
     pub provider_api_key_id: Option<String>,
     pub request_type: String,
-    pub has_format_conversion: bool,
     pub is_stream: bool,
     pub status_code: u16,
     pub terminal_error_message: Option<String>,
@@ -308,7 +305,6 @@ pub fn build_lifecycle_usage_seed(
         endpoint_api_format,
         provider_api_family,
         provider_endpoint_kind,
-        has_format_conversion: context_bool(context, "needs_conversion"),
         is_stream: plan.stream,
         routing: build_runtime_routing_seed(plan, context),
         body_states: build_runtime_body_states_seed(plan, context),
@@ -518,7 +514,6 @@ fn build_lifecycle_usage_event_from_record(
             endpoint_api_format: record.endpoint_api_format,
             provider_api_family: record.provider_api_family,
             provider_endpoint_kind: record.provider_endpoint_kind,
-            has_format_conversion: record.has_format_conversion,
             is_stream: record.is_stream,
             input_tokens: record.input_tokens,
             output_tokens: record.output_tokens,
@@ -649,7 +644,6 @@ fn build_terminal_usage_event_from_seed_impl(
         provider_endpoint_id,
         provider_api_key_id,
         request_type,
-        has_format_conversion,
         is_stream,
         status_code,
         terminal_error_message,
@@ -727,7 +721,6 @@ fn build_terminal_usage_event_from_seed_impl(
         endpoint_api_format: Some(provider_contract),
         provider_api_family,
         provider_endpoint_kind,
-        has_format_conversion: Some(has_format_conversion),
         is_stream: Some(is_stream),
         status_code: Some(status_code),
         error_message,
@@ -814,16 +807,9 @@ pub fn build_terminal_usage_context_seed(
         Some(provider_contract.as_str()),
         request_capture.provider_request.as_ref(),
     );
-    let has_format_conversion = resolve_has_format_conversion(
-        context,
-        client_contract.as_str(),
-        provider_contract.as_str(),
-    );
-
     TerminalUsageContextSeed {
         client_contract,
         provider_contract,
-        has_format_conversion,
         request_id: plan.request_id.clone(),
         user_id: context_string(context, "user_id"),
         api_key_id: context_string(context, "api_key_id"),
@@ -915,7 +901,6 @@ pub fn build_sync_terminal_usage_payload_seed(
         .or_else(|| headers_to_json(&payload.headers));
     let client_response_headers = context_usage_value(context, "client_response_headers")
         .or_else(|| headers_to_json(&payload.headers));
-    let standardized_usage = kiro_simulated_cache_standardized_usage_from_context(context);
     SyncTerminalUsagePayloadSeed {
         report_kind: payload.report_kind.clone(),
         status_code: payload.status_code,
@@ -930,7 +915,7 @@ pub fn build_sync_terminal_usage_payload_seed(
         provider_response_body_state,
         client_response,
         client_response_body_state,
-        standardized_usage,
+        standardized_usage: None,
         capture_metadata: build_payload_body_capture_metadata(
             payload.body_base64.as_deref(),
             None,
@@ -1047,7 +1032,6 @@ pub fn build_sync_terminal_usage_seed(
         provider_endpoint_id: context_seed.provider_endpoint_id,
         provider_api_key_id: context_seed.provider_api_key_id,
         request_type: context_seed.request_type,
-        has_format_conversion: context_seed.has_format_conversion,
         is_stream: context_seed.is_stream,
         status_code,
         terminal_error_message: None,
@@ -1231,7 +1215,6 @@ pub fn build_stream_terminal_usage_seed(
         provider_endpoint_id: context_seed.provider_endpoint_id,
         provider_api_key_id: context_seed.provider_api_key_id,
         request_type: context_seed.request_type,
-        has_format_conversion: context_seed.has_format_conversion,
         is_stream: context_seed.is_stream,
         status_code,
         terminal_error_message,
@@ -1442,20 +1425,6 @@ fn is_openai_responses_family_format_alias(value: &str) -> bool {
     aether_ai_formats::is_openai_responses_family_format(normalized.as_str())
 }
 
-fn resolve_has_format_conversion(
-    context: Option<&Map<String, Value>>,
-    client_contract: &str,
-    provider_contract: &str,
-) -> bool {
-    match context_string(context, "conversion_mode").as_deref() {
-        Some("none") => false,
-        Some("request_only" | "response_only" | "bidirectional") => true,
-        _ if context_bool(context, "needs_conversion").unwrap_or(false) => true,
-        _ if client_contract != provider_contract => true,
-        _ => false,
-    }
-}
-
 fn build_lifecycle_usage_record(
     input: LifecycleUsageRecordInput<'_>,
 ) -> Result<UpsertUsageRecord, DataLayerError> {
@@ -1497,7 +1466,6 @@ fn build_lifecycle_usage_record_owned(
         endpoint_api_format,
         provider_api_family,
         provider_endpoint_kind,
-        has_format_conversion,
         is_stream,
         routing,
         body_states,
@@ -1534,7 +1502,6 @@ fn build_lifecycle_usage_record_owned(
         endpoint_api_format,
         provider_api_family,
         provider_endpoint_kind,
-        has_format_conversion,
         is_stream: Some(is_stream),
         input_tokens: None,
         output_tokens: None,
@@ -1631,7 +1598,6 @@ fn build_lifecycle_usage_record_impl(
         endpoint_api_format: seed.endpoint_api_format.clone(),
         provider_api_family: seed.provider_api_family.clone(),
         provider_endpoint_kind: seed.provider_endpoint_kind.clone(),
-        has_format_conversion: seed.has_format_conversion,
         is_stream: Some(seed.is_stream),
         input_tokens: None,
         output_tokens: None,
@@ -1763,7 +1729,6 @@ fn build_usage_event_data_seed_with_detail(
         endpoint_api_format,
         provider_api_family,
         provider_endpoint_kind,
-        has_format_conversion: context_bool(context, "needs_conversion"),
         is_stream: Some(plan.stream),
         request_headers: context_usage_value(context, "original_headers"),
         request_body: request_capture.request_body,
@@ -1957,31 +1922,6 @@ fn context_body_value(context: Option<&Map<String, Value>>, key: &str) -> Option
     }
 }
 
-fn kiro_simulated_cache_standardized_usage_from_context(
-    context: Option<&Map<String, Value>>,
-) -> Option<StandardizedUsage> {
-    let enabled = context_bool(context, "kiro_simulated_cache_enabled").unwrap_or(false);
-    if !enabled {
-        return None;
-    }
-
-    let input_tokens = context_u64(context, "input_tokens")?;
-    let cache_creation_tokens = context_u64(context, "cache_creation_input_tokens").unwrap_or(0);
-    let cache_read_tokens = context_u64(context, "cache_read_input_tokens").unwrap_or(0);
-    if cache_creation_tokens == 0 && cache_read_tokens == 0 {
-        return None;
-    }
-
-    let billed_input_tokens = input_tokens
-        .saturating_sub(cache_creation_tokens)
-        .saturating_sub(cache_read_tokens);
-    let mut usage = StandardizedUsage::new();
-    usage.input_tokens = billed_input_tokens as i64;
-    usage.cache_creation_tokens = cache_creation_tokens as i64;
-    usage.cache_read_tokens = cache_read_tokens as i64;
-    Some(usage)
-}
-
 fn context_has_inline_body(context: Option<&Map<String, Value>>, key: &str) -> bool {
     matches!(context_value_ref(context, key), Some(value) if !value.is_null())
 }
@@ -2055,25 +1995,6 @@ fn build_runtime_request_metadata_seed(
         source_model.as_deref(),
         provider_request_body,
     );
-    if let Some(proxy) = plan.proxy.as_ref() {
-        if let Some(node_id) = proxy
-            .node_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-        {
-            let mode = proxy.mode.as_deref().unwrap_or("").trim();
-            let mut proxy_obj = serde_json::Map::new();
-            proxy_obj.insert("node_id".to_string(), Value::String(node_id.to_string()));
-            if !mode.is_empty() {
-                proxy_obj.insert("mode".to_string(), Value::String(mode.to_string()));
-            }
-            let obj = metadata.get_or_insert_with(|| Value::Object(serde_json::Map::new()));
-            if let Value::Object(map) = obj {
-                map.insert("proxy".to_string(), Value::Object(proxy_obj));
-            }
-        }
-    }
     metadata
 }
 
@@ -2913,11 +2834,6 @@ fn decode_body_for_storage(body_base64: Option<&str>) -> Option<Value> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(body_base64)
         .ok()?;
-    if let Some(error_body) =
-        aether_ai_formats::api::extract_provider_private_stream_error_body(None, &bytes)
-    {
-        return Some(error_body);
-    }
     if let Ok(json_body) = serde_json::from_slice::<Value>(&bytes) {
         return Some(json_body);
     }
@@ -3661,7 +3577,6 @@ mod tests {
             client_api_format: "claude:messages".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -3752,7 +3667,6 @@ mod tests {
             client_api_format: "claude:messages".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -3806,7 +3720,6 @@ mod tests {
             client_api_format: "claude:messages".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -3862,7 +3775,6 @@ mod tests {
             client_api_format: "openai:responses".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -3920,7 +3832,6 @@ mod tests {
             client_api_format: "claude:messages".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -3977,7 +3888,6 @@ mod tests {
             client_api_format: "claude:messages".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -3987,7 +3897,6 @@ mod tests {
             report_context: Some(json!({
                 "client_api_format": "claude:messages",
                 "provider_api_format": "openai:responses",
-                "needs_conversion": true,
                 "original_request_body": nested,
                 "provider_request_body": {"input": "safe"}
             })),
@@ -4135,7 +4044,6 @@ mod tests {
             client_api_format: "openai:chat".to_string(),
             provider_api_format: "openai:chat".to_string(),
             model_name: Some("windsurf-model".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -4211,7 +4119,6 @@ mod tests {
             client_api_format: "openai:chat".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -4221,7 +4128,6 @@ mod tests {
             report_context: Some(json!({
                 "client_api_format": "openai:chat",
                 "provider_api_format": "openai:responses",
-                "needs_conversion": true
             })),
             status_code: 200,
             headers: BTreeMap::new(),
@@ -4306,7 +4212,6 @@ mod tests {
             client_api_format: "openai:responses".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -4374,7 +4279,6 @@ mod tests {
             client_api_format: "openai:responses".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -4432,7 +4336,6 @@ mod tests {
             client_api_format: "openai:responses".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -4502,7 +4405,6 @@ mod tests {
             client_api_format: "openai:responses".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -4563,7 +4465,6 @@ mod tests {
             client_api_format: "gemini:generate_content".to_string(),
             provider_api_format: "gemini:generate_content".to_string(),
             model_name: Some("gemini".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -4638,7 +4539,6 @@ mod tests {
             client_api_format: "openai:chat".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -4653,7 +4553,6 @@ mod tests {
             report_context: Some(json!({
                 "client_api_format": "openai:chat",
                 "provider_api_format": "openai:responses",
-                "needs_conversion": true
             })),
             status_code: 200,
             headers: BTreeMap::new(),
@@ -4719,7 +4618,6 @@ mod tests {
             client_api_format: "openai:responses".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.5".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -4786,7 +4684,6 @@ mod tests {
             client_api_format: "openai:responses".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.5".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -4860,7 +4757,6 @@ mod tests {
             client_api_format: "openai:responses".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.5".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -4931,7 +4827,6 @@ mod tests {
             client_api_format: "openai:responses".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.5".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -4996,7 +4891,6 @@ mod tests {
             client_api_format: "openai:responses".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.5".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -5093,7 +4987,6 @@ mod tests {
             client_api_format: "openai:chat".to_string(),
             provider_api_format: "openai:image".to_string(),
             model_name: Some("gpt-image-2".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -5184,7 +5077,6 @@ mod tests {
             client_api_format: "openai:image".to_string(),
             provider_api_format: "openai:image".to_string(),
             model_name: Some("gpt-image-2".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -5250,7 +5142,6 @@ mod tests {
             client_api_format: "openai:image".to_string(),
             provider_api_format: "openai:image".to_string(),
             model_name: Some("gpt-image-2".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -5319,7 +5210,6 @@ mod tests {
             client_api_format: "openai:responses".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.5".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -5426,7 +5316,6 @@ mod tests {
             client_api_format: "openai:responses".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -5550,7 +5439,6 @@ mod tests {
             client_api_format: "openai:chat".to_string(),
             provider_api_format: "gemini:generate_content".to_string(),
             model_name: Some("gpt-5".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -5560,7 +5448,6 @@ mod tests {
             report_context: Some(json!({
                 "client_api_format": "openai:chat",
                 "provider_api_format": "gemini:generate_content",
-                "needs_conversion": true
             })),
             status_code: 200,
             headers: BTreeMap::from([
@@ -5657,7 +5544,6 @@ mod tests {
             client_api_format: "openai:responses".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -5773,7 +5659,6 @@ mod tests {
             client_api_format: "claude:messages".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.5".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -5784,7 +5669,6 @@ mod tests {
                 "client_api_format": "claude:messages",
                 "provider_api_format": "openai:responses",
                 "upstream_is_stream": true,
-                "needs_conversion": true
             })),
             status_code: 200,
             headers: BTreeMap::from([(
@@ -5846,7 +5730,6 @@ mod tests {
             client_api_format: "openai:chat".to_string(),
             provider_api_format: "gemini:generate_content".to_string(),
             model_name: Some("gpt-5".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -5856,7 +5739,6 @@ mod tests {
             report_context: Some(json!({
                 "client_api_format": "openai:chat",
                 "provider_api_format": "gemini:generate_content",
-                "needs_conversion": true
             })),
             status_code: 200,
             headers: BTreeMap::new(),
@@ -5918,7 +5800,6 @@ mod tests {
             client_api_format: "openai:responses".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -5984,7 +5865,6 @@ mod tests {
             client_api_format: "openai:chat".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -5994,7 +5874,6 @@ mod tests {
             report_context: Some(json!({
                 "client_api_format": "openai:chat",
                 "provider_api_format": "openai:responses",
-                "needs_conversion": true,
                 "original_request_body": {
                     "body_bytes_b64": client_body_base64
                 }
@@ -6070,7 +5949,6 @@ mod tests {
             client_api_format: "openai:chat".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -6156,7 +6034,6 @@ mod tests {
             client_api_format: "openai:responses".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -6222,7 +6099,6 @@ mod tests {
             client_api_format: "claude:messages".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -6232,7 +6108,6 @@ mod tests {
             report_context: Some(json!({
                 "client_api_format": "claude:messages",
                 "provider_api_format": "openai:responses",
-                "needs_conversion": true,
                 "original_request_body": null,
             })),
             status_code: 200,
@@ -6292,7 +6167,6 @@ mod tests {
             client_api_format: "openai:image".to_string(),
             provider_api_format: "openai:image".to_string(),
             model_name: Some("gpt-image-2".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -6302,7 +6176,6 @@ mod tests {
             report_context: Some(json!({
                 "client_api_format": "openai:image",
                 "provider_api_format": "openai:image",
-                "needs_conversion": true,
                 "original_request_body": {
                     "model": "gpt-image-2",
                     "prompt": "Draw a red kite",
@@ -6373,64 +6246,6 @@ mod tests {
     }
 
     #[test]
-    fn sync_terminal_usage_applies_kiro_simulated_cache_context() {
-        let plan = ExecutionPlan {
-            request_id: "req-sync-kiro-cache-context-1".to_string(),
-            candidate_id: Some("cand-sync-kiro-cache-context-1".to_string()),
-            provider_name: Some("Kiro".to_string()),
-            provider_id: "provider-kiro-1".to_string(),
-            endpoint_id: "endpoint-kiro-1".to_string(),
-            key_id: "key-kiro-1".to_string(),
-            method: "POST".to_string(),
-            url: "https://kiro.example/generateAssistantResponse".to_string(),
-            headers: BTreeMap::new(),
-            content_type: Some("application/json".to_string()),
-            content_encoding: None,
-            body: RequestBody::from_json(json!({
-                "model": "claude-sonnet-4",
-                "messages": [{"role": "user", "content": "hello kiro"}],
-            })),
-            stream: false,
-            client_api_format: "claude:messages".to_string(),
-            provider_api_format: "claude:messages".to_string(),
-            model_name: Some("claude-sonnet-4".to_string()),
-            proxy: None,
-            transport_profile: None,
-            timeouts: None,
-        };
-        let payload = GatewaySyncReportRequest {
-            trace_id: "trace-sync-kiro-cache-context-1".to_string(),
-            report_kind: "claude_cli_sync_success".to_string(),
-            report_context: Some(json!({
-                "client_api_format": "claude:messages",
-                "provider_api_format": "claude:messages",
-                "provider_name": "Kiro",
-                "model": "claude-sonnet-4",
-                "input_tokens": 1800,
-                "kiro_simulated_cache_enabled": true,
-                "cache_creation_input_tokens": 1200,
-                "cache_read_input_tokens": 300,
-            })),
-            status_code: 200,
-            headers: BTreeMap::new(),
-            body_json: Some(json!({"id": "kiro-sync-response-1"})),
-            client_body_json: None,
-            body_base64: None,
-            telemetry: None,
-        };
-
-        let event =
-            build_sync_terminal_usage_event(&plan, payload.report_context.as_ref(), &payload)
-                .expect("usage event should build");
-
-        assert_eq!(event.event_type, UsageEventType::Completed);
-        assert_eq!(event.data.input_tokens, Some(300));
-        assert_eq!(event.data.cache_creation_input_tokens, Some(1200));
-        assert_eq!(event.data.cache_read_input_tokens, Some(300));
-        assert_eq!(event.data.total_tokens, Some(300));
-    }
-
-    #[test]
     fn sync_terminal_usage_treats_null_error_field_as_success() {
         let plan = ExecutionPlan {
             request_id: "req-sync-null-error-1".to_string(),
@@ -6449,7 +6264,6 @@ mod tests {
             client_api_format: "claude:messages".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5.4".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -6459,7 +6273,6 @@ mod tests {
             report_context: Some(json!({
                 "client_api_format": "claude:messages",
                 "provider_api_format": "openai:responses",
-                "needs_conversion": true,
             })),
             status_code: 200,
             headers: BTreeMap::new(),
@@ -6514,7 +6327,6 @@ mod tests {
             provider_endpoint_id: Some("endpoint-1".to_string()),
             provider_api_key_id: Some("upstream-key-1".to_string()),
             request_type: "chat".to_string(),
-            has_format_conversion: false,
             is_stream: false,
             body_refs: UsageBodyRefsSeed::default(),
             body_states: UsageBodyStatesSeed::default(),
@@ -6647,7 +6459,6 @@ mod tests {
                 endpoint_api_format: Some("openai:chat".to_string()),
                 provider_api_family: Some("openai".to_string()),
                 provider_endpoint_kind: Some("chat".to_string()),
-                has_format_conversion: Some(false),
                 is_stream: false,
                 body_states: UsageBodyStatesSeed::default(),
                 routing: UsageRoutingSeed {
@@ -6699,7 +6510,6 @@ mod tests {
             client_api_format: "openai:chat".to_string(),
             provider_api_format: "openai:chat".to_string(),
             model_name: Some("gpt-5".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -6751,7 +6561,6 @@ mod tests {
             client_api_format: "openai:chat".to_string(),
             provider_api_format: "openai:chat".to_string(),
             model_name: Some("gpt-5".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };

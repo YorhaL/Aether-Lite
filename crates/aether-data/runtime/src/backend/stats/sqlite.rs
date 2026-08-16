@@ -3,12 +3,12 @@ use sqlx::Row;
 
 use crate::backend::stats_common::{stats_id, unix_secs, utc_from_unix_secs};
 use crate::backend::SqliteBackend;
-use crate::driver::sqlite::{sqlite_real, SqlitePool};
 use crate::error::SqlResultExt;
 use crate::{
     DataLayerError, StatsDailyAggregationInput, StatsDailyAggregationSummary,
     StatsHourlyAggregationInput, StatsHourlyAggregationSummary,
 };
+use aether_data_sqlite::{sqlite_real, SqlitePool};
 
 mod advanced;
 

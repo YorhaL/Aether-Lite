@@ -1,9 +1,3 @@
 pub mod endpoints;
 pub mod models;
 pub mod models_write;
-pub mod oauth;
-pub mod ops;
-pub mod pool;
-pub mod quota;
-pub mod state;
-pub mod status;

@@ -1,18 +1,15 @@
 use super::{
     AuthApiKeyLookupKey, CreateManagementTokenRecord, DataLayerError, GatewayAuthApiKeySnapshot,
-    GatewayDataState, ManagementTokenCounterDelta, ManagementTokenListQuery, ProxyNodeCounterDelta,
-    ProxyNodeHeartbeatMutation, ProxyNodeManualCreateMutation, ProxyNodeManualUpdateMutation,
-    ProxyNodeRegistrationMutation, ProxyNodeRemoteConfigMutation, ProxyNodeTrafficMutation,
-    ProxyNodeTunnelStatusMutation, RegenerateManagementTokenSecret, StoredAuthApiKeyExportRecord,
-    StoredAuthApiKeySnapshot, StoredLdapModuleConfig, StoredManagementToken,
-    StoredManagementTokenListPage, StoredManagementTokenWithUser, StoredOAuthProviderConfig,
-    StoredOAuthProviderModuleConfig, StoredProxyFleetMetricsBucket, StoredProxyNode,
-    StoredProxyNodeEvent, StoredProxyNodeMetricsBucket, StoredUserAuthRecord,
-    StoredUserOAuthLinkSummary, StoredUserPreferenceRecord, StoredUserSessionRecord,
-    StoredWalletSnapshot, UpdateManagementTokenRecord, UpsertOAuthProviderConfigRecord,
-    UserPlanEntitlementRecord,
+    GatewayDataState, ManagementTokenCounterDelta, ManagementTokenListQuery,
+    RegenerateManagementTokenSecret, StoredAuthApiKeyExportRecord, StoredAuthApiKeySnapshot,
+    StoredLdapModuleConfig, StoredManagementToken, StoredManagementTokenListPage,
+    StoredManagementTokenWithUser, StoredOAuthProviderConfig, StoredOAuthProviderModuleConfig,
+    StoredUserAuthRecord, StoredUserOAuthLinkSummary, StoredUserPreferenceRecord,
+    StoredUserSessionRecord, StoredWalletSnapshot, UpdateManagementTokenRecord,
+    UpsertOAuthProviderConfigRecord,
 };
 use crate::LocalMutationOutcome;
+use aether_data::backend::PrivacyDataState;
 use aether_data::repository::auth::ResolvedAuthApiKeySnapshotReader;
 
 #[derive(Debug, Clone, Default)]
@@ -29,6 +26,16 @@ pub(crate) struct GatewayUserGroupPolicySets {
 }
 
 impl GatewayDataState {
+    pub(crate) async fn record_user_privacy_policy_acceptance(
+        &self,
+        user_id: &str,
+        version: &str,
+    ) -> Result<bool, DataLayerError> {
+        PrivacyDataState::new(self.backends.as_ref())
+            .record_user_privacy_policy_acceptance(user_id, version)
+            .await
+    }
+
     pub(crate) async fn is_other_user_auth_email_taken(
         &self,
         email: &str,
@@ -624,7 +631,7 @@ impl GatewayDataState {
         ldap_dn: Option<String>,
         ldap_username: Option<String>,
         logged_in_at: chrono::DateTime<chrono::Utc>,
-        initial_gift_usd: f64,
+        initial_balance_usd: f64,
         unlimited: bool,
     ) -> Result<Option<StoredUserAuthRecord>, DataLayerError> {
         let Some(repository) = self.user_reader.as_ref() else {
@@ -638,7 +645,7 @@ impl GatewayDataState {
         };
         if outcome.created {
             match self
-                .initialize_auth_user_wallet(&outcome.user.id, initial_gift_usd, unlimited)
+                .initialize_auth_user_wallet(&outcome.user.id, initial_balance_usd, unlimited)
                 .await
             {
                 Ok(Some(_wallet)) => {}
@@ -659,28 +666,28 @@ impl GatewayDataState {
     pub(crate) async fn initialize_auth_user_wallet(
         &self,
         user_id: &str,
-        initial_gift_usd: f64,
+        initial_balance_usd: f64,
         unlimited: bool,
     ) -> Result<Option<StoredWalletSnapshot>, DataLayerError> {
         let Some(repository) = self.wallet_reader.as_ref() else {
             return Ok(None);
         };
         repository
-            .initialize_auth_user_wallet(user_id, initial_gift_usd, unlimited)
+            .initialize_auth_user_wallet(user_id, initial_balance_usd, unlimited)
             .await
     }
 
     pub(crate) async fn initialize_auth_api_key_wallet(
         &self,
         api_key_id: &str,
-        initial_gift_usd: f64,
+        initial_balance_usd: f64,
         unlimited: bool,
     ) -> Result<Option<StoredWalletSnapshot>, DataLayerError> {
         let Some(repository) = self.wallet_reader.as_ref() else {
             return Ok(None);
         };
         repository
-            .initialize_auth_api_key_wallet(api_key_id, initial_gift_usd, unlimited)
+            .initialize_auth_api_key_wallet(api_key_id, initial_balance_usd, unlimited)
             .await
     }
 
@@ -715,14 +722,10 @@ impl GatewayDataState {
         &self,
         user_id: &str,
         balance: f64,
-        gift_balance: f64,
         limit_mode: &str,
         currency: &str,
         status: &str,
-        total_recharged: f64,
         total_consumed: f64,
-        total_refunded: f64,
-        total_adjusted: f64,
         updated_at_unix_secs: Option<u64>,
     ) -> Result<Option<StoredWalletSnapshot>, DataLayerError> {
         let Some(repository) = self.wallet_reader.as_ref() else {
@@ -732,14 +735,10 @@ impl GatewayDataState {
             .update_auth_user_wallet_snapshot(
                 user_id,
                 balance,
-                gift_balance,
                 limit_mode,
                 currency,
                 status,
-                total_recharged,
                 total_consumed,
-                total_refunded,
-                total_adjusted,
                 updated_at_unix_secs,
             )
             .await
@@ -750,14 +749,10 @@ impl GatewayDataState {
         &self,
         api_key_id: &str,
         balance: f64,
-        gift_balance: f64,
         limit_mode: &str,
         currency: &str,
         status: &str,
-        total_recharged: f64,
         total_consumed: f64,
-        total_refunded: f64,
-        total_adjusted: f64,
         updated_at_unix_secs: Option<u64>,
     ) -> Result<Option<StoredWalletSnapshot>, DataLayerError> {
         let Some(repository) = self.wallet_reader.as_ref() else {
@@ -767,14 +762,10 @@ impl GatewayDataState {
             .update_auth_api_key_wallet_snapshot(
                 api_key_id,
                 balance,
-                gift_balance,
                 limit_mode,
                 currency,
                 status,
-                total_recharged,
                 total_consumed,
-                total_refunded,
-                total_adjusted,
                 updated_at_unix_secs,
             )
             .await
@@ -798,28 +789,6 @@ impl GatewayDataState {
             .await
     }
 
-    pub(crate) async fn count_user_pending_refunds(
-        &self,
-        user_id: &str,
-    ) -> Result<u64, DataLayerError> {
-        let Some(repository) = self.wallet_reader.as_ref() else {
-            return Ok(0);
-        };
-        repository.count_pending_refunds_by_user_id(user_id).await
-    }
-
-    pub(crate) async fn count_user_pending_payment_orders(
-        &self,
-        user_id: &str,
-    ) -> Result<u64, DataLayerError> {
-        let Some(repository) = self.wallet_reader.as_ref() else {
-            return Ok(0);
-        };
-        repository
-            .count_pending_payment_orders_by_user_id(user_id)
-            .await
-    }
-
     pub(crate) async fn delete_local_auth_user(
         &self,
         user_id: &str,
@@ -836,7 +805,7 @@ impl GatewayDataState {
         email_verified: bool,
         username: String,
         password_hash: String,
-        initial_gift_usd: f64,
+        initial_balance_usd: f64,
         unlimited: bool,
     ) -> Result<Option<(StoredUserAuthRecord, StoredWalletSnapshot)>, DataLayerError> {
         let Some(user) = self
@@ -847,7 +816,7 @@ impl GatewayDataState {
         };
 
         match self
-            .initialize_auth_user_wallet(&user.id, initial_gift_usd, unlimited)
+            .initialize_auth_user_wallet(&user.id, initial_balance_usd, unlimited)
             .await
         {
             Ok(Some(wallet)) => Ok(Some((user, wallet))),
@@ -1141,218 +1110,6 @@ impl GatewayDataState {
                     .record_management_token_usage(token_id, last_used_ip)
                     .await
             }
-            None => Ok(None),
-        }
-    }
-
-    pub(crate) async fn find_proxy_node(
-        &self,
-        node_id: &str,
-    ) -> Result<Option<StoredProxyNode>, DataLayerError> {
-        match &self.proxy_node_reader {
-            Some(repository) => repository.find_proxy_node(node_id).await,
-            None => Ok(None),
-        }
-    }
-
-    pub(crate) async fn list_proxy_nodes(&self) -> Result<Vec<StoredProxyNode>, DataLayerError> {
-        match &self.proxy_node_reader {
-            Some(repository) => repository.list_proxy_nodes().await,
-            None => Ok(Vec::new()),
-        }
-    }
-
-    pub(crate) async fn list_proxy_node_events(
-        &self,
-        node_id: &str,
-        limit: usize,
-    ) -> Result<Vec<StoredProxyNodeEvent>, DataLayerError> {
-        match &self.proxy_node_reader {
-            Some(repository) => repository.list_proxy_node_events(node_id, limit).await,
-            None => Ok(Vec::new()),
-        }
-    }
-
-    pub(crate) async fn list_proxy_node_events_filtered(
-        &self,
-        node_id: &str,
-        query: &super::ProxyNodeEventQuery,
-    ) -> Result<Vec<StoredProxyNodeEvent>, DataLayerError> {
-        match &self.proxy_node_reader {
-            Some(repository) => {
-                repository
-                    .list_proxy_node_events_filtered(node_id, query)
-                    .await
-            }
-            None => Ok(Vec::new()),
-        }
-    }
-
-    pub(crate) async fn list_proxy_node_metrics(
-        &self,
-        node_id: &str,
-        step: super::ProxyNodeMetricsStep,
-        from_unix_secs: u64,
-        to_unix_secs: u64,
-        limit: usize,
-    ) -> Result<Vec<StoredProxyNodeMetricsBucket>, DataLayerError> {
-        match &self.proxy_node_reader {
-            Some(repository) => {
-                repository
-                    .list_proxy_node_metrics(node_id, step, from_unix_secs, to_unix_secs, limit)
-                    .await
-            }
-            None => Ok(Vec::new()),
-        }
-    }
-
-    pub(crate) async fn list_proxy_fleet_metrics(
-        &self,
-        step: super::ProxyNodeMetricsStep,
-        from_unix_secs: u64,
-        to_unix_secs: u64,
-        limit: usize,
-    ) -> Result<Vec<StoredProxyFleetMetricsBucket>, DataLayerError> {
-        match &self.proxy_node_reader {
-            Some(repository) => {
-                repository
-                    .list_proxy_fleet_metrics(step, from_unix_secs, to_unix_secs, limit)
-                    .await
-            }
-            None => Ok(Vec::new()),
-        }
-    }
-
-    pub(crate) async fn register_proxy_node(
-        &self,
-        mutation: &ProxyNodeRegistrationMutation,
-    ) -> Result<Option<StoredProxyNode>, DataLayerError> {
-        match &self.proxy_node_writer {
-            Some(repository) => repository.register_node(mutation).await.map(Some),
-            None => Ok(None),
-        }
-    }
-
-    pub(crate) async fn create_manual_proxy_node(
-        &self,
-        mutation: &ProxyNodeManualCreateMutation,
-    ) -> Result<Option<StoredProxyNode>, DataLayerError> {
-        match &self.proxy_node_writer {
-            Some(repository) => repository.create_manual_node(mutation).await.map(Some),
-            None => Ok(None),
-        }
-    }
-
-    pub(crate) async fn update_manual_proxy_node(
-        &self,
-        mutation: &ProxyNodeManualUpdateMutation,
-    ) -> Result<Option<StoredProxyNode>, DataLayerError> {
-        match &self.proxy_node_writer {
-            Some(repository) => repository.update_manual_node(mutation).await,
-            None => Ok(None),
-        }
-    }
-
-    pub(crate) async fn reset_stale_proxy_node_tunnel_statuses(
-        &self,
-    ) -> Result<usize, DataLayerError> {
-        match &self.proxy_node_writer {
-            Some(repository) => repository.reset_stale_tunnel_statuses().await,
-            None => Ok(0),
-        }
-    }
-
-    pub(crate) async fn cleanup_proxy_node_metrics(
-        &self,
-        retain_1m_from_unix_secs: u64,
-        retain_1h_from_unix_secs: u64,
-        delete_limit: usize,
-    ) -> Result<super::ProxyNodeMetricsCleanupSummary, DataLayerError> {
-        match &self.proxy_node_writer {
-            Some(repository) => {
-                repository
-                    .cleanup_proxy_node_metrics(
-                        retain_1m_from_unix_secs,
-                        retain_1h_from_unix_secs,
-                        delete_limit,
-                    )
-                    .await
-            }
-            None => Ok(super::ProxyNodeMetricsCleanupSummary::default()),
-        }
-    }
-
-    pub(crate) async fn apply_proxy_node_heartbeat(
-        &self,
-        mutation: &ProxyNodeHeartbeatMutation,
-    ) -> Result<Option<StoredProxyNode>, DataLayerError> {
-        match &self.proxy_node_writer {
-            Some(repository) => repository.apply_heartbeat(mutation).await,
-            None => Ok(None),
-        }
-    }
-
-    pub(crate) async fn record_proxy_node_traffic(
-        &self,
-        mutation: &ProxyNodeTrafficMutation,
-    ) -> Result<bool, DataLayerError> {
-        if let Some(repository) = &self.usage_writer {
-            let enqueued = repository
-                .enqueue_proxy_node_counter_delta(ProxyNodeCounterDelta {
-                    node_id: mutation.node_id.clone(),
-                    total_requests_delta: mutation.total_requests_delta,
-                    failed_requests_delta: mutation.failed_requests_delta,
-                    dns_failures_delta: mutation.dns_failures_delta,
-                    stream_errors_delta: mutation.stream_errors_delta,
-                })
-                .await?;
-            if enqueued {
-                return Ok(true);
-            }
-        }
-
-        match &self.proxy_node_writer {
-            Some(repository) => repository.record_traffic(mutation).await,
-            None => Ok(false),
-        }
-    }
-
-    pub(crate) async fn update_proxy_node_tunnel_status(
-        &self,
-        mutation: &ProxyNodeTunnelStatusMutation,
-    ) -> Result<Option<StoredProxyNode>, DataLayerError> {
-        match &self.proxy_node_writer {
-            Some(repository) => repository.update_tunnel_status(mutation).await,
-            None => Ok(None),
-        }
-    }
-
-    pub(crate) async fn unregister_proxy_node(
-        &self,
-        node_id: &str,
-    ) -> Result<Option<StoredProxyNode>, DataLayerError> {
-        match &self.proxy_node_writer {
-            Some(repository) => repository.unregister_node(node_id).await,
-            None => Ok(None),
-        }
-    }
-
-    pub(crate) async fn delete_proxy_node(
-        &self,
-        node_id: &str,
-    ) -> Result<Option<StoredProxyNode>, DataLayerError> {
-        match &self.proxy_node_writer {
-            Some(repository) => repository.delete_node(node_id).await,
-            None => Ok(None),
-        }
-    }
-
-    pub(crate) async fn update_proxy_node_remote_config(
-        &self,
-        mutation: &ProxyNodeRemoteConfigMutation,
-    ) -> Result<Option<StoredProxyNode>, DataLayerError> {
-        match &self.proxy_node_writer {
-            Some(repository) => repository.update_remote_config(mutation).await,
             None => Ok(None),
         }
     }
@@ -1853,19 +1610,6 @@ impl GatewayDataState {
             return Ok(Vec::new());
         };
         let mut groups = repository.list_user_groups_for_user(user_id).await?;
-        let dynamic_group_ids = self.active_membership_group_ids_for_user(user_id).await?;
-        if !dynamic_group_ids.is_empty() {
-            groups.extend(
-                repository
-                    .list_user_groups_by_ids(&dynamic_group_ids)
-                    .await?,
-            );
-            let mut deduped = std::collections::BTreeMap::new();
-            for group in groups {
-                deduped.insert(group.id.clone(), group);
-            }
-            groups = deduped.into_values().collect();
-        }
         groups.sort_by(|left, right| {
             left.name
                 .cmp(&right.name)
@@ -1890,7 +1634,7 @@ impl GatewayDataState {
         user_ids: &[String],
     ) -> Result<std::collections::BTreeMap<String, GatewayUserGroupPolicySets>, DataLayerError>
     {
-        let mut assigned_group_ids_by_user = user_ids
+        let mut group_ids_by_user = user_ids
             .iter()
             .cloned()
             .map(|user_id| (user_id, std::collections::BTreeSet::new()))
@@ -1898,84 +1642,44 @@ impl GatewayDataState {
         if user_ids.is_empty() {
             return Ok(std::collections::BTreeMap::new());
         }
-        let Some(user_repository) = self.user_reader.as_ref() else {
-            return Ok(assigned_group_ids_by_user
+        let Some(repository) = self.user_reader.as_ref() else {
+            return Ok(group_ids_by_user
                 .into_keys()
                 .map(|user_id| (user_id, GatewayUserGroupPolicySets::default()))
                 .collect());
         };
-        let normalized_user_ids = assigned_group_ids_by_user
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
 
-        let entitlements = async {
-            match self.billing_reader.as_ref() {
-                Some(repository) => {
-                    repository
-                        .list_user_plan_entitlements_by_user_ids(&normalized_user_ids)
-                        .await
-                }
-                None => Ok(None),
-            }
-        };
-        let (memberships, entitlements) = tokio::try_join!(
-            user_repository.list_user_group_memberships_by_user_ids(&normalized_user_ids),
-            entitlements,
-        )?;
-        for membership in memberships {
-            if let Some(group_ids) = assigned_group_ids_by_user.get_mut(&membership.user_id) {
+        for membership in repository
+            .list_user_group_memberships_by_user_ids(user_ids)
+            .await?
+        {
+            if let Some(group_ids) = group_ids_by_user.get_mut(&membership.user_id) {
                 group_ids.insert(membership.group_id);
             }
         }
-        let mut effective_group_ids_by_user = assigned_group_ids_by_user.clone();
-        if let Some(entitlements) = entitlements {
-            let now = chrono::Utc::now().timestamp().max(0) as u64;
-            for (user_id, dynamic_group_ids) in
-                active_membership_group_ids_by_user(&entitlements, now)
-            {
-                if let Some(group_ids) = effective_group_ids_by_user.get_mut(&user_id) {
-                    group_ids.extend(dynamic_group_ids);
-                }
-            }
-        }
 
-        let all_group_ids = effective_group_ids_by_user
+        let all_group_ids = group_ids_by_user
             .values()
             .flatten()
             .cloned()
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
-        let groups_by_id = if all_group_ids.is_empty() {
-            std::collections::BTreeMap::new()
-        } else {
-            user_repository
-                .list_user_groups_by_ids(&all_group_ids)
-                .await?
-                .into_iter()
-                .map(|group| (group.id.clone(), group))
-                .collect::<std::collections::BTreeMap<_, _>>()
-        };
-        Ok(assigned_group_ids_by_user
+        let groups_by_id = repository
+            .list_user_groups_by_ids(&all_group_ids)
+            .await?
             .into_iter()
-            .map(|(user_id, assigned_group_ids)| {
-                let mut assigned_groups = assigned_group_ids
+            .map(|group| (group.id.clone(), group))
+            .collect::<std::collections::BTreeMap<_, _>>();
+
+        Ok(group_ids_by_user
+            .into_iter()
+            .map(|(user_id, group_ids)| {
+                let mut groups = group_ids
                     .into_iter()
                     .filter_map(|group_id| groups_by_id.get(&group_id).cloned())
                     .collect::<Vec<_>>();
-                assigned_groups.sort_by(|left, right| {
-                    left.name
-                        .cmp(&right.name)
-                        .then_with(|| left.id.cmp(&right.id))
-                });
-                let mut effective_groups = effective_group_ids_by_user
-                    .remove(&user_id)
-                    .unwrap_or_default()
-                    .into_iter()
-                    .filter_map(|group_id| groups_by_id.get(&group_id).cloned())
-                    .collect::<Vec<_>>();
-                effective_groups.sort_by(|left, right| {
+                groups.sort_by(|left, right| {
                     left.name
                         .cmp(&right.name)
                         .then_with(|| left.id.cmp(&right.id))
@@ -1983,72 +1687,13 @@ impl GatewayDataState {
                 (
                     user_id,
                     GatewayUserGroupPolicySets {
-                        assigned_groups,
-                        effective_groups,
+                        assigned_groups: groups.clone(),
+                        effective_groups: groups,
                     },
                 )
             })
             .collect())
     }
-
-    async fn active_membership_group_ids_for_user(
-        &self,
-        user_id: &str,
-    ) -> Result<Vec<String>, DataLayerError> {
-        let Some(repository) = self.billing_reader.as_ref() else {
-            return Ok(Vec::new());
-        };
-        let Some(entitlements) = repository.list_user_plan_entitlements(user_id).await? else {
-            return Ok(Vec::new());
-        };
-        let now = chrono::Utc::now().timestamp().max(0) as u64;
-        Ok(active_membership_group_ids_by_user(&entitlements, now)
-            .remove(user_id)
-            .unwrap_or_default()
-            .into_iter()
-            .collect())
-    }
-}
-
-fn active_membership_group_ids_by_user<'a>(
-    entitlements: impl IntoIterator<Item = &'a UserPlanEntitlementRecord>,
-    now_unix_secs: u64,
-) -> std::collections::BTreeMap<String, std::collections::BTreeSet<String>> {
-    let mut group_ids_by_user =
-        std::collections::BTreeMap::<String, std::collections::BTreeSet<String>>::new();
-    for entitlement in entitlements {
-        if entitlement.status != "active"
-            || entitlement.starts_at_unix_secs > now_unix_secs
-            || entitlement.expires_at_unix_secs <= now_unix_secs
-        {
-            continue;
-        }
-        let Some(items) = entitlement.entitlements_snapshot.as_array() else {
-            continue;
-        };
-        for item in items {
-            if item.get("type").and_then(serde_json::Value::as_str) != Some("membership_group") {
-                continue;
-            }
-            let Some(groups) = item
-                .get("grant_user_groups")
-                .and_then(serde_json::Value::as_array)
-            else {
-                continue;
-            };
-            for group_id in groups {
-                if let Some(group_id) = group_id.as_str().map(str::trim) {
-                    if !group_id.is_empty() {
-                        group_ids_by_user
-                            .entry(entitlement.user_id.clone())
-                            .or_default()
-                            .insert(group_id.to_string());
-                    }
-                }
-            }
-        }
-    }
-    group_ids_by_user
 }
 
 // Per-user list policy columns are retained only for legacy import/export compatibility.
@@ -2277,942 +1922,5 @@ fn rate_limit_policy_value(policy: Option<RateLimitRestriction>) -> Option<i32> 
         None => None,
         Some(RateLimitRestriction::Unlimited) => Some(0),
         Some(RateLimitRestriction::Limited(value)) => Some(value),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use super::*;
-    use aether_data::repository::auth::{
-        InMemoryAuthApiKeySnapshotRepository, StoredAuthApiKeyExportRecord,
-        StoredAuthApiKeySnapshot,
-    };
-    use aether_data::repository::billing::InMemoryBillingReadRepository;
-    use aether_data::repository::users::{
-        InMemoryUserReadRepository, StoredUserAuthRecord, StoredUserGroup, UpsertUserGroupRecord,
-        UserReadRepository,
-    };
-
-    use crate::data::GatewayDataState;
-
-    fn sample_snapshot(api_key_id: &str, user_id: &str) -> StoredAuthApiKeySnapshot {
-        sample_snapshot_with_role(api_key_id, user_id, "user")
-    }
-
-    fn sample_snapshot_with_role(
-        api_key_id: &str,
-        user_id: &str,
-        role: &str,
-    ) -> StoredAuthApiKeySnapshot {
-        StoredAuthApiKeySnapshot::new(
-            user_id.to_string(),
-            "alice".to_string(),
-            Some("alice@example.com".to_string()),
-            role.to_string(),
-            "local".to_string(),
-            true,
-            false,
-            Some(serde_json::json!(["openai"])),
-            Some(serde_json::json!(["openai:chat"])),
-            Some(serde_json::json!(["gpt-5"])),
-            api_key_id.to_string(),
-            Some("default".to_string()),
-            true,
-            false,
-            false,
-            Some(60),
-            Some(5),
-            Some(200),
-            Some(serde_json::json!(["openai"])),
-            Some(serde_json::json!(["openai:chat"])),
-            Some(serde_json::json!(["gpt-5"])),
-        )
-        .expect("snapshot should build")
-    }
-
-    fn sample_auth_user(user_id: &str, role: &str) -> StoredUserAuthRecord {
-        StoredUserAuthRecord::new(
-            user_id.to_string(),
-            Some("alice@example.com".to_string()),
-            true,
-            "alice".to_string(),
-            Some("hash".to_string()),
-            role.to_string(),
-            "local".to_string(),
-            Some(serde_json::json!(["openai"])),
-            Some(serde_json::json!(["openai:chat"])),
-            Some(serde_json::json!(["gpt-5"])),
-            true,
-            false,
-            None,
-            None,
-        )
-        .expect("auth user should build")
-    }
-
-    fn sample_group(
-        id: &str,
-        priority: i32,
-        allowed_models: Option<Vec<&str>>,
-        allowed_models_mode: &str,
-        rate_limit: Option<i32>,
-        rate_limit_mode: &str,
-    ) -> StoredUserGroup {
-        StoredUserGroup {
-            id: id.to_string(),
-            name: id.to_string(),
-            normalized_name: id.to_string(),
-            description: None,
-            priority,
-            allowed_providers: None,
-            allowed_providers_mode: "unrestricted".to_string(),
-            allowed_api_formats: None,
-            allowed_api_formats_mode: "unrestricted".to_string(),
-            allowed_models: allowed_models.map(|values| {
-                values
-                    .into_iter()
-                    .map(ToOwned::to_owned)
-                    .collect::<Vec<_>>()
-            }),
-            allowed_models_mode: allowed_models_mode.to_string(),
-            rate_limit,
-            rate_limit_mode: rate_limit_mode.to_string(),
-            daily_usage_limit_usd: None,
-            daily_usage_limit_mode: "inherit".to_string(),
-            created_at: None,
-            updated_at: None,
-        }
-    }
-
-    fn with_daily_usage_limit(
-        mut group: StoredUserGroup,
-        value: Option<f64>,
-        mode: &str,
-    ) -> StoredUserGroup {
-        group.daily_usage_limit_usd = value;
-        group.daily_usage_limit_mode = mode.to_string();
-        group
-    }
-
-    #[test]
-    fn daily_usage_group_policy_falls_back_without_custom_groups() {
-        let groups = vec![
-            with_daily_usage_limit(
-                sample_group("system", 0, None, "unrestricted", None, "system"),
-                Some(10.0),
-                "system",
-            ),
-            with_daily_usage_limit(
-                sample_group("inherit", 0, None, "unrestricted", None, "system"),
-                Some(5.0),
-                "inherit",
-            ),
-        ];
-
-        assert_eq!(
-            resolve_group_effective_daily_usage_limit_policy(&groups),
-            None
-        );
-    }
-
-    #[test]
-    fn daily_usage_group_policy_uses_highest_custom_grant() {
-        let groups = vec![
-            with_daily_usage_limit(
-                sample_group("basic", 0, None, "unrestricted", None, "system"),
-                Some(10.0),
-                "custom",
-            ),
-            with_daily_usage_limit(
-                sample_group("premium", 0, None, "unrestricted", None, "system"),
-                Some(25.0),
-                "custom",
-            ),
-        ];
-
-        assert_eq!(
-            resolve_group_effective_daily_usage_limit_policy(&groups),
-            Some(25.0)
-        );
-    }
-
-    #[test]
-    fn daily_usage_group_policy_treats_any_custom_zero_as_unlimited() {
-        let groups = vec![
-            with_daily_usage_limit(
-                sample_group("limited", 0, None, "unrestricted", None, "system"),
-                Some(25.0),
-                "custom",
-            ),
-            with_daily_usage_limit(
-                sample_group("unlimited", 0, None, "unrestricted", None, "system"),
-                Some(0.0),
-                "custom",
-            ),
-        ];
-
-        assert_eq!(
-            resolve_group_effective_daily_usage_limit_policy(&groups),
-            Some(0.0)
-        );
-    }
-
-    #[test]
-    fn list_policy_intersects_unrestricted_group_union_with_user_restriction() {
-        let groups = vec![
-            sample_group("default", 0, None, "unrestricted", None, "system"),
-            sample_group(
-                "restricted",
-                10,
-                Some(vec!["gpt-5", "gpt-4.1"]),
-                "specific",
-                None,
-                "system",
-            ),
-        ];
-
-        let policy = resolve_effective_list_policy(
-            Some(vec!["gpt-4.1".to_string(), "gemini-2.5-pro".to_string()]),
-            "specific",
-            &groups,
-            |group| (&group.allowed_models_mode, group.allowed_models.clone()),
-        );
-
-        assert_eq!(
-            policy,
-            Some(vec!["gpt-4.1".to_string(), "gemini-2.5-pro".to_string()])
-        );
-    }
-
-    #[test]
-    fn api_format_policy_intersection_preserves_search_companion_scope() {
-        let mut responses_group =
-            sample_group("responses", 10, None, "unrestricted", None, "system");
-        responses_group.allowed_api_formats = Some(vec!["openai:responses".to_string()]);
-        responses_group.allowed_api_formats_mode = "specific".to_string();
-
-        let search_policy = resolve_effective_api_format_policy(
-            Some(vec!["openai:search".to_string()]),
-            "specific",
-            std::slice::from_ref(&responses_group),
-            |group| {
-                (
-                    &group.allowed_api_formats_mode,
-                    group.allowed_api_formats.clone(),
-                )
-            },
-        );
-        assert_eq!(search_policy, Some(vec!["openai:search".to_string()]));
-
-        responses_group.allowed_api_formats = Some(vec!["openai:search".to_string()]);
-        let responses_policy = resolve_effective_api_format_policy(
-            Some(vec!["openai:responses".to_string()]),
-            "specific",
-            &[responses_group],
-            |group| {
-                (
-                    &group.allowed_api_formats_mode,
-                    group.allowed_api_formats.clone(),
-                )
-            },
-        );
-        assert_eq!(responses_policy, Some(vec!["openai:search".to_string()]));
-    }
-
-    #[test]
-    fn list_policy_unions_multiple_group_restrictions_legacy_case() {
-        let groups = vec![
-            sample_group(
-                "team-a",
-                10,
-                Some(vec!["gpt-5", "gpt-4.1"]),
-                "specific",
-                None,
-                "system",
-            ),
-            sample_group(
-                "team-b",
-                20,
-                Some(vec!["gpt-4.1", "gemini-2.5-pro"]),
-                "specific",
-                None,
-                "system",
-            ),
-        ];
-
-        let policy = resolve_effective_list_policy(None, "unrestricted", &groups, |group| {
-            (&group.allowed_models_mode, group.allowed_models.clone())
-        });
-
-        assert_eq!(
-            policy,
-            Some(vec![
-                "gemini-2.5-pro".to_string(),
-                "gpt-4.1".to_string(),
-                "gpt-5".to_string()
-            ])
-        );
-    }
-
-    #[test]
-    fn list_policy_unions_multiple_group_restrictions() {
-        let groups = vec![
-            sample_group(
-                "team-a",
-                10,
-                Some(vec!["gpt-5", "gpt-4.1"]),
-                "specific",
-                None,
-                "system",
-            ),
-            sample_group(
-                "team-b",
-                20,
-                Some(vec!["gpt-4.1", "gemini-2.5-pro"]),
-                "specific",
-                None,
-                "system",
-            ),
-        ];
-
-        let policy = resolve_effective_list_policy(None, "unrestricted", &groups, |group| {
-            (&group.allowed_models_mode, group.allowed_models.clone())
-        });
-
-        assert_eq!(
-            policy,
-            Some(vec![
-                "gemini-2.5-pro".to_string(),
-                "gpt-4.1".to_string(),
-                "gpt-5".to_string()
-            ])
-        );
-    }
-
-    #[test]
-    fn unrestricted_group_makes_group_policy_unrestricted() {
-        let groups = vec![
-            sample_group(
-                "restricted",
-                10,
-                Some(vec!["gpt-5"]),
-                "specific",
-                None,
-                "system",
-            ),
-            sample_group("unrestricted", 20, None, "unrestricted", None, "system"),
-        ];
-
-        let policy = resolve_effective_list_policy(None, "unrestricted", &groups, |group| {
-            (&group.allowed_models_mode, group.allowed_models.clone())
-        });
-
-        assert_eq!(policy, None);
-    }
-
-    #[test]
-    fn deny_all_group_does_not_remove_other_group_grants() {
-        let groups = vec![
-            sample_group("deny", 10, None, "deny_all", None, "system"),
-            sample_group(
-                "restricted",
-                20,
-                Some(vec!["gpt-5"]),
-                "specific",
-                None,
-                "system",
-            ),
-        ];
-
-        let policy = resolve_effective_list_policy(None, "unrestricted", &groups, |group| {
-            (&group.allowed_models_mode, group.allowed_models.clone())
-        });
-
-        assert_eq!(policy, Some(vec!["gpt-5".to_string()]));
-    }
-
-    #[test]
-    fn user_unrestricted_does_not_bypass_group_restrictions() {
-        let groups = vec![sample_group(
-            "restricted",
-            10,
-            Some(vec!["gpt-5"]),
-            "specific",
-            None,
-            "system",
-        )];
-
-        let policy = resolve_effective_list_policy(None, "unrestricted", &groups, |group| {
-            (&group.allowed_models_mode, group.allowed_models.clone())
-        });
-
-        assert_eq!(policy, Some(vec!["gpt-5".to_string()]));
-    }
-
-    #[test]
-    fn rate_limit_policy_uses_highest_group_limit_before_user_restriction() {
-        let groups = vec![
-            sample_group("default", 10, None, "unrestricted", Some(30), "custom"),
-            sample_group("tier-1", 20, None, "unrestricted", Some(100), "custom"),
-        ];
-
-        assert_eq!(
-            resolve_effective_rate_limit_policy(Some(120), "custom", &groups),
-            Some(100)
-        );
-    }
-
-    #[test]
-    fn rate_limit_unlimited_group_overrides_limited_groups() {
-        let groups = vec![
-            sample_group("default", 10, None, "unrestricted", Some(30), "custom"),
-            sample_group("tier-2", 20, None, "unrestricted", Some(0), "custom"),
-        ];
-
-        assert_eq!(
-            resolve_effective_rate_limit_policy(None, "system", &groups),
-            Some(0)
-        );
-    }
-
-    #[test]
-    fn rate_limit_user_policy_still_restricts_group_grants() {
-        let groups = vec![sample_group(
-            "tier-1",
-            10,
-            None,
-            "unrestricted",
-            Some(100),
-            "custom",
-        )];
-
-        assert_eq!(
-            resolve_effective_rate_limit_policy(Some(60), "custom", &groups),
-            Some(60)
-        );
-    }
-
-    #[tokio::test]
-    async fn effective_user_groups_include_active_plan_memberships_in_batch() {
-        let user_repository = Arc::new(InMemoryUserReadRepository::seed_auth_users(vec![
-            sample_auth_user("user-1", "user"),
-            sample_auth_user("user-2", "user"),
-        ]));
-        let direct_group = user_repository
-            .create_user_group(UpsertUserGroupRecord {
-                name: "Direct".to_string(),
-                description: None,
-                priority: 10,
-                allowed_providers: None,
-                allowed_providers_mode: "unrestricted".to_string(),
-                allowed_api_formats: None,
-                allowed_api_formats_mode: "unrestricted".to_string(),
-                allowed_models: None,
-                allowed_models_mode: "unrestricted".to_string(),
-                rate_limit: Some(30),
-                rate_limit_mode: "custom".to_string(),
-                daily_usage_limit_usd: None,
-                daily_usage_limit_mode: "inherit".to_string(),
-            })
-            .await
-            .expect("direct group should create")
-            .expect("direct group should exist");
-        let plan_group = user_repository
-            .create_user_group(UpsertUserGroupRecord {
-                name: "Plan".to_string(),
-                description: None,
-                priority: 20,
-                allowed_providers: None,
-                allowed_providers_mode: "unrestricted".to_string(),
-                allowed_api_formats: None,
-                allowed_api_formats_mode: "unrestricted".to_string(),
-                allowed_models: None,
-                allowed_models_mode: "unrestricted".to_string(),
-                rate_limit: Some(100),
-                rate_limit_mode: "custom".to_string(),
-                daily_usage_limit_usd: None,
-                daily_usage_limit_mode: "inherit".to_string(),
-            })
-            .await
-            .expect("plan group should create")
-            .expect("plan group should exist");
-        user_repository
-            .add_user_to_group(&direct_group.id, "user-1")
-            .await
-            .expect("direct membership should create");
-
-        let now = chrono::Utc::now().timestamp().max(0) as u64;
-        let billing_repository = Arc::new(
-            InMemoryBillingReadRepository::seed(Vec::new()).with_entitlements(vec![
-                UserPlanEntitlementRecord {
-                    id: "entitlement-active".to_string(),
-                    user_id: "user-1".to_string(),
-                    plan_id: "plan-1".to_string(),
-                    payment_order_id: "order-1".to_string(),
-                    status: "active".to_string(),
-                    starts_at_unix_secs: now.saturating_sub(60),
-                    expires_at_unix_secs: now.saturating_add(3600),
-                    entitlements_snapshot: serde_json::json!([{
-                        "type": "membership_group",
-                        "grant_user_groups": [plan_group.id.clone()],
-                    }]),
-                    created_at_unix_secs: now.saturating_sub(60),
-                    updated_at_unix_secs: now.saturating_sub(60),
-                },
-                UserPlanEntitlementRecord {
-                    id: "entitlement-future".to_string(),
-                    user_id: "user-2".to_string(),
-                    plan_id: "plan-2".to_string(),
-                    payment_order_id: "order-2".to_string(),
-                    status: "active".to_string(),
-                    starts_at_unix_secs: now.saturating_add(3600),
-                    expires_at_unix_secs: now.saturating_add(7200),
-                    entitlements_snapshot: serde_json::json!([{
-                        "type": "membership_group",
-                        "grant_user_groups": [plan_group.id.clone()],
-                    }]),
-                    created_at_unix_secs: now,
-                    updated_at_unix_secs: now,
-                },
-            ]),
-        );
-        let state = GatewayDataState::with_billing_reader_for_tests(billing_repository)
-            .with_user_reader(user_repository);
-
-        let resolved = state
-            .user_group_policy_sets_for_users(&["user-1".to_string(), "user-2".to_string()])
-            .await
-            .expect("effective groups should resolve");
-        let user_one_groups = resolved.get("user-1").expect("user-1 should resolve");
-        assert_eq!(
-            user_one_groups
-                .assigned_groups
-                .iter()
-                .map(|group| group.name.as_str())
-                .collect::<Vec<_>>(),
-            vec!["Direct"]
-        );
-        assert_eq!(
-            user_one_groups
-                .effective_groups
-                .iter()
-                .map(|group| group.name.as_str())
-                .collect::<Vec<_>>(),
-            vec!["Direct", "Plan"]
-        );
-        assert_eq!(
-            resolve_group_effective_rate_limit_policy(&user_one_groups.effective_groups),
-            Some(100)
-        );
-        let user_two_groups = resolved.get("user-2").expect("user-2 should resolve");
-        assert!(user_two_groups.assigned_groups.is_empty());
-        assert!(user_two_groups.effective_groups.is_empty());
-
-        let single = state
-            .effective_user_groups_for_user("user-1")
-            .await
-            .expect("single-user effective groups should resolve");
-        assert_eq!(single, user_one_groups.effective_groups);
-    }
-
-    #[tokio::test]
-    async fn admin_non_standalone_snapshot_applies_group_and_key_policies() {
-        let mut snapshot = sample_snapshot_with_role("key-admin", "admin-1", "admin")
-            .with_user_rate_limit(Some(120));
-        snapshot.api_key_allowed_providers = Some(vec!["anthropic".to_string()]);
-        snapshot.api_key_allowed_api_formats = Some(vec!["anthropic:messages".to_string()]);
-        snapshot.api_key_allowed_models = Some(vec!["claude-sonnet-4-5".to_string()]);
-        snapshot.api_key_rate_limit = Some(5);
-        snapshot.api_key_concurrent_limit = Some(1);
-
-        let auth_repository = Arc::new(InMemoryAuthApiKeySnapshotRepository::seed(vec![(
-            Some("hash-admin".to_string()),
-            snapshot,
-        )]));
-        let user_repository = Arc::new(InMemoryUserReadRepository::seed_auth_users(vec![
-            sample_auth_user("admin-1", "admin"),
-        ]));
-        let group = user_repository
-            .create_user_group(UpsertUserGroupRecord {
-                name: "Restricted".to_string(),
-                description: None,
-                priority: 10,
-                allowed_providers: Some(vec!["openai".to_string()]),
-                allowed_providers_mode: "specific".to_string(),
-                allowed_api_formats: Some(vec!["openai:chat".to_string()]),
-                allowed_api_formats_mode: "specific".to_string(),
-                allowed_models: Some(vec!["gpt-4.1".to_string()]),
-                allowed_models_mode: "specific".to_string(),
-                rate_limit: Some(1),
-                rate_limit_mode: "custom".to_string(),
-                daily_usage_limit_usd: None,
-                daily_usage_limit_mode: "inherit".to_string(),
-            })
-            .await
-            .expect("group should create")
-            .expect("group should exist");
-        user_repository
-            .add_user_to_group(&group.id, "admin-1")
-            .await
-            .expect("group membership should create");
-
-        let state = GatewayDataState::with_auth_api_key_reader_for_tests(auth_repository)
-            .with_user_reader(user_repository);
-        let resolved = state
-            .read_auth_api_key_snapshot_by_key_hash("hash-admin", 100)
-            .await
-            .expect("snapshot should resolve")
-            .expect("snapshot should exist");
-
-        assert_eq!(resolved.user_role, "admin");
-        assert_eq!(resolved.effective_allowed_providers(), Some(&[][..]));
-        assert_eq!(resolved.effective_allowed_api_formats(), Some(&[][..]));
-        assert_eq!(resolved.effective_allowed_models(), Some(&[][..]));
-        assert_eq!(resolved.user_rate_limit, Some(1));
-        assert_eq!(resolved.api_key_rate_limit, Some(5));
-        assert_eq!(resolved.api_key_concurrent_limit, Some(1));
-    }
-
-    #[tokio::test]
-    async fn current_admin_role_refreshes_without_bypassing_key_policies() {
-        let mut snapshot = sample_snapshot("key-admin", "admin-1");
-        snapshot.api_key_allowed_providers = Some(vec!["anthropic".to_string()]);
-        snapshot.api_key_allowed_api_formats = Some(vec!["anthropic:messages".to_string()]);
-        snapshot.api_key_allowed_models = Some(vec!["claude-sonnet-4-5".to_string()]);
-
-        let auth_repository = Arc::new(InMemoryAuthApiKeySnapshotRepository::seed(vec![(
-            Some("hash-admin".to_string()),
-            snapshot,
-        )]));
-        let user_repository = Arc::new(InMemoryUserReadRepository::seed_auth_users(vec![
-            sample_auth_user("admin-1", "admin"),
-        ]));
-        let state = GatewayDataState::with_auth_api_key_reader_for_tests(auth_repository)
-            .with_user_reader(user_repository);
-
-        let resolved = state
-            .read_auth_api_key_snapshot_by_key_hash("hash-admin", 100)
-            .await
-            .expect("snapshot should resolve")
-            .expect("snapshot should exist");
-
-        assert_eq!(resolved.user_role, "admin");
-        assert_eq!(
-            resolved.effective_allowed_providers(),
-            Some(&["anthropic".to_string()][..])
-        );
-        assert_eq!(
-            resolved.effective_allowed_api_formats(),
-            Some(&["anthropic:messages".to_string()][..])
-        );
-        assert_eq!(
-            resolved.effective_allowed_models(),
-            Some(&["claude-sonnet-4-5".to_string()][..])
-        );
-        assert_eq!(resolved.user_rate_limit, None);
-        assert_eq!(resolved.api_key_rate_limit, Some(60));
-        assert_eq!(resolved.api_key_concurrent_limit, Some(5));
-    }
-
-    #[tokio::test]
-    async fn current_user_role_replaces_stored_admin_role() {
-        let snapshot = sample_snapshot_with_role("key-user", "user-1", "admin");
-        let auth_repository = Arc::new(InMemoryAuthApiKeySnapshotRepository::seed(vec![(
-            Some("hash-user".to_string()),
-            snapshot,
-        )]));
-        let user_repository = Arc::new(InMemoryUserReadRepository::seed_auth_users(vec![
-            sample_auth_user("user-1", "user"),
-        ]));
-        let state = GatewayDataState::with_auth_api_key_reader_for_tests(auth_repository)
-            .with_user_reader(user_repository);
-
-        let resolved = state
-            .read_auth_api_key_snapshot_by_key_hash("hash-user", 100)
-            .await
-            .expect("snapshot should resolve")
-            .expect("snapshot should exist");
-
-        assert_eq!(resolved.user_role, "user");
-    }
-
-    #[tokio::test]
-    async fn user_personal_policy_fields_are_ignored_when_groups_are_applied() {
-        let mut snapshot = sample_snapshot("key-user", "user-1").with_user_rate_limit(Some(200));
-        snapshot.api_key_allowed_providers = None;
-        snapshot.api_key_allowed_api_formats = None;
-        snapshot.api_key_allowed_models = None;
-
-        let auth_repository = Arc::new(InMemoryAuthApiKeySnapshotRepository::seed(vec![(
-            Some("hash-user".to_string()),
-            snapshot,
-        )]));
-        let user = sample_auth_user("user-1", "user");
-        let user_repository = Arc::new(InMemoryUserReadRepository::seed_auth_users(vec![
-            user.clone()
-        ]));
-        let group = user_repository
-            .create_user_group(UpsertUserGroupRecord {
-                name: "Group Policy".to_string(),
-                description: None,
-                priority: 10,
-                allowed_providers: Some(vec!["anthropic".to_string()]),
-                allowed_providers_mode: "specific".to_string(),
-                allowed_api_formats: Some(vec!["claude:messages".to_string()]),
-                allowed_api_formats_mode: "specific".to_string(),
-                allowed_models: Some(vec!["claude-sonnet-4-5".to_string()]),
-                allowed_models_mode: "specific".to_string(),
-                rate_limit: Some(30),
-                rate_limit_mode: "custom".to_string(),
-                daily_usage_limit_usd: None,
-                daily_usage_limit_mode: "inherit".to_string(),
-            })
-            .await
-            .expect("group should create")
-            .expect("group should exist");
-        user_repository
-            .add_user_to_group(&group.id, "user-1")
-            .await
-            .expect("group membership should create");
-
-        let state = GatewayDataState::with_auth_api_key_reader_for_tests(auth_repository)
-            .with_user_reader(user_repository);
-        let resolved = state
-            .read_auth_api_key_snapshot_by_key_hash("hash-user", 100)
-            .await
-            .expect("snapshot should resolve")
-            .expect("snapshot should exist");
-
-        assert_eq!(
-            resolved.effective_allowed_providers(),
-            Some(&["anthropic".to_string()][..])
-        );
-        assert_eq!(
-            resolved.effective_allowed_api_formats(),
-            Some(&["claude:messages".to_string()][..])
-        );
-        assert_eq!(
-            resolved.effective_allowed_models(),
-            Some(&["claude-sonnet-4-5".to_string()][..])
-        );
-        assert_eq!(resolved.user_rate_limit, Some(30));
-
-        let catalog_policies = state
-            .resolve_user_effective_list_policies(&user)
-            .await
-            .expect("catalog policies should resolve");
-        assert_eq!(
-            catalog_policies.allowed_providers.as_deref(),
-            resolved.effective_allowed_providers()
-        );
-        assert_eq!(
-            catalog_policies.allowed_api_formats.as_deref(),
-            resolved.effective_allowed_api_formats()
-        );
-        assert_eq!(
-            catalog_policies.allowed_models.as_deref(),
-            resolved.effective_allowed_models()
-        );
-    }
-
-    #[tokio::test]
-    async fn group_responses_permission_and_key_search_scope_resolve_to_search() {
-        let mut snapshot = sample_snapshot("key-search", "user-search");
-        snapshot.api_key_allowed_api_formats = Some(vec!["openai:search".to_string()]);
-        let auth_repository = Arc::new(InMemoryAuthApiKeySnapshotRepository::seed(vec![(
-            Some("hash-search".to_string()),
-            snapshot,
-        )]));
-        let user_repository = Arc::new(InMemoryUserReadRepository::seed_auth_users(vec![
-            sample_auth_user("user-search", "user"),
-        ]));
-        let group = user_repository
-            .create_user_group(UpsertUserGroupRecord {
-                name: "Responses".to_string(),
-                description: None,
-                priority: 10,
-                allowed_providers: None,
-                allowed_providers_mode: "unrestricted".to_string(),
-                allowed_api_formats: Some(vec!["openai:responses".to_string()]),
-                allowed_api_formats_mode: "specific".to_string(),
-                allowed_models: None,
-                allowed_models_mode: "unrestricted".to_string(),
-                rate_limit: None,
-                rate_limit_mode: "system".to_string(),
-                daily_usage_limit_usd: None,
-                daily_usage_limit_mode: "inherit".to_string(),
-            })
-            .await
-            .expect("group should create")
-            .expect("group should exist");
-        user_repository
-            .add_user_to_group(&group.id, "user-search")
-            .await
-            .expect("group membership should create");
-
-        let state = GatewayDataState::with_auth_api_key_reader_for_tests(auth_repository)
-            .with_user_reader(user_repository);
-        let resolved = state
-            .read_auth_api_key_snapshot_by_key_hash("hash-search", 100)
-            .await
-            .expect("snapshot should resolve")
-            .expect("snapshot should exist");
-
-        assert_eq!(
-            resolved.effective_allowed_api_formats(),
-            Some(&["openai:search".to_string()][..])
-        );
-    }
-
-    #[tokio::test]
-    async fn snapshot_without_user_reader_uses_stored_policy_intersection() {
-        let mut snapshot = sample_snapshot("key-search", "user-search");
-        snapshot.api_key_allowed_api_formats = Some(vec!["openai:search".to_string()]);
-        let auth_repository = Arc::new(InMemoryAuthApiKeySnapshotRepository::seed(vec![(
-            Some("hash-search".to_string()),
-            snapshot,
-        )]));
-        let state = GatewayDataState::with_auth_api_key_reader_for_tests(auth_repository);
-
-        let resolved = state
-            .read_auth_api_key_snapshot_by_key_hash("hash-search", 100)
-            .await
-            .expect("snapshot should resolve")
-            .expect("snapshot should exist");
-
-        assert_eq!(resolved.effective_allowed_api_formats(), Some(&[][..]));
-    }
-
-    #[tokio::test]
-    async fn missing_current_user_uses_stored_policy_intersection() {
-        let mut snapshot = sample_snapshot("key-search", "missing-user");
-        snapshot.api_key_allowed_api_formats = Some(vec!["openai:search".to_string()]);
-        let auth_repository = Arc::new(InMemoryAuthApiKeySnapshotRepository::seed(vec![(
-            Some("hash-search".to_string()),
-            snapshot,
-        )]));
-        let user_repository = Arc::new(InMemoryUserReadRepository::default());
-        let state = GatewayDataState::with_auth_api_key_reader_for_tests(auth_repository)
-            .with_user_reader(user_repository);
-
-        let resolved = state
-            .read_auth_api_key_snapshot_by_key_hash("hash-search", 100)
-            .await
-            .expect("snapshot should resolve")
-            .expect("snapshot should exist");
-
-        assert_eq!(resolved.effective_allowed_api_formats(), Some(&[][..]));
-    }
-
-    #[tokio::test]
-    async fn data_state_lists_auth_api_key_export_records() {
-        let repository = Arc::new(
-            InMemoryAuthApiKeySnapshotRepository::seed(vec![
-                (
-                    Some("hash-user".to_string()),
-                    sample_snapshot("key-user", "user-1"),
-                ),
-                (
-                    Some("hash-standalone".to_string()),
-                    sample_snapshot("key-standalone", "admin-1"),
-                ),
-            ])
-            .with_export_records(vec![
-                StoredAuthApiKeyExportRecord::new(
-                    "user-1".to_string(),
-                    "key-user".to_string(),
-                    "hash-user".to_string(),
-                    Some("enc-user".to_string()),
-                    Some("default".to_string()),
-                    None,
-                    None,
-                    Some(serde_json::json!(["gpt-5"])),
-                    Some(60),
-                    Some(5),
-                    Some(serde_json::json!({"cache_1h": true})),
-                    true,
-                    Some(200),
-                    false,
-                    9,
-                    0,
-                    1.75,
-                    false,
-                )
-                .expect("user export record should build"),
-                StoredAuthApiKeyExportRecord::new(
-                    "admin-1".to_string(),
-                    "key-standalone".to_string(),
-                    "hash-standalone".to_string(),
-                    Some("enc-standalone".to_string()),
-                    Some("standalone".to_string()),
-                    None,
-                    None,
-                    None,
-                    None,
-                    Some(1),
-                    None,
-                    true,
-                    None,
-                    true,
-                    2,
-                    0,
-                    0.5,
-                    true,
-                )
-                .expect("standalone export record should build"),
-            ]),
-        );
-
-        let state = GatewayDataState::with_auth_api_key_reader_for_tests(repository);
-
-        let user_records = state
-            .list_auth_api_key_export_records_by_user_ids(&["user-1".to_string()])
-            .await
-            .expect("user export records should load");
-        assert_eq!(user_records.len(), 1);
-        assert_eq!(user_records[0].api_key_id, "key-user");
-        assert_eq!(user_records[0].total_requests, 9);
-
-        let selected_records = state
-            .list_auth_api_key_export_records_by_ids(&[
-                "key-standalone".to_string(),
-                "missing".to_string(),
-                "key-user".to_string(),
-            ])
-            .await
-            .expect("selected export records should load");
-        assert_eq!(selected_records.len(), 2);
-        assert_eq!(selected_records[0].api_key_id, "key-standalone");
-        assert_eq!(selected_records[1].api_key_id, "key-user");
-
-        let paged_records = state
-            .list_auth_api_key_export_standalone_records_page(
-                &aether_data::repository::auth::StandaloneApiKeyExportListQuery {
-                    skip: 0,
-                    limit: 10,
-                    is_active: Some(true),
-                },
-            )
-            .await
-            .expect("paged standalone export records should load");
-        assert_eq!(paged_records.len(), 1);
-        assert_eq!(paged_records[0].api_key_id, "key-standalone");
-        assert_eq!(
-            state
-                .count_auth_api_key_export_standalone_records(Some(true))
-                .await
-                .expect("standalone export count should load"),
-            1
-        );
-
-        let standalone_records = state
-            .list_auth_api_key_export_standalone_records()
-            .await
-            .expect("standalone export records should load");
-        assert_eq!(standalone_records.len(), 1);
-        assert_eq!(standalone_records[0].api_key_id, "key-standalone");
-        assert!(standalone_records[0].is_standalone);
     }
 }

@@ -2,9 +2,9 @@
 
 生成日期：2026-06-03。
 
-本文档整理 Aether 当前接入和转换矩阵实际涉及的三类 provider 接口面：OpenAI Chat Completions / Responses / Embeddings / Images，Claude Messages，以及 Gemini GenerateContent / Embeddings / Files / PredictLongRunning 相关接口。它不是三家公司所有管理类、训练类、账单类 API 的全集。
+本文档整理 Aether Lite 当前同格式透传涉及的三类 API 接口面：OpenAI Chat Completions / Responses / Embeddings / Images，Claude Messages，以及 Gemini GenerateContent / Embeddings / Files / PredictLongRunning 相关接口。它不是三家公司所有管理类、训练类、账单类 API 的全集。
 
-这是 schema inventory / audit input，不是运行时代码的字段 allowlist。Provider 官方新增字段时，同格式运行时路径仍按原始 body 透传；canonical same-format roundtrip 通过 provider extension 保留未映射字段；跨格式转换只有在存在显式语义映射时才开放，否则 fail closed。刷新本文档只用于更新审计基线和决定是否新增跨格式映射。
+这是 schema inventory / audit input，不是运行时代码的字段 allowlist。Provider 官方新增字段时，同格式运行时路径仍按原始 body 透传。Lite 运行时不支持跨格式请求或响应转换；刷新本文档只用于更新同格式透传的审计基线。
 
 ## 来源与范围
 

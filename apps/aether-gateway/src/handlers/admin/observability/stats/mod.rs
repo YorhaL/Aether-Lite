@@ -6,7 +6,6 @@ mod analytics_routes;
 mod cost_routes;
 mod leaderboard;
 mod leaderboard_routes;
-mod provider_quota_routes;
 mod range;
 pub(crate) use self::range::{parse_bounded_u32, resolve_admin_usage_time_range};
 pub(crate) use aether_admin::observability::stats::{
@@ -20,16 +19,6 @@ pub(crate) async fn maybe_build_local_admin_stats_response(
 ) -> Result<Option<Response<Body>>, GatewayError> {
     if request_context.route_family() != Some("stats_manage") {
         return Ok(None);
-    }
-
-    if let Some(response) =
-        provider_quota_routes::maybe_build_local_admin_stats_provider_quota_response(
-            state,
-            request_context,
-        )
-        .await?
-    {
-        return Ok(Some(response));
     }
 
     if let Some(response) =

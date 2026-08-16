@@ -1,13 +1,12 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use async_trait::async_trait;
 use sqlx::{sqlite::SqliteRow, QueryBuilder, Row, Sqlite};
 
 use aether_data_contracts::repository::candidate_selection::{
     MinimalCandidateSelectionReadRepository, StoredApiFormatCandidateRowsQuery,
-    StoredMinimalCandidateSelectionRow, StoredPoolKeyCandidateOrder,
-    StoredPoolKeyCandidateRowsByKeyIdsQuery, StoredPoolKeyCandidateRowsQuery,
-    StoredProviderModelMapping, StoredRequestedModelCandidateRowsQuery,
+    StoredMinimalCandidateSelectionRow, StoredProviderModelMapping,
+    StoredRequestedModelCandidateRowsQuery,
 };
 use aether_data_contracts::DataLayerError;
 
@@ -18,10 +17,8 @@ const CANDIDATE_SELECTION_COLUMNS: &str = r#"
 SELECT
   p.id AS provider_id,
   p.name AS provider_name,
-  p.provider_type AS provider_type,
   p.provider_priority AS provider_priority,
   p.is_active AS provider_is_active,
-  p.config AS provider_config,
   pe.id AS endpoint_id,
   COALESCE(pe.api_format, '') AS endpoint_api_format,
   pe.api_family AS endpoint_api_family,
@@ -30,7 +27,6 @@ SELECT
   pak.id AS key_id,
   pak.name AS key_name,
   pak.auth_type AS key_auth_type,
-  pak.auth_config AS key_auth_config,
   pak.is_active AS key_is_active,
   pak.api_formats AS key_api_formats,
   pak.allowed_models AS key_allowed_models,
@@ -46,15 +42,7 @@ SELECT
   m.provider_model_mappings AS model_provider_model_mappings,
   m.supports_streaming AS model_supports_streaming,
   m.is_active AS model_is_active,
-  m.is_available AS model_is_available,
-  CASE
-    WHEN json_valid(p.config) THEN
-      CASE
-        WHEN json_type(p.config, '$.pool_advanced') IS NOT NULL THEN 1
-        ELSE 0
-      END
-    ELSE 0
-  END AS provider_pool_enabled
+  m.is_available AS model_is_available
 FROM providers p
 INNER JOIN provider_endpoints pe ON pe.provider_id = p.id
 INNER JOIN provider_api_keys pak ON pak.provider_id = p.id
@@ -79,7 +67,6 @@ pub struct SqliteMinimalCandidateSelectionReadRepository {
 #[derive(Debug, Clone)]
 struct CandidateSelectionRow {
     row: StoredMinimalCandidateSelectionRow,
-    key_auth_config: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -212,7 +199,6 @@ impl SqliteMinimalCandidateSelectionReadRepository {
             items.retain(|item| {
                 api_format_matches(&item.row.endpoint_api_format, &canonical_api_format)
                     && item.row.key_supports_api_format(&canonical_api_format)
-                    && key_auth_channel_matches(item, &canonical_api_format)
             });
             rows.extend(items.into_iter().map(|item| item.row));
         }
@@ -241,12 +227,7 @@ impl SqliteMinimalCandidateSelectionReadRepository {
             sql_match_aliases(&api_format_permission_aliases(&canonical_api_format));
         let mut builder = QueryBuilder::<Sqlite>::new("WITH candidate_rows AS (");
         builder.push(CANDIDATE_SELECTION_COLUMNS);
-        push_candidate_sql_filters_for_aliases(
-            &mut builder,
-            &storage_aliases,
-            &match_aliases,
-            &canonical_api_format,
-        );
+        push_candidate_sql_filters_for_aliases(&mut builder, &storage_aliases, &match_aliases);
         push_requested_model_sql_filter(&mut builder, requested_model_name, &match_aliases);
         push_selected_rows_query_tail(&mut builder, SelectedRowsOrder::WithGlobalModel, Some(page));
 
@@ -259,7 +240,6 @@ impl SqliteMinimalCandidateSelectionReadRepository {
         rows.retain(|item| {
             api_format_matches(&item.row.endpoint_api_format, &canonical_api_format)
                 && item.row.key_supports_api_format(&canonical_api_format)
-                && key_auth_channel_matches(item, &canonical_api_format)
         });
 
         Ok(RequestedModelRawPage { rows, raw_len })
@@ -373,126 +353,6 @@ impl MinimalCandidateSelectionReadRepository for SqliteMinimalCandidateSelection
             .collect();
         Ok(dedupe_candidate_selection_rows(rows))
     }
-
-    async fn list_pool_key_rows_for_group(
-        &self,
-        query: &StoredPoolKeyCandidateRowsQuery,
-    ) -> Result<Vec<StoredMinimalCandidateSelectionRow>, DataLayerError> {
-        if query.limit == 0 {
-            return Ok(Vec::new());
-        }
-        let canonical_api_format = normalize_api_format(&query.api_format);
-        let storage_aliases = api_format_aliases(&canonical_api_format);
-        let match_aliases =
-            sql_match_aliases(&api_format_permission_aliases(&canonical_api_format));
-        let mut rows = Vec::<CandidateSelectionRow>::new();
-
-        for storage_api_format in storage_aliases {
-            let mut builder = QueryBuilder::<Sqlite>::new(CANDIDATE_SELECTION_COLUMNS);
-            push_candidate_sql_filters(&mut builder, &storage_api_format, &match_aliases);
-            builder.push(" AND p.id = ");
-            builder.push_bind(&query.provider_id);
-            builder.push(" AND pe.id = ");
-            builder.push_bind(&query.endpoint_id);
-            builder.push(" AND m.id = ");
-            builder.push_bind(&query.model_id);
-            push_pool_key_order(&mut builder, &query.order);
-            builder.push(" LIMIT ");
-            builder.push_bind(i64::from(query.limit));
-            builder.push(" OFFSET ");
-            builder.push_bind(i64::from(query.offset));
-
-            let query_rows = builder.build().fetch_all(&self.pool).await.map_sql_err()?;
-            let mut items = query_rows
-                .iter()
-                .map(map_candidate_selection_row)
-                .collect::<Result<Vec<_>, _>>()?;
-            items.retain(|item| {
-                api_format_matches(&item.row.endpoint_api_format, &canonical_api_format)
-                    && item.row.key_supports_api_format(&canonical_api_format)
-                    && key_auth_channel_matches(item, &canonical_api_format)
-            });
-            rows.extend(items);
-        }
-
-        Ok(dedupe_candidate_selection_rows(
-            rows.into_iter().map(|item| item.row).collect(),
-        ))
-    }
-
-    async fn list_pool_key_rows_for_group_key_ids(
-        &self,
-        query: &StoredPoolKeyCandidateRowsByKeyIdsQuery,
-    ) -> Result<Vec<StoredMinimalCandidateSelectionRow>, DataLayerError> {
-        if query.key_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let key_order = query
-            .key_ids
-            .iter()
-            .enumerate()
-            .map(|(index, key_id)| (key_id.as_str(), index))
-            .collect::<BTreeMap<_, _>>();
-        let canonical_api_format = normalize_api_format(&query.api_format);
-        let storage_aliases = api_format_aliases(&canonical_api_format);
-        let match_aliases =
-            sql_match_aliases(&api_format_permission_aliases(&canonical_api_format));
-        let mut rows = Vec::new();
-
-        for storage_api_format in storage_aliases {
-            let mut builder = QueryBuilder::<Sqlite>::new(CANDIDATE_SELECTION_COLUMNS);
-            push_candidate_sql_filters(&mut builder, &storage_api_format, &match_aliases);
-            builder.push(" AND p.id = ");
-            builder.push_bind(&query.provider_id);
-            builder.push(" AND pe.id = ");
-            builder.push_bind(&query.endpoint_id);
-            builder.push(" AND m.id = ");
-            builder.push_bind(&query.model_id);
-            builder.push(" AND pak.id IN (");
-            {
-                let mut separated = builder.separated(", ");
-                for key_id in &query.key_ids {
-                    separated.push_bind(key_id);
-                }
-            }
-            builder.push(")");
-            builder.push(" ORDER BY CASE pak.id");
-            for (index, key_id) in query.key_ids.iter().enumerate() {
-                builder.push(" WHEN ");
-                builder.push_bind(key_id);
-                builder.push(" THEN ");
-                builder.push_bind(i64::try_from(index).map_err(|_| {
-                    DataLayerError::UnexpectedValue("key id order index overflowed".to_string())
-                })?);
-            }
-            builder.push(" ELSE ");
-            builder.push_bind(i64::try_from(query.key_ids.len()).map_err(|_| {
-                DataLayerError::UnexpectedValue("key id order length overflowed".to_string())
-            })?);
-            builder.push(" END ASC, pak.id ASC");
-
-            let query_rows = builder.build().fetch_all(&self.pool).await.map_sql_err()?;
-            let mut items = query_rows
-                .iter()
-                .map(map_candidate_selection_row)
-                .collect::<Result<Vec<_>, _>>()?;
-            items.retain(|item| {
-                api_format_matches(&item.row.endpoint_api_format, &canonical_api_format)
-                    && item.row.key_supports_api_format(&canonical_api_format)
-                    && key_auth_channel_matches(item, &canonical_api_format)
-            });
-            rows.extend(items.into_iter().map(|item| item.row));
-        }
-
-        let mut rows = dedupe_candidate_selection_rows(rows);
-        rows.sort_by(|left, right| {
-            key_order
-                .get(left.key_id.as_str())
-                .cmp(&key_order.get(right.key_id.as_str()))
-                .then(left.key_id.cmp(&right.key_id))
-        });
-        Ok(rows)
-    }
 }
 
 fn push_candidate_sql_filters(
@@ -503,20 +363,17 @@ fn push_candidate_sql_filters(
     builder.push(" AND LOWER(COALESCE(pe.api_format, '')) = ");
     builder.push_bind(storage_api_format.trim().to_ascii_lowercase());
     push_key_api_format_sql_filter(builder, match_aliases);
-    push_key_auth_channel_sql_filter(builder, storage_api_format);
 }
 
 fn push_candidate_sql_filters_for_aliases(
     builder: &mut QueryBuilder<'_, Sqlite>,
     storage_api_formats: &[String],
     match_aliases: &[String],
-    requested_api_format: &str,
 ) {
     builder.push(" AND LOWER(COALESCE(pe.api_format, '')) IN (");
     push_bind_list(builder, storage_api_formats);
     builder.push(")");
     push_key_api_format_sql_filter(builder, match_aliases);
-    push_key_auth_channel_sql_filter(builder, requested_api_format);
 }
 
 fn push_key_api_format_sql_filter(
@@ -590,112 +447,6 @@ fn push_key_api_format_sql_filter(
     );
 }
 
-fn push_key_auth_channel_sql_filter(
-    builder: &mut QueryBuilder<'_, Sqlite>,
-    storage_api_format: &str,
-) {
-    let api_format = normalize_api_format(storage_api_format);
-    builder.push(
-        r#"
-  AND (
-    (
-      LOWER(TRIM(p.provider_type)) = 'codex'
-      AND LOWER(TRIM(pak.auth_type)) = 'oauth'
-      AND "#,
-    );
-    builder.push_bind(api_format.clone());
-    builder.push(
-        r#" IN ('openai:responses', 'openai:responses:compact', 'openai:search', 'openai:image')
-    )
-    OR (
-      LOWER(TRIM(p.provider_type)) = 'chatgpt_web'
-      AND LOWER(TRIM(pak.auth_type)) IN ('oauth', 'bearer')
-      AND "#,
-    );
-    builder.push_bind(api_format.clone());
-    builder.push(
-        r#" = 'openai:image'
-    )
-    OR (
-      LOWER(TRIM(p.provider_type)) = 'claude_code'
-      AND LOWER(TRIM(pak.auth_type)) = 'oauth'
-      AND "#,
-    );
-    builder.push_bind(api_format.clone());
-    builder.push(
-        r#" = 'claude:messages'
-    )
-    OR (
-      LOWER(TRIM(p.provider_type)) = 'kiro'
-      AND "#,
-    );
-    builder.push_bind(api_format.clone());
-    builder.push(
-        r#" = 'claude:messages'
-      AND (
-        LOWER(TRIM(pak.auth_type)) = 'oauth'
-        OR (
-          LOWER(TRIM(pak.auth_type)) = 'bearer'
-          AND pak.auth_config IS NOT NULL
-          AND TRIM(pak.auth_config) <> ''
-        )
-      )
-    )
-    OR (
-      LOWER(TRIM(p.provider_type)) IN ('gemini_cli', 'antigravity')
-      AND LOWER(TRIM(pak.auth_type)) = 'oauth'
-      AND "#,
-    );
-    builder.push_bind(api_format.clone());
-    builder.push(
-        r#" = 'gemini:generate_content'
-    )
-    OR (
-      LOWER(TRIM(p.provider_type)) = 'grok'
-      AND LOWER(TRIM(pak.auth_type)) = 'oauth'
-      AND "#,
-    );
-    builder.push_bind(api_format.clone());
-    builder.push(
-        r#" IN ('openai:chat', 'openai:responses', 'claude:messages', 'openai:image')
-    )
-    OR (
-      LOWER(TRIM(p.provider_type)) = 'windsurf'
-      AND LOWER(TRIM(pak.auth_type)) IN ('oauth', 'api_key', 'bearer')
-      AND "#,
-    );
-    builder.push_bind(api_format.clone());
-    builder.push(
-        r#" = 'openai:chat'
-    )
-    OR (
-      LOWER(TRIM(p.provider_type)) = 'vertex_ai'
-      AND LOWER(TRIM(pak.auth_type)) IN ('api_key', 'service_account', 'vertex_ai')
-      AND "#,
-    );
-    builder.push_bind(api_format.clone());
-    builder.push(
-        r#" IN ('gemini:generate_content', 'gemini:embedding')
-    )
-    OR (
-      LOWER(TRIM(p.provider_type)) NOT IN (
-        'chatgpt_web',
-        'claude_code',
-        'codex',
-        'gemini_cli',
-        'grok',
-        'vertex_ai',
-        'antigravity',
-        'kiro',
-        'windsurf'
-      )
-      AND LOWER(TRIM(pak.auth_type)) <> 'oauth'
-    )
-  )
-"#,
-    );
-}
-
 fn push_requested_model_sql_filter(
     builder: &mut QueryBuilder<'_, Sqlite>,
     requested_model_name: &str,
@@ -741,33 +492,8 @@ fn push_selected_rows_query_tail(
 ) {
     builder.push(
         r#"
-),
-pool_rows AS (
-  SELECT candidate.*
-  FROM candidate_rows candidate
-  WHERE candidate.provider_pool_enabled = 1
-    AND NOT EXISTS (
-      SELECT 1
-      FROM candidate_rows other
-      WHERE other.provider_pool_enabled = 1
-        AND other.provider_id = candidate.provider_id
-        AND other.endpoint_id = candidate.endpoint_id
-        AND other.model_id = candidate.model_id
-        AND (
-          other.key_internal_priority < candidate.key_internal_priority
-          OR (
-            other.key_internal_priority = candidate.key_internal_priority
-            AND other.key_id < candidate.key_id
-          )
-        )
-    )
-),
-selected_rows AS (
-  SELECT * FROM candidate_rows WHERE provider_pool_enabled = 0
-  UNION ALL
-  SELECT * FROM pool_rows
 )
-SELECT * FROM selected_rows
+SELECT * FROM candidate_rows
 "#,
     );
     push_selected_rows_order(builder, order);
@@ -789,96 +515,11 @@ fn push_selected_rows_order(builder: &mut QueryBuilder<'_, Sqlite>, order: Selec
     );
 }
 
-fn push_pool_key_order(
-    builder: &mut QueryBuilder<'_, Sqlite>,
-    order: &StoredPoolKeyCandidateOrder,
-) {
-    match order {
-        StoredPoolKeyCandidateOrder::InternalPriority => {
-            builder.push(" ORDER BY pak.internal_priority ASC, pak.id ASC");
-        }
-        StoredPoolKeyCandidateOrder::Lru => {
-            builder.push(
-                " ORDER BY pak.last_used_at IS NOT NULL ASC, pak.last_used_at ASC, pak.internal_priority ASC, pak.id ASC",
-            );
-        }
-        StoredPoolKeyCandidateOrder::CacheAffinity => {
-            builder.push(
-                " ORDER BY pak.last_used_at IS NULL ASC, pak.last_used_at DESC, pak.internal_priority ASC, pak.id ASC",
-            );
-        }
-        StoredPoolKeyCandidateOrder::SingleAccount => {
-            builder.push(
-                " ORDER BY pak.internal_priority ASC, pak.last_used_at IS NULL ASC, pak.last_used_at DESC, pak.id ASC",
-            );
-        }
-        StoredPoolKeyCandidateOrder::LoadBalance { seed } => {
-            push_seeded_pool_key_order(builder, seed);
-        }
-    }
-}
-
-fn push_seeded_pool_key_order(builder: &mut QueryBuilder<'_, Sqlite>, seed: &str) {
-    const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
-    const PLACEHOLDERS: &[u8; 16] = b"ghijklmnopqrstuv";
-
-    let mut digits_by_rank = HEX_DIGITS.map(char::from);
-    digits_by_rank.sort_by(|left, right| {
-        stable_pool_key_hash(seed, &left.to_string())
-            .cmp(&stable_pool_key_hash(seed, &right.to_string()))
-            .then(left.cmp(right))
-    });
-    let mut rank_by_digit = ['0'; 16];
-    for (rank, digit) in digits_by_rank.into_iter().enumerate() {
-        let digit_index = digit
-            .to_digit(16)
-            .expect("seeded pool-key rank input must be hexadecimal")
-            as usize;
-        rank_by_digit[digit_index] = char::from(HEX_DIGITS[rank]);
-    }
-
-    // SQLite has no built-in hash; placeholders avoid cascading replacements
-    // while remapping every key-id nibble to a seed-derived rank.
-    builder.push(" ORDER BY ");
-    for _ in 0..(HEX_DIGITS.len() + PLACEHOLDERS.len()) {
-        builder.push("replace(");
-    }
-    builder.push("lower(hex(pak.id))");
-    for (digit, placeholder) in HEX_DIGITS.iter().zip(PLACEHOLDERS) {
-        builder.push(format!(
-            ", '{}', '{}')",
-            char::from(*digit),
-            char::from(*placeholder)
-        ));
-    }
-    for (placeholder, rank) in PLACEHOLDERS.iter().zip(rank_by_digit) {
-        builder.push(format!(", '{}', ", char::from(*placeholder)));
-        builder.push_bind(rank.to_string());
-        builder.push(")");
-    }
-    builder.push(" ASC, pak.id ASC");
-}
-
 fn push_bind_list(builder: &mut QueryBuilder<'_, Sqlite>, values: &[String]) {
     let mut separated = builder.separated(", ");
     for value in values {
         separated.push_bind(value.clone());
     }
-}
-
-fn stable_pool_key_hash(seed: &str, key_id: &str) -> u64 {
-    let mut hash = 0xcbf29ce484222325u64;
-    for byte in seed
-        .as_bytes()
-        .iter()
-        .copied()
-        .chain(std::iter::once(b':'))
-        .chain(key_id.as_bytes().iter().copied())
-    {
-        hash ^= u64::from(byte);
-        hash = hash.wrapping_mul(0x100000001b3);
-    }
-    hash
 }
 
 fn row_matches_requested_model(
@@ -955,58 +596,6 @@ fn mapping_scope_matches(
     })
 }
 
-fn key_auth_channel_matches(row: &CandidateSelectionRow, api_format: &str) -> bool {
-    let provider_type = row.row.provider_type.trim().to_ascii_lowercase();
-    let auth_type = row.row.key_auth_type.trim().to_ascii_lowercase();
-    let api_format = normalize_api_format(api_format);
-    match provider_type.as_str() {
-        "codex" => {
-            auth_type == "oauth"
-                && matches!(
-                    api_format.as_str(),
-                    "openai:responses"
-                        | "openai:responses:compact"
-                        | "openai:search"
-                        | "openai:image"
-                )
-        }
-        "chatgpt_web" => {
-            matches!(auth_type.as_str(), "oauth" | "bearer") && api_format == "openai:image"
-        }
-        "claude_code" => auth_type == "oauth" && api_format == "claude:messages",
-        "kiro" => {
-            api_format == "claude:messages"
-                && (auth_type == "oauth"
-                    || (auth_type == "bearer"
-                        && row
-                            .key_auth_config
-                            .as_deref()
-                            .is_some_and(|value| !value.trim().is_empty())))
-        }
-        "gemini_cli" | "antigravity" => {
-            auth_type == "oauth" && api_format == "gemini:generate_content"
-        }
-        "grok" => {
-            auth_type == "oauth"
-                && matches!(
-                    api_format.as_str(),
-                    "openai:chat" | "openai:responses" | "claude:messages" | "openai:image"
-                )
-        }
-        "windsurf" => {
-            matches!(auth_type.as_str(), "oauth" | "api_key" | "bearer")
-                && api_format == "openai:chat"
-        }
-        "vertex_ai" => vertex_key_auth_channel_matches(&auth_type, &api_format),
-        _ => auth_type != "oauth",
-    }
-}
-
-fn vertex_key_auth_channel_matches(auth_type: &str, api_format: &str) -> bool {
-    matches!(auth_type, "api_key" | "service_account" | "vertex_ai")
-        && matches!(api_format, "gemini:generate_content" | "gemini:embedding")
-}
-
 fn dedupe_candidate_selection_rows(
     rows: Vec<StoredMinimalCandidateSelectionRow>,
 ) -> Vec<StoredMinimalCandidateSelectionRow> {
@@ -1043,7 +632,6 @@ fn sort_candidate_selection_rows(
 }
 
 fn map_candidate_selection_row(row: &SqliteRow) -> Result<CandidateSelectionRow, DataLayerError> {
-    let _provider_config = parse_json(row.try_get("provider_config").ok().flatten())?;
     let global_model_config = parse_json(row.try_get("global_model_config").ok().flatten())?;
     let global_model_mappings = global_model_config
         .as_ref()
@@ -1056,7 +644,6 @@ fn map_candidate_selection_row(row: &SqliteRow) -> Result<CandidateSelectionRow,
         row: StoredMinimalCandidateSelectionRow {
             provider_id: row.try_get("provider_id").map_sql_err()?,
             provider_name: row.try_get("provider_name").map_sql_err()?,
-            provider_type: row.try_get("provider_type").map_sql_err()?,
             provider_priority: row.try_get("provider_priority").map_sql_err()?,
             provider_is_active: row.try_get("provider_is_active").map_sql_err()?,
             endpoint_id: row.try_get("endpoint_id").map_sql_err()?,
@@ -1097,7 +684,6 @@ fn map_candidate_selection_row(row: &SqliteRow) -> Result<CandidateSelectionRow,
             model_is_active: row.try_get("model_is_active").map_sql_err()?,
             model_is_available: row.try_get("model_is_available").map_sql_err()?,
         },
-        key_auth_config: row.try_get("key_auth_config").map_sql_err()?,
     })
 }
 
@@ -1335,520 +921,4 @@ fn sql_match_aliases(api_formats: &[String]) -> Vec<String> {
         .iter()
         .map(|value| value.trim().to_ascii_lowercase())
         .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{
-        push_key_auth_channel_sql_filter, push_pool_key_order, vertex_key_auth_channel_matches,
-        ExactPageAccumulator, SqliteMinimalCandidateSelectionReadRepository,
-        REQUESTED_MODEL_RAW_SCAN_LIMIT,
-    };
-    use crate::run_migrations;
-    use aether_data_contracts::repository::candidate_selection::{
-        MinimalCandidateSelectionReadRepository, StoredPoolKeyCandidateOrder,
-        StoredPoolKeyCandidateRowsQuery, StoredRequestedModelCandidateRowsQuery,
-    };
-
-    #[test]
-    fn vertex_auth_matrix_rejects_retired_claude_format() {
-        for auth_type in ["api_key", "service_account", "vertex_ai"] {
-            assert!(!vertex_key_auth_channel_matches(
-                auth_type,
-                "claude:messages"
-            ));
-            assert!(vertex_key_auth_channel_matches(
-                auth_type,
-                "gemini:generate_content"
-            ));
-            assert!(vertex_key_auth_channel_matches(
-                auth_type,
-                "gemini:embedding"
-            ));
-        }
-
-        let mut builder = sqlx::QueryBuilder::<sqlx::Sqlite>::new("SELECT 1 WHERE 1 = 1");
-        push_key_auth_channel_sql_filter(&mut builder, "claude:messages");
-        let sql = builder.sql();
-        let vertex_clause = sql
-            .split_once("LOWER(TRIM(p.provider_type)) = 'vertex_ai'")
-            .and_then(|(_, suffix)| suffix.split_once("LOWER(TRIM(p.provider_type)) NOT IN"))
-            .map(|(clause, _)| clause)
-            .expect("Vertex auth clause should exist");
-        assert!(!vertex_clause.contains("claude:messages"));
-        assert!(vertex_clause.contains("gemini:generate_content"));
-        assert!(vertex_clause.contains("gemini:embedding"));
-    }
-
-    #[test]
-    fn exact_page_accumulator_continues_after_coarse_false_positives() {
-        let mut accumulator = ExactPageAccumulator::new(1, 2);
-        accumulator.push_matching(vec![("coarse-1", false), ("coarse-2", false)], |row| row.1);
-        assert!(!accumulator.is_full());
-
-        accumulator.push_matching(
-            vec![
-                ("exact-1", true),
-                ("coarse-3", false),
-                ("exact-2", true),
-                ("exact-3", true),
-            ],
-            |row| row.1,
-        );
-
-        assert!(accumulator.is_full());
-        assert_eq!(
-            accumulator.into_page(),
-            vec![("exact-2", true), ("exact-3", true)]
-        );
-        assert_eq!(REQUESTED_MODEL_RAW_SCAN_LIMIT, 2048);
-    }
-
-    #[test]
-    fn load_balance_pool_key_order_is_seeded_and_pageable_in_sql() {
-        let sql_for_seed = |seed: &str| {
-            let mut builder =
-                sqlx::QueryBuilder::<sqlx::Sqlite>::new("SELECT pak.id FROM provider_api_keys pak");
-            push_pool_key_order(
-                &mut builder,
-                &StoredPoolKeyCandidateOrder::LoadBalance {
-                    seed: seed.to_string(),
-                },
-            );
-            builder.push(" LIMIT ");
-            builder.push_bind(64_i64);
-            builder.push(" OFFSET ");
-            builder.push_bind(128_i64);
-            builder.sql().to_string()
-        };
-
-        let first_seed_sql = sql_for_seed("seed-a");
-        let second_seed_sql = sql_for_seed("seed-b");
-
-        assert!(first_seed_sql.contains("lower(hex(pak.id))"));
-        assert!(first_seed_sql.contains("ASC, pak.id ASC LIMIT ? OFFSET ?"));
-        assert_eq!(first_seed_sql, second_seed_sql);
-        assert_eq!(first_seed_sql.matches('?').count(), 18);
-    }
-
-    #[tokio::test]
-    async fn sqlite_repository_reads_candidate_selection_rows() {
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .expect("sqlite pool should connect");
-        run_migrations(&pool)
-            .await
-            .expect("sqlite migrations should run");
-        seed_candidate_selection(&pool).await;
-
-        let repository = SqliteMinimalCandidateSelectionReadRepository::new(pool);
-        let rows = repository
-            .list_for_exact_api_format("openai:chat")
-            .await
-            .expect("candidate rows should load");
-        assert_eq!(
-            rows.iter()
-                .map(|row| row.key_id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["key-windsurf-oauth", "key-1"]
-        );
-        assert_eq!(
-            rows[1].global_model_mappings,
-            Some(vec!["alias-global".to_string()])
-        );
-        assert_eq!(rows[1].global_model_supports_streaming, Some(true));
-        assert_eq!(
-            rows[1]
-                .model_provider_model_mappings
-                .as_ref()
-                .and_then(|mappings| mappings.first())
-                .and_then(|mapping| mapping.operations.as_ref()),
-            Some(&vec!["compact".to_string()])
-        );
-
-        let requested = repository
-            .list_for_exact_api_format_and_requested_model_page(
-                &StoredRequestedModelCandidateRowsQuery {
-                    api_format: "openai:chat".to_string(),
-                    requested_model_name: "alias-provider".to_string(),
-                    offset: 0,
-                    limit: 10,
-                },
-            )
-            .await
-            .expect("requested model rows should load");
-        assert_eq!(requested.len(), 1);
-
-        let windsurf_requested = repository
-            .list_for_exact_api_format_and_requested_model_page(
-                &StoredRequestedModelCandidateRowsQuery {
-                    api_format: "openai:chat".to_string(),
-                    requested_model_name: "claude-opus-4-7".to_string(),
-                    offset: 0,
-                    limit: 10,
-                },
-            )
-            .await
-            .expect("windsurf oauth rows should load");
-        assert_eq!(
-            windsurf_requested
-                .iter()
-                .map(|row| row.key_id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["key-windsurf-oauth"]
-        );
-
-        let pool_keys = repository
-            .list_pool_key_rows_for_group(&StoredPoolKeyCandidateRowsQuery {
-                api_format: "openai:chat".to_string(),
-                provider_id: "provider-1".to_string(),
-                endpoint_id: "endpoint-1".to_string(),
-                model_id: "model-1".to_string(),
-                selected_provider_model_name: "provider-model".to_string(),
-                order: StoredPoolKeyCandidateOrder::InternalPriority,
-                offset: 1,
-                limit: 1,
-            })
-            .await
-            .expect("pool keys should load");
-        assert_eq!(pool_keys.len(), 1);
-        assert_eq!(pool_keys[0].key_id, "key-2");
-
-        let image_rows = repository
-            .list_for_exact_api_format_and_requested_model_page(
-                &StoredRequestedModelCandidateRowsQuery {
-                    api_format: "openai:image".to_string(),
-                    requested_model_name: "gpt-image-2".to_string(),
-                    offset: 0,
-                    limit: 10,
-                },
-            )
-            .await
-            .expect("chatgpt web image rows should load");
-        assert_eq!(
-            image_rows
-                .iter()
-                .map(|row| row.key_id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["key-chatgpt-web-oauth", "key-chatgpt-web-bearer"]
-        );
-
-        let search_rows = repository
-            .list_for_exact_api_format_and_requested_model_page(
-                &StoredRequestedModelCandidateRowsQuery {
-                    api_format: "openai:search".to_string(),
-                    requested_model_name: "gpt-5.6-sol".to_string(),
-                    offset: 0,
-                    limit: 10,
-                },
-            )
-            .await
-            .expect("Codex Search rows should load through Responses permissions");
-        assert_eq!(search_rows.len(), 1);
-        assert_eq!(search_rows[0].key_id, "key-codex-search");
-        assert_eq!(search_rows[0].endpoint_api_format, "openai:search");
-    }
-
-    #[tokio::test]
-    async fn sqlite_requested_model_page_crosses_coarse_false_positive_windows() {
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .expect("sqlite pool should connect");
-        run_migrations(&pool)
-            .await
-            .expect("sqlite migrations should run");
-        seed_requested_model_pagination(&pool).await;
-
-        let repository = SqliteMinimalCandidateSelectionReadRepository::new(pool);
-        let rows = repository
-            .list_for_exact_api_format_and_requested_model_page(
-                &StoredRequestedModelCandidateRowsQuery {
-                    api_format: "openai:chat".to_string(),
-                    requested_model_name: "sqlite-page-target".to_string(),
-                    offset: 1,
-                    limit: 1,
-                },
-            )
-            .await
-            .expect("requested model page should cross the coarse-only window");
-
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].model_id, "model-pagination-exact-1");
-    }
-
-    #[tokio::test]
-    async fn sqlite_load_balance_pool_key_pages_use_stable_seeded_order() {
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .expect("sqlite pool should connect");
-        run_migrations(&pool)
-            .await
-            .expect("sqlite migrations should run");
-        seed_candidate_selection(&pool).await;
-
-        let repository = SqliteMinimalCandidateSelectionReadRepository::new(pool);
-        let load_page = |seed: &str, offset, limit| StoredPoolKeyCandidateRowsQuery {
-            api_format: "openai:chat".to_string(),
-            provider_id: "provider-1".to_string(),
-            endpoint_id: "endpoint-1".to_string(),
-            model_id: "model-1".to_string(),
-            selected_provider_model_name: "provider-model".to_string(),
-            order: StoredPoolKeyCandidateOrder::LoadBalance {
-                seed: seed.to_string(),
-            },
-            offset,
-            limit,
-        };
-
-        let seed_a_first = repository
-            .list_pool_key_rows_for_group(&load_page("seed-a", 0, 1))
-            .await
-            .expect("first load-balance page should load");
-        let seed_a_second = repository
-            .list_pool_key_rows_for_group(&load_page("seed-a", 1, 1))
-            .await
-            .expect("second load-balance page should load");
-        let seed_a_replay = repository
-            .list_pool_key_rows_for_group(&load_page("seed-a", 0, 2))
-            .await
-            .expect("replayed load-balance window should load");
-        let seed_b = repository
-            .list_pool_key_rows_for_group(&load_page("seed-b", 0, 2))
-            .await
-            .expect("alternate load-balance seed should load");
-
-        let seed_a_pages = seed_a_first
-            .iter()
-            .chain(&seed_a_second)
-            .map(|row| row.key_id.as_str())
-            .collect::<Vec<_>>();
-        let seed_a_replay = seed_a_replay
-            .iter()
-            .map(|row| row.key_id.as_str())
-            .collect::<Vec<_>>();
-        let seed_b = seed_b
-            .iter()
-            .map(|row| row.key_id.as_str())
-            .collect::<Vec<_>>();
-
-        assert_eq!(seed_a_pages, vec!["key-1", "key-2"]);
-        assert_eq!(seed_a_pages, seed_a_replay);
-        assert_eq!(seed_b, vec!["key-2", "key-1"]);
-    }
-
-    async fn seed_candidate_selection(pool: &sqlx::SqlitePool) {
-        sqlx::query(
-            r#"
-INSERT INTO providers (
-  id, name, provider_type, provider_priority, config, is_active, created_at, updated_at
-)
-VALUES ('provider-1', 'Provider One', 'custom', 10, '{"pool_advanced":{}}', 1, 1, 1);
-
-INSERT INTO provider_endpoints (
-  id, provider_id, name, base_url, api_format, is_active, created_at, updated_at
-)
-VALUES ('endpoint-1', 'provider-1', 'Endpoint One', 'https://example.test', 'openai:chat', 1, 1, 1);
-
-INSERT INTO provider_api_keys (
-  id, provider_id, name, auth_type, api_formats, internal_priority, is_active, created_at, updated_at
-)
-VALUES
-  ('key-1', 'provider-1', 'Key One', 'api_key', '["openai:chat"]', 10, 1, 1, 1),
-  ('key-2', 'provider-1', 'Key Two', 'api_key', '["openai:chat"]', 20, 1, 1, 1);
-
-INSERT INTO providers (
-  id, name, provider_type, provider_priority, is_active, created_at, updated_at
-)
-VALUES ('provider-chatgpt-web', 'ChatGPT Web', 'chatgpt_web', 20, 1, 1, 1);
-
-INSERT INTO providers (
-  id, name, provider_type, provider_priority, is_active, created_at, updated_at
-)
-VALUES ('provider-windsurf', 'Windsurf', 'windsurf', 15, 1, 1, 1);
-
-INSERT INTO providers (
-  id, name, provider_type, provider_priority, is_active, created_at, updated_at
-)
-VALUES ('provider-codex-search', 'Codex Search', 'codex', 12, 1, 1, 1);
-
-INSERT INTO provider_endpoints (
-  id, provider_id, name, base_url, api_format, is_active, created_at, updated_at
-)
-VALUES (
-  'endpoint-chatgpt-web', 'provider-chatgpt-web', 'ChatGPT Web Image',
-  'https://chatgpt.com', 'openai:image', 1, 1, 1
-);
-
-INSERT INTO provider_endpoints (
-  id, provider_id, name, base_url, api_format, is_active, created_at, updated_at
-)
-VALUES (
-  'endpoint-windsurf', 'provider-windsurf', 'Windsurf Chat',
-  'https://server.codeium.com', 'openai:chat', 1, 1, 1
-);
-
-INSERT INTO provider_endpoints (
-  id, provider_id, name, base_url, api_format, is_active, created_at, updated_at
-)
-VALUES (
-  'endpoint-codex-search', 'provider-codex-search', 'Codex Search',
-  'https://chatgpt.com/backend-api/codex', 'openai:search', 1, 1, 1
-);
-
-INSERT INTO provider_api_keys (
-  id, provider_id, name, auth_type, api_formats, internal_priority, is_active, created_at, updated_at
-)
-VALUES
-  ('key-chatgpt-web-oauth', 'provider-chatgpt-web', 'OAuth', 'oauth', '["openai:image"]', 10, 1, 1, 1),
-  ('key-chatgpt-web-bearer', 'provider-chatgpt-web', 'Bearer', 'bearer', '["openai:image"]', 20, 1, 1, 1),
-  ('key-chatgpt-web-api-key', 'provider-chatgpt-web', 'API Key', 'api_key', '["openai:image"]', 30, 1, 1, 1);
-
-INSERT INTO provider_api_keys (
-  id, provider_id, name, auth_type, api_formats, internal_priority, is_active, created_at, updated_at
-)
-VALUES (
-  'key-windsurf-oauth', 'provider-windsurf', 'OAuth', 'oauth', '["openai:chat"]', 10, 1, 1, 1
-);
-
-INSERT INTO provider_api_keys (
-  id, provider_id, name, auth_type, api_formats, internal_priority, is_active, created_at, updated_at
-)
-VALUES (
-  'key-codex-search', 'provider-codex-search', 'OAuth', 'oauth',
-  '["openai:responses"]', 10, 1, 1, 1
-);
-
-INSERT INTO global_models (
-  id, name, config, is_active, created_at, updated_at
-)
-VALUES
-  ('global-1', 'gpt-5', '{"model_mappings":["alias-global"],"streaming":true}', 1, 1, 1),
-  ('global-image-1', 'gpt-image-2', NULL, 1, 1, 1),
-  ('global-windsurf-1', 'claude-opus-4-7', '{"streaming":true}', 1, 1, 1),
-  ('global-codex-search-1', 'search-global', '{"streaming":false}', 1, 1, 1);
-
-INSERT INTO models (
-  id, provider_id, global_model_id, provider_model_name, provider_model_mappings,
-  supports_streaming, is_active, is_available, created_at, updated_at
-)
-VALUES (
-  'model-1', 'provider-1', 'global-1', 'provider-model',
-  '[{"name":"alias-provider","api_formats":["openai:chat"],"operations":["COMPACT"],"priority":1}]',
-  1, 1, 1, 1, 1
-),
-(
-  'model-chatgpt-web-image', 'provider-chatgpt-web', 'global-image-1', 'gpt-image-2',
-  NULL, 1, 1, 1, 1, 1
-),
-(
-  'model-windsurf-opus', 'provider-windsurf', 'global-windsurf-1', 'claude-opus-4-7',
-  NULL, NULL, 1, 1, 1, 1
-),
-(
-  'model-codex-search', 'provider-codex-search', 'global-codex-search-1', 'search-upstream',
-  '[{"name":"gpt-5.6-sol","api_formats":["openai:responses"],"priority":1}]',
-  0, 1, 1, 1, 1
-);
-"#,
-        )
-        .execute(pool)
-        .await
-        .expect("candidate selection rows should seed");
-    }
-
-    async fn seed_requested_model_pagination(pool: &sqlx::SqlitePool) {
-        sqlx::query(
-            r#"
-INSERT INTO providers (
-  id, name, provider_type, provider_priority, is_active, created_at, updated_at
-)
-VALUES (
-  'provider-pagination', 'Pagination Provider', 'custom', 10, 1, 1, 1
-);
-
-INSERT INTO provider_endpoints (
-  id, provider_id, name, base_url, api_format, is_active, created_at, updated_at
-)
-VALUES (
-  'endpoint-pagination', 'provider-pagination', 'Pagination Endpoint',
-  'https://example.test', 'openai:chat', 1, 1, 1
-);
-
-INSERT INTO provider_api_keys (
-  id, provider_id, name, auth_type, api_formats, internal_priority,
-  is_active, created_at, updated_at
-)
-VALUES (
-  'key-pagination', 'provider-pagination', 'Pagination Key', 'api_key',
-  '["openai:chat"]', 10, 1, 1, 1
-);
-
-WITH RECURSIVE sequence(value) AS (
-  SELECT 0
-  UNION ALL
-  SELECT value + 1 FROM sequence WHERE value < 255
-)
-INSERT INTO global_models (
-  id, name, is_active, created_at, updated_at
-)
-SELECT
-  printf('global-pagination-false-%03d', value),
-  printf('a-pagination-false-%03d', value),
-  1, 1, 1
-FROM sequence;
-
-INSERT INTO global_models (
-  id, name, is_active, created_at, updated_at
-)
-VALUES
-  ('global-pagination-exact-0', 'z-pagination-exact-0', 1, 1, 1),
-  ('global-pagination-exact-1', 'z-pagination-exact-1', 1, 1, 1);
-
-WITH RECURSIVE sequence(value) AS (
-  SELECT 0
-  UNION ALL
-  SELECT value + 1 FROM sequence WHERE value < 255
-)
-INSERT INTO models (
-  id, provider_id, global_model_id, provider_model_name, provider_model_mappings,
-  is_active, is_available, created_at, updated_at
-)
-SELECT
-  printf('model-pagination-false-%03d', value),
-  'provider-pagination',
-  printf('global-pagination-false-%03d', value),
-  'upstream-false',
-  '[{"name":"sqlite-page-target-noise","api_formats":["openai:chat"],"priority":1}]',
-  1, 1, 1, 1
-FROM sequence;
-
-INSERT INTO models (
-  id, provider_id, global_model_id, provider_model_name, provider_model_mappings,
-  is_active, is_available, created_at, updated_at
-)
-VALUES
-  (
-    'model-pagination-exact-0', 'provider-pagination', 'global-pagination-exact-0',
-    'upstream-exact-0',
-    '[{"name":"sqlite-page-target","api_formats":["openai:chat"],"priority":1}]',
-    1, 1, 1, 1
-  ),
-  (
-    'model-pagination-exact-1', 'provider-pagination', 'global-pagination-exact-1',
-    'upstream-exact-1',
-    '[{"name":"sqlite-page-target","api_formats":["openai:chat"],"priority":1}]',
-    1, 1, 1, 1
-  );
-"#,
-        )
-        .execute(pool)
-        .await
-        .expect("requested model pagination rows should seed");
-    }
 }

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 
-use aether_data::driver::postgres::PostgresPoolConfig;
+use aether_data::PostgresPoolConfig;
 use aether_data::{DataBackends, DataLayerConfig};
 use sqlx::{Connection, PgConnection};
 

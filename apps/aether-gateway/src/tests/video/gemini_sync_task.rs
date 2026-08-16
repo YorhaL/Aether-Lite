@@ -1,4 +1,4 @@
-use aether_crypto::{encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
+use aether_crypto::{encrypt_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
 use aether_data::repository::candidates::InMemoryRequestCandidateRepository;
 use aether_data::repository::provider_catalog::InMemoryProviderCatalogReadRepository;
 use aether_data::repository::video_tasks::InMemoryVideoTaskRepository;
@@ -24,7 +24,6 @@ use crate::constants::{CONTROL_EXECUTED_HEADER, CONTROL_EXECUTE_FALLBACK_HEADER,
 
 use super::{
     build_router_with_state, build_state_with_execution_runtime_override, start_server,
-    VideoTaskTruthSourceMode,
 };
 
 #[tokio::test]
@@ -172,7 +171,6 @@ async fn gateway_executes_gemini_video_cancel_via_data_backed_local_follow_up_wi
             key_id: Some("key-gemini-video-local-1".to_string()),
             client_api_format: Some("gemini:video".to_string()),
             provider_api_format: Some("gemini:video".to_string()),
-            format_converted: false,
             model: Some("veo-3".to_string()),
             prompt: Some("gemini prompt".to_string()),
             original_request_body: Some(json!({"prompt": "gemini prompt"})),
@@ -217,7 +215,6 @@ async fn gateway_executes_gemini_video_cancel_via_data_backed_local_follow_up_wi
                             "original_request_body": {
                                 "prompt": "gemini prompt"
                             },
-                            "format_converted": false
                         },
                         "transport": {
                             "upstream_base_url": "https://generativelanguage.googleapis.com",
@@ -374,7 +371,7 @@ async fn gateway_executes_gemini_video_cancel_via_reconstructed_data_backed_loca
         .expect("key should build")
         .with_transport_fields(
             Some(json!(["gemini:video"])),
-            encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-upstream-gemini-video")
+            encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-upstream-gemini-video")
                 .expect("api key should encrypt"),
             None,
             None,
@@ -533,7 +530,6 @@ async fn gateway_executes_gemini_video_cancel_via_reconstructed_data_backed_loca
             key_id: Some("key-gemini-video-followup-1".to_string()),
             client_api_format: Some("gemini:video".to_string()),
             provider_api_format: Some("gemini:video".to_string()),
-            format_converted: false,
             model: Some("veo-3".to_string()),
             prompt: Some("operation cancel".to_string()),
             original_request_body: Some(json!({
@@ -571,7 +567,6 @@ async fn gateway_executes_gemini_video_cancel_via_reconstructed_data_backed_loca
 
     let gateway = build_router_with_state(
         build_state_with_execution_runtime_override(execution_runtime_url)
-        .with_video_task_truth_source_mode(VideoTaskTruthSourceMode::RustAuthoritative)
         .with_data_state_for_tests(
             crate::data::GatewayDataState::with_video_task_provider_transport_and_request_candidate_repository_for_tests(
                 repository,

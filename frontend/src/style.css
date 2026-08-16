@@ -1192,7 +1192,7 @@ body[theme-mode='dark'] .literary-annotation {
     background-color: hsl(var(--muted-foreground) / 0.5);
   }
 
-  /* Tabs styled as existing outline buttons (used by wallet/payment pages) */
+  /* Tabs styled as existing outline buttons. */
   .tabs-button-list {
     background-color: transparent !important;
     border: 0 !important;

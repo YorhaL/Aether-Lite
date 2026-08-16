@@ -3,27 +3,20 @@ use std::path::PathBuf;
 
 use crate::control::GatewayControlAuthContext;
 
-use super::{LocalVideoTaskFollowUpPlan, VideoTaskTruthSourceMode};
+use super::LocalVideoTaskFollowUpPlan;
 
 #[derive(Debug)]
 pub(crate) struct VideoTaskService(aether_video_tasks_core::VideoTaskService);
 
 impl VideoTaskService {
-    pub(crate) fn new(mode: VideoTaskTruthSourceMode) -> Self {
-        Self(aether_video_tasks_core::VideoTaskService::new(mode))
+    pub(crate) fn new() -> Self {
+        Self(aether_video_tasks_core::VideoTaskService::new())
     }
 
-    pub(crate) fn with_file_store(
-        mode: VideoTaskTruthSourceMode,
-        path: impl Into<PathBuf>,
-    ) -> std::io::Result<Self> {
+    pub(crate) fn with_file_store(path: impl Into<PathBuf>) -> std::io::Result<Self> {
         Ok(Self(
-            aether_video_tasks_core::VideoTaskService::with_file_store(mode, path)?,
+            aether_video_tasks_core::VideoTaskService::with_file_store(path)?,
         ))
-    }
-
-    pub(crate) fn with_truth_source_mode(&self, mode: VideoTaskTruthSourceMode) -> Self {
-        Self(self.0.with_truth_source_mode(mode))
     }
 
     pub(crate) fn prepare_follow_up_sync_plan(

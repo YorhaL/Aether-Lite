@@ -52,19 +52,6 @@ fn gateway_production_body_collection_stays_bounded() {
 }
 
 #[test]
-fn tunnel_node_status_delivery_stays_bounded() {
-    let source = read_workspace_file("apps/aether-gateway/src/tunnel/embedded/hub.rs");
-    assert!(
-        !source.contains("unbounded_channel::<NodeStatusEvent>"),
-        "tunnel node status delivery must not use an unbounded channel"
-    );
-    assert!(
-        source.contains("bounded_queue::<NodeStatusEvent>"),
-        "tunnel node status delivery must use the tracked bounded queue"
-    );
-}
-
-#[test]
 fn gateway_small_runtime_shims_stay_deleted() {
     for path in [
         "apps/aether-gateway/src/hooks/audit.rs",
@@ -81,7 +68,6 @@ fn gateway_small_runtime_shims_stay_deleted() {
         "apps/aether-gateway/src/query/billing/mod.rs",
         "apps/aether-gateway/src/query/monitoring/mod.rs",
         "apps/aether-gateway/src/state/runtime/security/mod.rs",
-        "apps/aether-gateway/src/state/runtime/payments/mod.rs",
     ] {
         assert!(
             !workspace_file_exists(path),
@@ -157,7 +143,6 @@ fn runtime_state_owns_redis_runtime_boundaries() {
     let mut violations = Vec::new();
     for root in [
         "apps/aether-gateway/src",
-        "apps/aether-tunnel/src",
         "crates/aether-admin/src",
         "crates/aether-billing/src",
         "crates/aether-model-fetch/src",
@@ -195,7 +180,6 @@ fn runtime_state_owns_redis_runtime_boundaries() {
     let mut dependency_violations = Vec::new();
     for manifest in [
         "apps/aether-gateway/Cargo.toml",
-        "apps/aether-tunnel/Cargo.toml",
         "crates/aether-admin/Cargo.toml",
         "crates/aether-billing/Cargo.toml",
         "crates/aether-model-fetch/Cargo.toml",
@@ -1123,7 +1107,6 @@ fn model_fetch_runtime_paths_depend_on_shared_crates_not_local_pure_helpers() {
 
     let state_integrations = read_workspace_file("apps/aether-gateway/src/state/integrations.rs");
     for pattern in [
-        "impl provider_transport::TransportTunnelAffinityLookup for AppState",
         "impl ModelFetchTransportRuntime for AppState",
         "impl ModelFetchRuntimeState for AppState",
         "impl ModelFetchAssociationStore for AppState",
@@ -1133,12 +1116,6 @@ fn model_fetch_runtime_paths_depend_on_shared_crates_not_local_pure_helpers() {
             "state/integrations.rs should host {pattern}"
         );
     }
-
-    let app_state = read_workspace_file("apps/aether-gateway/src/state/app.rs");
-    assert!(
-        !app_state.contains("impl provider_transport::TransportTunnelAffinityLookup for AppState"),
-        "state/app.rs should not host provider transport integration impls anymore"
-    );
 
     let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -1263,7 +1240,6 @@ fn video_task_service_depends_on_shared_core_crate() {
         "video_tasks/service.rs should wrap shared VideoTaskService"
     );
     for pattern in [
-        "truth_source_mode:",
         "store:",
         "mod follow_up;",
         "mod lifecycle;",
@@ -1499,23 +1475,6 @@ fn usage_reporting_does_not_log_raw_report_context() {
 }
 
 #[test]
-fn proxy_registration_client_does_not_log_raw_management_response_body() {
-    let source = read_workspace_file("apps/aether-tunnel/src/registration/client.rs");
-    assert!(
-        !source.contains("error!(body = %text"),
-        "registration/client.rs should not log raw management response bodies"
-    );
-    assert!(
-        !source.contains("register failed (HTTP {}): {}"),
-        "registration/client.rs should not bubble raw register response bodies into logs"
-    );
-    assert!(
-        !source.contains("unregister failed: {}"),
-        "registration/client.rs should not bubble raw unregister response bodies into logs"
-    );
-}
-
-#[test]
 fn hotspot_modules_do_not_log_sensitive_payload_like_fields() {
     let patterns = [
         "report_context = ?",
@@ -1594,42 +1553,5 @@ fn execution_runtime_video_finalize_paths_depend_on_shared_video_task_core() {
     assert!(
         !internal_gateway.contains("fn infer_internal_finalize_signature("),
         "internal gateway finalize path should not own local finalize signature inference"
-    );
-}
-
-#[test]
-fn ai_serving_runtime_kiro_wrapper_is_facade_only() {
-    for path in [
-        "apps/aether-gateway/src/ai_serving/runtime/mod.rs",
-        "apps/aether-gateway/src/ai_serving/runtime/provider_types.rs",
-        "apps/aether-gateway/src/ai_serving/runtime/adapters/mod.rs",
-        "apps/aether-gateway/src/ai_serving/runtime/adapters/antigravity/mod.rs",
-        "apps/aether-gateway/src/ai_serving/runtime/adapters/claude/mod.rs",
-        "apps/aether-gateway/src/ai_serving/runtime/adapters/claude_code/mod.rs",
-        "apps/aether-gateway/src/ai_serving/runtime/adapters/gemini/mod.rs",
-        "apps/aether-gateway/src/ai_serving/runtime/adapters/generic_oauth.rs",
-        "apps/aether-gateway/src/ai_serving/runtime/adapters/kiro/mod.rs",
-        "apps/aether-gateway/src/ai_serving/runtime/adapters/openai/mod.rs",
-        "apps/aether-gateway/src/ai_serving/runtime/adapters/vertex/mod.rs",
-        "apps/aether-gateway/src/ai_serving/runtime/adapters/kiro/auth.rs",
-        "apps/aether-gateway/src/ai_serving/runtime/adapters/kiro/converter.rs",
-        "apps/aether-gateway/src/ai_serving/runtime/adapters/kiro/credentials.rs",
-        "apps/aether-gateway/src/ai_serving/runtime/adapters/kiro/headers.rs",
-        "apps/aether-gateway/src/ai_serving/runtime/adapters/kiro/policy.rs",
-        "apps/aether-gateway/src/ai_serving/runtime/adapters/kiro/refresh.rs",
-        "apps/aether-gateway/src/ai_serving/runtime/adapters/kiro/request.rs",
-        "apps/aether-gateway/src/ai_serving/runtime/adapters/kiro/url.rs",
-    ] {
-        assert!(
-            !workspace_file_exists(path),
-            "{path} should be removed once gateway ai_serving runtime adapter ownership is flattened into adaptation/provider_transport facades"
-        );
-    }
-
-    let adaptation_mod =
-        read_workspace_file("apps/aether-gateway/src/ai_serving/adaptation/mod.rs");
-    assert!(
-        adaptation_mod.contains("pub(crate) use kiro::KiroToClaudeCliStreamState;"),
-        "adaptation/mod.rs should own KiroToClaudeCliStreamState export after runtime facade removal"
     );
 }

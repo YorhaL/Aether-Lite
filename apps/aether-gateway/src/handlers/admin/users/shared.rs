@@ -81,7 +81,7 @@ pub(super) struct AdminCreateUserRequest {
     #[serde(default)]
     pub(super) role: Option<String>,
     #[serde(default)]
-    pub(super) initial_gift_usd: Option<f64>,
+    pub(super) initial_balance_usd: Option<f64>,
     #[serde(default)]
     pub(super) unlimited: bool,
     #[serde(default)]
@@ -352,7 +352,7 @@ pub(super) fn normalize_admin_user_group_ids(values: Vec<String>) -> Vec<String>
         .collect()
 }
 
-pub(super) fn admin_default_user_initial_gift(value: Option<&serde_json::Value>) -> f64 {
+pub(super) fn admin_default_user_initial_balance(value: Option<&serde_json::Value>) -> f64 {
     match value {
         Some(serde_json::Value::Number(number)) => number.as_f64().unwrap_or(10.0),
         Some(serde_json::Value::String(value)) => value.parse::<f64>().unwrap_or(10.0),

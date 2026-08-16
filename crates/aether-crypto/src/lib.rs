@@ -1,7 +1,7 @@
-mod python_fernet;
+mod fernet;
 
-pub use python_fernet::{
-    decrypt_python_fernet_ciphertext, derive_python_fernet_key, encrypt_python_fernet_plaintext,
-    looks_like_python_fernet_ciphertext, warm_python_fernet_secret, PythonFernetCompat,
-    PythonFernetError, APP_SALT_HEX, APP_SALT_SEED, DEVELOPMENT_ENCRYPTION_KEY,
+pub use fernet::{
+    decrypt_fernet_ciphertext, derive_fernet_key, encrypt_fernet_plaintext,
+    looks_like_fernet_ciphertext, warm_fernet_secret, FernetCodec, FernetError, APP_SALT_HEX,
+    APP_SALT_SEED, DEVELOPMENT_ENCRYPTION_KEY,
 };

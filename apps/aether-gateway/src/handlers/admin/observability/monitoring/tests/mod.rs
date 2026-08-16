@@ -1276,5 +1276,3 @@ async fn admin_monitoring_circuit_history_returns_local_payload() {
         json!("2026-03-30T12:00:00+00:00")
     );
 }
-
-mod trace;

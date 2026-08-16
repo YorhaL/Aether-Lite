@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::json;
-use aether_crypto::{encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
+use aether_crypto::{encrypt_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
 use aether_data::repository::announcements::{
     InMemoryAnnouncementReadRepository, StoredAnnouncement,
 };
@@ -189,7 +189,7 @@ fn sample_key(
     api_format: &str,
     secret: &str,
 ) -> StoredProviderCatalogKey {
-    let encrypted_api_key = encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, secret)
+    let encrypted_api_key = encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, secret)
         .expect("api key ciphertext should build");
     StoredProviderCatalogKey::new(
         id.to_string(),
@@ -374,4 +374,3 @@ mod core;
 mod internal;
 mod oauth;
 mod ops;
-mod public_support;

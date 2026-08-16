@@ -59,7 +59,6 @@ impl PostgresPoolConfig {
 #[serde(rename_all = "snake_case")]
 pub enum DatabaseDriver {
     Sqlite,
-    Mysql,
     Postgres,
 }
 
@@ -67,7 +66,6 @@ impl DatabaseDriver {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Sqlite => "sqlite",
-            Self::Mysql => "mysql",
             Self::Postgres => "postgres",
         }
     }
@@ -76,7 +74,6 @@ impl DatabaseDriver {
         let scheme = url.split_once(':')?.0.to_ascii_lowercase();
         match scheme.as_str() {
             "sqlite" => Some(Self::Sqlite),
-            "mysql" | "mariadb" => Some(Self::Mysql),
             "postgres" | "postgresql" => Some(Self::Postgres),
             _ => None,
         }
@@ -95,10 +92,9 @@ impl FromStr for DatabaseDriver {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value.trim().to_ascii_lowercase().as_str() {
             "sqlite" => Ok(Self::Sqlite),
-            "mysql" | "mariadb" => Ok(Self::Mysql),
             "postgres" | "postgresql" => Ok(Self::Postgres),
             other => Err(DataLayerError::InvalidConfiguration(format!(
-                "unsupported database driver '{other}'; expected sqlite, mysql, or postgres"
+                "unsupported database driver '{other}'; expected sqlite or postgres"
             ))),
         }
     }
@@ -254,10 +250,6 @@ mod tests {
             DatabaseDriver::Sqlite
         );
         assert_eq!(
-            "mariadb".parse::<DatabaseDriver>().unwrap(),
-            DatabaseDriver::Mysql
-        );
-        assert_eq!(
             "postgresql".parse::<DatabaseDriver>().unwrap(),
             DatabaseDriver::Postgres
         );
@@ -271,10 +263,6 @@ mod tests {
             Some(DatabaseDriver::Sqlite)
         );
         assert_eq!(
-            DatabaseDriver::from_database_url("mysql://localhost/aether"),
-            Some(DatabaseDriver::Mysql)
-        );
-        assert_eq!(
             DatabaseDriver::from_database_url("postgres://localhost/aether"),
             Some(DatabaseDriver::Postgres)
         );
@@ -283,7 +271,7 @@ mod tests {
     #[test]
     fn validates_driver_url_mismatch() {
         let config = SqlDatabaseConfig {
-            driver: DatabaseDriver::Mysql,
+            driver: DatabaseDriver::Sqlite,
             url: "postgres://localhost/aether".to_string(),
             pool: SqlPoolConfig::default(),
         };

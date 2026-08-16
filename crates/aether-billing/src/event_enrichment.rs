@@ -339,10 +339,6 @@ fn merge_billing_snapshot_metadata(
         "rate_multiplier".to_string(),
         Value::from(computation.rate_multiplier),
     );
-    metadata.insert(
-        "is_free_tier".to_string(),
-        Value::from(computation.is_free_tier),
-    );
     *request_metadata = Some(Value::Object(metadata));
     Ok(())
 }
@@ -357,7 +353,6 @@ fn build_settlement_snapshot(
         "schema_version": SETTLEMENT_SNAPSHOT_SCHEMA_VERSION,
         "pricing_snapshot": {
             "provider_id": pricing.provider_id.clone(),
-            "provider_billing_type": pricing.provider_billing_type.clone(),
             "provider_api_key_id": pricing.provider_api_key_id.clone(),
             "global_model_id": pricing.global_model_id.clone(),
             "global_model_name": pricing.global_model_name.clone(),
@@ -373,9 +368,8 @@ fn build_settlement_snapshot(
             "tiered_pricing": resolution.tiered_pricing,
             "price_per_request": resolution.price_per_request,
             "rate_multiplier": computation.rate_multiplier,
-            "is_free_tier": computation.is_free_tier,
         },
-        "billing_plan_snapshot": {
+        "billing_rule_snapshot": {
             "rule_id": snapshot.rule_id.clone(),
             "rule_name": snapshot.rule_name.clone(),
             "scope": snapshot.scope.clone(),
@@ -548,7 +542,6 @@ mod tests {
             name_context: Some(
                 StoredBillingModelContext::new(
                     "provider-1".to_string(),
-                    Some("pay_as_you_go".to_string()),
                     Some("key-1".to_string()),
                     None,
                     Some(60),
@@ -646,7 +639,6 @@ mod tests {
             name_context: Some(
                 StoredBillingModelContext::new(
                     "provider-1".to_string(),
-                    Some("pay_as_you_go".to_string()),
                     Some("key-1".to_string()),
                     Some(json!({"openai:chat": 0.5})),
                     Some(60),
@@ -708,7 +700,6 @@ mod tests {
             name_context: Some(
                 StoredBillingModelContext::new(
                     "provider-1".to_string(),
-                    Some("pay_as_you_go".to_string()),
                     Some("key-1".to_string()),
                     None,
                     None,
@@ -784,7 +775,6 @@ mod tests {
             name_context: Some(
                 StoredBillingModelContext::new(
                     "provider-1".to_string(),
-                    Some("pay_as_you_go".to_string()),
                     Some("key-1".to_string()),
                     None,
                     Some(60),
@@ -886,7 +876,6 @@ mod tests {
             name_context: Some(
                 StoredBillingModelContext::new(
                     "provider-1".to_string(),
-                    Some("pay_as_you_go".to_string()),
                     Some("key-1".to_string()),
                     None,
                     None,
@@ -975,7 +964,6 @@ mod tests {
             name_context: Some(
                 StoredBillingModelContext::new(
                     "provider-1".to_string(),
-                    Some("pay_as_you_go".to_string()),
                     Some("key-1".to_string()),
                     None,
                     None,
@@ -1059,7 +1047,6 @@ mod tests {
             name_context: Some(
                 StoredBillingModelContext::new(
                     "provider-1".to_string(),
-                    Some("pay_as_you_go".to_string()),
                     Some("key-1".to_string()),
                     None,
                     None,
@@ -1153,7 +1140,6 @@ mod tests {
             name_context: Some(
                 StoredBillingModelContext::new(
                     "provider-1".to_string(),
-                    Some("pay_as_you_go".to_string()),
                     Some("key-1".to_string()),
                     Some(json!({"openai:responses": 0.5})),
                     Some(60),
@@ -1264,7 +1250,6 @@ mod tests {
     async fn enriches_by_provider_model_id_before_name_fallback() {
         let blank_name_context = StoredBillingModelContext::new(
             "provider-1".to_string(),
-            Some("pay_as_you_go".to_string()),
             Some("key-1".to_string()),
             None,
             Some(60),
@@ -1282,7 +1267,6 @@ mod tests {
         .expect("blank billing context should build");
         let priced_model_context = StoredBillingModelContext::new(
             "provider-1".to_string(),
-            Some("pay_as_you_go".to_string()),
             Some("key-1".to_string()),
             None,
             Some(60),

@@ -55,11 +55,6 @@ pub(crate) async fn build_admin_endpoint_health_status_payload(
     let mut endpoint_to_format = BTreeMap::<String, String>::new();
     let mut provider_ids_by_format = BTreeMap::<String, BTreeSet<String>>::new();
     let mut active_provider_formats = BTreeSet::<(String, String)>::new();
-    let provider_type_by_id = providers
-        .iter()
-        .map(|provider| (provider.id.clone(), provider.provider_type.clone()))
-        .collect::<BTreeMap<_, _>>();
-    let mut active_endpoints_by_provider = BTreeMap::<String, Vec<_>>::new();
     for endpoint in active_endpoints {
         endpoint_to_format.insert(endpoint.id.clone(), endpoint.api_format.clone());
         endpoint_ids_by_format
@@ -71,10 +66,6 @@ pub(crate) async fn build_admin_endpoint_health_status_payload(
             .or_default()
             .insert(endpoint.provider_id.clone());
         active_provider_formats.insert((endpoint.provider_id.clone(), endpoint.api_format.clone()));
-        active_endpoints_by_provider
-            .entry(endpoint.provider_id.clone())
-            .or_default()
-            .push(endpoint);
     }
     let all_endpoint_ids = endpoint_to_format.keys().cloned().collect::<Vec<_>>();
 
@@ -88,15 +79,7 @@ pub(crate) async fn build_admin_endpoint_health_status_payload(
             .ok()
             .unwrap_or_default();
         for key in keys {
-            let provider_type = provider_type_by_id
-                .get(&key.provider_id)
-                .map(String::as_str)
-                .unwrap_or("");
-            let endpoints = active_endpoints_by_provider
-                .get(&key.provider_id)
-                .map(Vec::as_slice)
-                .unwrap_or(&[]);
-            for api_format in provider_key_effective_api_formats(&key, provider_type, endpoints) {
+            for api_format in provider_key_effective_api_formats(&key) {
                 if !active_provider_formats.contains(&(key.provider_id.clone(), api_format.clone()))
                 {
                     continue;

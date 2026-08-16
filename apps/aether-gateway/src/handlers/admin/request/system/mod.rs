@@ -5,7 +5,6 @@ mod adaptive;
 mod export;
 mod import;
 mod modules;
-mod proxy_nodes;
 mod templates;
 
 const ADMIN_SYSTEM_DATA_EXPORT_VERSION: &str = "1.0";
@@ -57,12 +56,6 @@ impl<'a> AdminAppState<'a> {
         self.app.delete_system_config_value(key).await
     }
 
-    pub(crate) async fn list_proxy_nodes(
-        &self,
-    ) -> Result<Vec<aether_data::repository::proxy_nodes::StoredProxyNode>, GatewayError> {
-        self.app.list_proxy_nodes().await
-    }
-
     pub(crate) async fn read_admin_system_stats(
         &self,
     ) -> Result<aether_data::repository::system::AdminSystemStats, GatewayError> {
@@ -106,21 +99,6 @@ impl<'a> AdminAppState<'a> {
         &self,
     ) -> Result<crate::maintenance::AdminStatsRebuildSummary, GatewayError> {
         self.app.rebuild_admin_stats_once().await
-    }
-
-    pub(crate) async fn find_proxy_node(
-        &self,
-        node_id: &str,
-    ) -> Result<Option<aether_data::repository::proxy_nodes::StoredProxyNode>, GatewayError> {
-        self.app.find_proxy_node(node_id).await
-    }
-
-    pub(crate) async fn list_proxy_node_events(
-        &self,
-        node_id: &str,
-        limit: usize,
-    ) -> Result<Vec<aether_data::repository::proxy_nodes::StoredProxyNodeEvent>, GatewayError> {
-        self.app.list_proxy_node_events(node_id, limit).await
     }
 
     pub(crate) async fn read_admin_email_template_payload(

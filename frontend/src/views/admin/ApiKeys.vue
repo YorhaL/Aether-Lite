@@ -793,8 +793,6 @@
       :owner-name="walletActionTarget?.apiKey.name || walletActionTarget?.apiKey.key_display || '未命名 Key'"
       :owner-subtitle="walletActionTarget?.apiKey.key_display || walletActionTarget?.apiKey.username || ''"
       context-label="独立密钥钱包"
-      accent="blue"
-      :show-refunds="false"
       @close="closeWalletActionDrawer"
       @changed="handleWalletDrawerChanged"
     />

@@ -16,9 +16,6 @@ vi.mock('lucide-vue-next', async () => {
 
   return {
     Copy: Icon,
-    Download: Icon,
-    RefreshCw: Icon,
-    ShieldX: Icon,
   }
 })
 
@@ -28,7 +25,7 @@ function createProviderKey(overrides: Partial<EndpointAPIKey> = {}): EndpointAPI
     provider_id: 'provider-1',
     api_formats: ['openai:chat'],
     api_key_masked: 'sk-***',
-    auth_type: 'oauth',
+    auth_type: 'api_key',
     name: 'Primary key',
     internal_priority: 10,
     cache_ttl_minutes: 0,
@@ -68,89 +65,43 @@ function mount(props: Record<string, unknown>) {
 }
 
 describe('ProviderKeyIdentityBlock', () => {
-  it('renders identity badges and emits copy/download/refresh actions', () => {
+  it('renders a custom key identity and emits copy actions', () => {
     const onCopyName = vi.fn()
-    const onDownloadCredential = vi.fn()
-    const onRefreshOAuth = vi.fn()
+    const onCopyFullKey = vi.fn()
 
     const { root, unmount } = mount({
-      apiKey: createProviderKey({
-        oauth_temporary: true,
-      }),
-      maskedSecretLabel: 'oauth:***',
-      oauthPlanLabel: 'Team',
-      oauthPlanClass: 'text-purple-600',
-      oauthOrgBadge: { label: 'org:demo', title: 'org_id: demo' },
-      kiroSubscriptionLabel: 'Pro',
-      kiroSubscriptionClass: 'text-blue-600',
-      canExportCredential: true,
-      showOAuthRefreshControl: true,
-      oauthStatus: { text: '12m', isExpired: false, isExpiringSoon: true, isInvalid: false },
-      oauthStatusTitle: 'OAuth expires soon',
-      oauthRefreshButtonTitle: 'Refresh OAuth',
-      canRefreshCredential: true,
+      apiKey: createProviderKey(),
+      maskedSecretLabel: 'sk-***',
       onCopyName,
-      onDownloadCredential,
-      onRefreshOAuth,
+      onCopyFullKey,
     })
 
     expect(root.querySelector('[data-testid="provider-key-name"]')?.textContent).toContain('Primary key')
-    expect(root.querySelector('[data-testid="provider-key-oauth-plan"]')?.textContent).toContain('Team')
-    expect(root.querySelector('[data-testid="provider-key-oauth-org"]')?.textContent).toContain('org:demo')
-    expect(root.querySelector('[data-testid="provider-key-kiro-plan"]')?.textContent).toContain('Pro')
-    expect(root.querySelector('[data-testid="provider-key-oauth-status"]')?.textContent).toContain('12m')
-    expect(root.querySelector('[data-testid="provider-key-temporary"]')).toBeTruthy()
+    expect(root.textContent).toContain('sk-***')
 
     ;(root.querySelector('[data-testid="provider-key-name"]') as HTMLElement).click()
-    ;(root.querySelector('button[title="下载 OAuth 授权文件"]') as HTMLButtonElement).click()
-    ;(root.querySelector('button[title="Refresh OAuth"]') as HTMLButtonElement).click()
+    ;(root.querySelector('button[title="复制密钥"]') as HTMLButtonElement).click()
 
     expect(onCopyName).toHaveBeenCalledWith('Primary key')
-    expect(onDownloadCredential).toHaveBeenCalledTimes(1)
-    expect(onRefreshOAuth).toHaveBeenCalledTimes(1)
+    expect(onCopyFullKey).toHaveBeenCalledTimes(1)
 
     unmount()
   })
 
-  it('renders account block and inactive account states', () => {
+  it('renders an unnamed key', () => {
     const onCopyFullKey = vi.fn()
-    const onClearOAuthInvalid = vi.fn()
 
     const { root, unmount } = mount({
       apiKey: createProviderKey({ name: '' }),
       maskedSecretLabel: 'sk-***',
-      canExportCredential: false,
-      showOAuthRefreshControl: true,
-      accountLevelBlock: true,
-      oauthStatusTitle: 'Account blocked',
-      antigravityInactive: true,
       onCopyFullKey,
-      onClearOAuthInvalid,
     })
 
     expect(root.querySelector('[data-testid="provider-key-name"]')?.textContent).toContain('未命名密钥')
-    expect(root.querySelector('[data-testid="provider-key-account-block"]')?.textContent).toContain('账号异常')
-    expect(root.querySelector('[data-testid="provider-key-antigravity-inactive"]')?.textContent).toContain('账号未激活')
 
     ;(root.querySelector('button[title="复制密钥"]') as HTMLButtonElement).click()
-    ;(root.querySelector('button[title="清除异常标记（确认账号已完成验证后使用）"]') as HTMLButtonElement).click()
 
     expect(onCopyFullKey).toHaveBeenCalledTimes(1)
-    expect(onClearOAuthInvalid).toHaveBeenCalledTimes(1)
-
-    unmount()
-  })
-
-  it('does not offer generic copy or export actions for Agent Identity', () => {
-    const { root, unmount } = mount({
-      apiKey: createProviderKey({ agent_identity: true }),
-      maskedSecretLabel: '[Agent Identity]',
-      canExportCredential: false,
-    })
-
-    expect(root.textContent).toContain('[Agent Identity]')
-    expect(root.querySelector('button[title="下载 OAuth 授权文件"]')).toBeNull()
-    expect(root.querySelector('button[title="复制密钥"]')).toBeNull()
 
     unmount()
   })

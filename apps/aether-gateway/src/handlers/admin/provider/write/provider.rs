@@ -1,6 +1,4 @@
 mod create;
-mod endpoint;
-mod template;
 mod update;
 
 fn normalize_provider_request_timeout(value: Option<f64>) -> Result<Option<f64>, String> {
@@ -28,12 +26,6 @@ fn normalize_provider_stream_first_byte_timeout(value: Option<f64>) -> Result<Op
 }
 
 pub(crate) use self::create::build_admin_create_provider_record;
-pub(crate) use self::endpoint::build_admin_fixed_provider_endpoint_record;
-pub(crate) use self::template::{
-    apply_admin_fixed_provider_endpoint_template_overrides,
-    reconcile_admin_fixed_provider_template_endpoints,
-    reconcile_admin_fixed_provider_template_endpoints_after_update,
-};
 pub(crate) use self::update::build_admin_update_provider_record;
 
 #[cfg(test)]

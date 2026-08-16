@@ -1,14 +1,13 @@
 use super::{
     ApiKeyLastUsedDelta, DataLayerError, GatewayDataState, GeminiFileMappingListQuery,
     GeminiFileMappingStats, ProviderCatalogKeyAdaptiveStateUpdate,
-    ProviderCatalogKeyAdminCasUpdate, ProviderCatalogKeyHealthStateUpdate,
-    ProviderCatalogKeyListQuery, ProviderCatalogKeyOAuthCredentialCasDelete,
-    ProviderCatalogKeyOAuthRuntimeStateCasUpdate, ProviderCatalogKeyRuntimeMetadataUpdate,
-    ProviderCatalogKeyStatusSnapshotUpdate, PublicHealthStatusCount, PublicHealthTimelineBucket,
-    StoredGeminiFileMapping, StoredGeminiFileMappingListPage, StoredProviderCatalogEndpoint,
-    StoredProviderCatalogKey, StoredProviderCatalogKeyMaintenanceSummary,
-    StoredProviderCatalogKeyPage, StoredProviderCatalogKeyStats, StoredProviderCatalogProvider,
-    StoredRequestCandidate, UpsertGeminiFileMappingRecord, UpsertRequestCandidateRecord,
+    ProviderCatalogKeyHealthStateUpdate, ProviderCatalogKeyListQuery,
+    ProviderCatalogKeyRuntimeMetadataUpdate, ProviderCatalogKeyStatusSnapshotUpdate,
+    PublicHealthStatusCount, PublicHealthTimelineBucket, StoredGeminiFileMapping,
+    StoredGeminiFileMappingListPage, StoredProviderCatalogEndpoint, StoredProviderCatalogKey,
+    StoredProviderCatalogKeyMaintenanceSummary, StoredProviderCatalogKeyPage,
+    StoredProviderCatalogKeyStats, StoredProviderCatalogProvider, StoredRequestCandidate,
+    UpsertGeminiFileMappingRecord, UpsertRequestCandidateRecord,
 };
 
 impl GatewayDataState {
@@ -347,78 +346,6 @@ impl GatewayDataState {
         }
     }
 
-    pub(crate) async fn update_provider_catalog_key_oauth_credentials(
-        &self,
-        key_id: &str,
-        encrypted_api_key: &str,
-        encrypted_auth_config: Option<&str>,
-        expires_at_unix_secs: Option<u64>,
-    ) -> Result<bool, DataLayerError> {
-        let updated = match &self.provider_catalog_writer {
-            Some(repository) => {
-                repository
-                    .update_key_oauth_credentials(
-                        key_id,
-                        encrypted_api_key,
-                        encrypted_auth_config,
-                        expires_at_unix_secs,
-                    )
-                    .await
-            }
-            None => Ok(false),
-        }?;
-        if updated {
-            self.clear_provider_catalog_cache();
-        }
-        Ok(updated)
-    }
-
-    pub(crate) async fn update_provider_catalog_key_oauth_runtime_state(
-        &self,
-        key_id: &str,
-        oauth_invalid_at_unix_secs: Option<u64>,
-        oauth_invalid_reason: Option<&str>,
-        encrypted_auth_config_update: Option<&str>,
-        updated_at_unix_secs: Option<u64>,
-    ) -> Result<bool, DataLayerError> {
-        let updated = match &self.provider_catalog_writer {
-            Some(repository) => {
-                repository
-                    .update_key_oauth_runtime_state(
-                        key_id,
-                        oauth_invalid_at_unix_secs,
-                        oauth_invalid_reason,
-                        encrypted_auth_config_update,
-                        updated_at_unix_secs,
-                    )
-                    .await
-            }
-            None => Ok(false),
-        }?;
-        if updated {
-            self.clear_provider_catalog_cache();
-        }
-        Ok(updated)
-    }
-
-    pub(crate) async fn compare_and_update_provider_catalog_key_oauth_runtime_state(
-        &self,
-        update: &ProviderCatalogKeyOAuthRuntimeStateCasUpdate,
-    ) -> Result<bool, DataLayerError> {
-        let updated = match &self.provider_catalog_writer {
-            Some(repository) => {
-                repository
-                    .compare_and_update_key_oauth_runtime_state(update)
-                    .await
-            }
-            None => Ok(false),
-        }?;
-        // A false result is a credential CAS conflict. Clear cached snapshots
-        // either way so the next read observes the authoritative row.
-        self.clear_provider_catalog_cache();
-        Ok(updated)
-    }
-
     pub(crate) async fn create_provider_catalog_key(
         &self,
         key: &StoredProviderCatalogKey,
@@ -561,20 +488,6 @@ impl GatewayDataState {
         Ok(updated)
     }
 
-    pub(crate) async fn compare_and_update_provider_catalog_key_admin_state(
-        &self,
-        update: &ProviderCatalogKeyAdminCasUpdate,
-    ) -> Result<bool, DataLayerError> {
-        let updated = match &self.provider_catalog_writer {
-            Some(repository) => repository.compare_and_update_key_admin_state(update).await,
-            None => Ok(false),
-        }?;
-        // Clear on both success and conflict so a retry cannot reuse the stale
-        // credential snapshot that lost the CAS.
-        self.clear_provider_catalog_cache();
-        Ok(updated)
-    }
-
     pub(crate) async fn update_provider_catalog_keys(
         &self,
         keys: &[StoredProviderCatalogKey],
@@ -703,36 +616,6 @@ impl GatewayDataState {
             self.clear_provider_catalog_cache();
         }
         Ok(deleted)
-    }
-
-    pub(crate) async fn compare_and_delete_provider_catalog_key_oauth_credential(
-        &self,
-        delete: &ProviderCatalogKeyOAuthCredentialCasDelete,
-    ) -> Result<bool, DataLayerError> {
-        let deleted = match &self.provider_catalog_writer {
-            Some(repository) => {
-                repository
-                    .compare_and_delete_key_oauth_credential(delete)
-                    .await
-            }
-            None => Ok(false),
-        }?;
-        self.clear_provider_catalog_cache();
-        Ok(deleted)
-    }
-
-    pub(crate) async fn clear_provider_catalog_key_oauth_invalid_marker(
-        &self,
-        key_id: &str,
-    ) -> Result<bool, DataLayerError> {
-        let updated = match &self.provider_catalog_writer {
-            Some(repository) => repository.clear_key_oauth_invalid_marker(key_id).await,
-            None => Ok(false),
-        }?;
-        if updated {
-            self.clear_provider_catalog_cache();
-        }
-        Ok(updated)
     }
 
     pub(crate) async fn update_provider_catalog_key_health_state(

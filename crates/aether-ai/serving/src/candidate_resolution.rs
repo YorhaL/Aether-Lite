@@ -1,17 +1,9 @@
 use async_trait::async_trait;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AiCandidateResolutionMode {
-    Standard,
-    WithoutTransportPairGate,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AiCandidateResolutionRequest<'a> {
     pub client_api_format: &'a str,
     pub requested_model: Option<&'a str>,
-    pub mode: AiCandidateResolutionMode,
-    pub expand_pool_groups: bool,
 }
 
 impl<'a> AiCandidateResolutionRequest<'a> {
@@ -19,26 +11,7 @@ impl<'a> AiCandidateResolutionRequest<'a> {
         Self {
             client_api_format,
             requested_model,
-            mode: AiCandidateResolutionMode::Standard,
-            expand_pool_groups: false,
         }
-    }
-
-    pub fn without_transport_pair_gate(
-        client_api_format: &'a str,
-        requested_model: Option<&'a str>,
-    ) -> Self {
-        Self {
-            client_api_format,
-            requested_model,
-            mode: AiCandidateResolutionMode::WithoutTransportPairGate,
-            expand_pool_groups: false,
-        }
-    }
-
-    pub fn logical_pool_groups(mut self) -> Self {
-        self.expand_pool_groups = false;
-        self
     }
 }
 
@@ -99,11 +72,6 @@ pub trait AiCandidateResolutionPort: Send + Sync {
         candidates: Vec<Self::Eligible>,
         normalized_client_api_format: &str,
     ) -> Result<Vec<Self::Eligible>, Self::Error>;
-
-    async fn apply_pool_scheduler(
-        &self,
-        candidates: Vec<Self::Eligible>,
-    ) -> Result<(Vec<Self::Eligible>, Vec<Self::Skipped>), Self::Error>;
 }
 
 pub async fn run_ai_candidate_resolution<Port>(
@@ -128,9 +96,8 @@ where
             continue;
         };
 
-        match candidate_skip_reason_for_mode(
+        match candidate_skip_reason(
             port,
-            request.mode,
             &candidate,
             &transport,
             normalized_client_api_format.as_str(),
@@ -148,23 +115,14 @@ where
     let ranked = port
         .rank_eligible_candidates(eligible, normalized_client_api_format.as_str())
         .await?;
-    let ranked = if request.expand_pool_groups {
-        let (ranked, pool_skipped) = port.apply_pool_scheduler(ranked).await?;
-        skipped.extend(pool_skipped);
-        ranked
-    } else {
-        ranked
-    };
-
     Ok(AiCandidateResolutionOutcome {
         eligible_candidates: ranked,
         skipped_candidates: skipped,
     })
 }
 
-fn candidate_skip_reason_for_mode<Port>(
+fn candidate_skip_reason<Port>(
     port: &Port,
-    mode: AiCandidateResolutionMode,
     candidate: &Port::Candidate,
     transport: &Port::Transport,
     normalized_client_api_format: &str,
@@ -174,284 +132,12 @@ where
     Port: AiCandidateResolutionPort,
 {
     port.candidate_common_skip_reason(candidate, transport, requested_model)
-        .or_else(|| match mode {
-            AiCandidateResolutionMode::Standard => port.candidate_transport_pair_skip_reason(
+        .or_else(|| {
+            port.candidate_transport_pair_skip_reason(
                 candidate,
                 transport,
                 normalized_client_api_format,
                 requested_model.unwrap_or_default(),
-            ),
-            AiCandidateResolutionMode::WithoutTransportPairGate => None,
+            )
         })
-}
-
-pub fn extract_ai_pool_sticky_session_token(body_json: &serde_json::Value) -> Option<String> {
-    fn non_empty_str(value: Option<&serde_json::Value>) -> Option<&str> {
-        value
-            .and_then(serde_json::Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-    }
-
-    let object = body_json.as_object()?;
-
-    non_empty_str(object.get("prompt_cache_key"))
-        .or_else(|| non_empty_str(object.get("conversation_id")))
-        .or_else(|| non_empty_str(object.get("conversationId")))
-        .or_else(|| non_empty_str(object.get("session_id")))
-        .or_else(|| non_empty_str(object.get("sessionId")))
-        .or_else(|| {
-            object
-                .get("metadata")
-                .and_then(serde_json::Value::as_object)
-                .and_then(|metadata| {
-                    non_empty_str(metadata.get("session_id"))
-                        .or_else(|| non_empty_str(metadata.get("conversation_id")))
-                })
-        })
-        .or_else(|| {
-            object
-                .get("conversationState")
-                .and_then(serde_json::Value::as_object)
-                .and_then(|state| {
-                    non_empty_str(state.get("conversationId"))
-                        .or_else(|| non_empty_str(state.get("sessionId")))
-                })
-        })
-        .map(ToOwned::to_owned)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-    use std::sync::Mutex;
-
-    #[derive(Default)]
-    struct TestPort {
-        calls: Mutex<Vec<String>>,
-    }
-
-    #[async_trait]
-    impl AiCandidateResolutionPort for TestPort {
-        type Candidate = &'static str;
-        type Transport = &'static str;
-        type Eligible = String;
-        type Skipped = String;
-        type Error = std::convert::Infallible;
-
-        async fn read_candidate_transport(
-            &self,
-            candidate: &Self::Candidate,
-        ) -> Result<Option<Self::Transport>, Self::Error> {
-            self.calls
-                .lock()
-                .unwrap()
-                .push(format!("transport:{candidate}"));
-            Ok(match *candidate {
-                "missing" => None,
-                "inactive" => Some("inactive-transport"),
-                _ => Some("active-transport"),
-            })
-        }
-
-        fn build_missing_transport_skipped_candidate(
-            &self,
-            candidate: Self::Candidate,
-        ) -> Self::Skipped {
-            format!("{candidate}:transport_snapshot_missing")
-        }
-
-        fn candidate_common_skip_reason(
-            &self,
-            candidate: &Self::Candidate,
-            _transport: &Self::Transport,
-            requested_model: Option<&str>,
-        ) -> Option<&'static str> {
-            self.calls.lock().unwrap().push(format!(
-                "common:{candidate}:{}",
-                requested_model.unwrap_or_default()
-            ));
-            (*candidate == "inactive").then_some("provider_inactive")
-        }
-
-        fn candidate_transport_pair_skip_reason(
-            &self,
-            candidate: &Self::Candidate,
-            _transport: &Self::Transport,
-            normalized_client_api_format: &str,
-            requested_model: &str,
-        ) -> Option<&'static str> {
-            self.calls.lock().unwrap().push(format!(
-                "pair:{candidate}:{normalized_client_api_format}:{requested_model}"
-            ));
-            (*candidate == "unsupported").then_some("transport_unsupported")
-        }
-
-        fn build_skipped_candidate(
-            &self,
-            candidate: Self::Candidate,
-            _transport: Self::Transport,
-            skip_reason: &'static str,
-        ) -> Self::Skipped {
-            format!("{candidate}:{skip_reason}")
-        }
-
-        fn build_eligible_candidate(
-            &self,
-            candidate: Self::Candidate,
-            _transport: Self::Transport,
-        ) -> Self::Eligible {
-            format!("eligible:{candidate}")
-        }
-
-        async fn rank_eligible_candidates(
-            &self,
-            mut candidates: Vec<Self::Eligible>,
-            normalized_client_api_format: &str,
-        ) -> Result<Vec<Self::Eligible>, Self::Error> {
-            self.calls
-                .lock()
-                .unwrap()
-                .push(format!("rank:{normalized_client_api_format}"));
-            candidates.reverse();
-            Ok(candidates)
-        }
-
-        async fn apply_pool_scheduler(
-            &self,
-            candidates: Vec<Self::Eligible>,
-        ) -> Result<(Vec<Self::Eligible>, Vec<Self::Skipped>), Self::Error> {
-            self.calls.lock().unwrap().push("pool".to_string());
-            Ok((candidates, vec!["pool:cooldown".to_string()]))
-        }
-    }
-
-    #[tokio::test]
-    async fn resolution_reads_transport_gates_candidates_then_ranks_without_expanding_pools() {
-        let port = TestPort::default();
-
-        let outcome = run_ai_candidate_resolution(
-            &port,
-            vec!["first", "missing", "inactive", "unsupported", "second"],
-            AiCandidateResolutionRequest::standard(" OpenAI:Chat ", Some(" gpt-4.1 ")),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(
-            outcome.eligible_candidates,
-            ["eligible:second", "eligible:first"]
-        );
-        assert_eq!(
-            outcome.skipped_candidates,
-            [
-                "missing:transport_snapshot_missing",
-                "inactive:provider_inactive",
-                "unsupported:transport_unsupported",
-            ]
-        );
-        assert_eq!(
-            port.calls.lock().unwrap().as_slice(),
-            [
-                "transport:first",
-                "common:first:gpt-4.1",
-                "pair:first:openai:chat:gpt-4.1",
-                "transport:missing",
-                "transport:inactive",
-                "common:inactive:gpt-4.1",
-                "transport:unsupported",
-                "common:unsupported:gpt-4.1",
-                "pair:unsupported:openai:chat:gpt-4.1",
-                "transport:second",
-                "common:second:gpt-4.1",
-                "pair:second:openai:chat:gpt-4.1",
-                "rank:openai:chat",
-            ]
-        );
-    }
-
-    #[tokio::test]
-    async fn resolution_mode_can_skip_transport_pair_gate() {
-        let port = TestPort::default();
-
-        let outcome = run_ai_candidate_resolution(
-            &port,
-            vec!["unsupported"],
-            AiCandidateResolutionRequest::without_transport_pair_gate("openai:chat", None),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(outcome.eligible_candidates, ["eligible:unsupported"]);
-        assert!(outcome.skipped_candidates.is_empty());
-        assert_eq!(
-            port.calls.lock().unwrap().as_slice(),
-            [
-                "transport:unsupported",
-                "common:unsupported:",
-                "rank:openai:chat",
-            ]
-        );
-    }
-
-    #[tokio::test]
-    async fn resolution_can_keep_pool_groups_logical() {
-        let port = TestPort::default();
-
-        let outcome = run_ai_candidate_resolution(
-            &port,
-            vec!["first", "second"],
-            AiCandidateResolutionRequest::standard("openai:chat", Some("gpt-4.1"))
-                .logical_pool_groups(),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(
-            outcome.eligible_candidates,
-            ["eligible:second", "eligible:first"]
-        );
-        assert!(outcome.skipped_candidates.is_empty());
-        assert_eq!(
-            port.calls.lock().unwrap().as_slice(),
-            [
-                "transport:first",
-                "common:first:gpt-4.1",
-                "pair:first:openai:chat:gpt-4.1",
-                "transport:second",
-                "common:second:gpt-4.1",
-                "pair:second:openai:chat:gpt-4.1",
-                "rank:openai:chat",
-            ]
-        );
-    }
-
-    #[test]
-    fn sticky_session_token_is_extracted_from_known_request_fields() {
-        assert_eq!(
-            extract_ai_pool_sticky_session_token(&json!({
-                "prompt_cache_key": " cache-a ",
-                "conversation_id": "conversation-b"
-            }))
-            .as_deref(),
-            Some("cache-a")
-        );
-
-        assert_eq!(
-            extract_ai_pool_sticky_session_token(&json!({
-                "metadata": {"conversation_id": " conversation-c "}
-            }))
-            .as_deref(),
-            Some("conversation-c")
-        );
-
-        assert_eq!(
-            extract_ai_pool_sticky_session_token(&json!({
-                "conversationState": {"sessionId": " session-d "}
-            }))
-            .as_deref(),
-            Some("session-d")
-        );
-    }
 }

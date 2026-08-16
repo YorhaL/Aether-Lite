@@ -1,4 +1,4 @@
-use aether_crypto::{encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
+use aether_crypto::{encrypt_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
 use aether_data::repository::provider_catalog::InMemoryProviderCatalogReadRepository;
 use aether_data::repository::video_tasks::InMemoryVideoTaskRepository;
 use aether_data_contracts::repository::provider_catalog::{
@@ -36,7 +36,6 @@ fn sample_video_task(
         key_id: Some("provider-key-1".to_string()),
         client_api_format: Some(client_api_format.to_string()),
         provider_api_format: Some(client_api_format.to_string()),
-        format_converted: false,
         model: Some(model.to_string()),
         prompt: Some(format!("prompt-{id}")),
         original_request_body: Some(json!({"prompt": format!("prompt-{id}")})),
@@ -384,7 +383,7 @@ async fn gateway_proxies_gemini_video_task_video_from_internal_async_task_endpoi
         .expect("key should build")
         .with_transport_fields(
             Some(json!(["gemini:video"])),
-            encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "gemini-upstream-secret")
+            encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "gemini-upstream-secret")
                 .expect("api key should encrypt"),
             None,
             None,
@@ -537,7 +536,6 @@ async fn gateway_cancels_openai_video_task_via_internal_async_task_endpoint() {
                     "original_request_body": {
                         "prompt": "prompt-task-openai-cancel"
                     },
-                    "format_converted": false
                 },
                 "transport": {
                     "upstream_base_url": "https://api.openai.example/v1",
@@ -700,7 +698,6 @@ async fn gateway_cancels_openai_video_task_via_internal_async_task_endpoint_with
                     "original_request_body": {
                         "prompt": "prompt-task-openai-cancel"
                     },
-                    "format_converted": false
                 },
                 "transport": {
                     "upstream_base_url": upstream_api_root,

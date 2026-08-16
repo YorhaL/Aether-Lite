@@ -1,14 +1,14 @@
 use super::*;
 
 pub async fn export_postgres_core_jsonl(
-    pool: &crate::driver::postgres::PostgresPool,
+    pool: &aether_data_postgres::PostgresPool,
     created_at_unix_secs: u64,
 ) -> Result<String, DataLayerError> {
     export_postgres_jsonl(pool, postgres_core_export_domains(), created_at_unix_secs).await
 }
 
 pub async fn export_postgres_jsonl(
-    pool: &crate::driver::postgres::PostgresPool,
+    pool: &aether_data_postgres::PostgresPool,
     domains: Vec<ExportDomain>,
     created_at_unix_secs: u64,
 ) -> Result<String, DataLayerError> {
@@ -56,7 +56,7 @@ pub async fn export_postgres_jsonl(
 }
 
 pub async fn import_postgres_jsonl(
-    pool: &crate::driver::postgres::PostgresPool,
+    pool: &aether_data_postgres::PostgresPool,
     input: &str,
 ) -> Result<usize, DataLayerError> {
     let plan = build_import_plan(input)?;
@@ -64,7 +64,7 @@ pub async fn import_postgres_jsonl(
 }
 
 pub async fn import_postgres_plan(
-    pool: &crate::driver::postgres::PostgresPool,
+    pool: &aether_data_postgres::PostgresPool,
     plan: &DataImportPlan,
 ) -> Result<usize, DataLayerError> {
     let mut tx = pool.begin().await.map_sql_err()?;
@@ -175,7 +175,6 @@ fn postgres_domain_table(
         ExportDomain::UserOAuthLinks => Ok(("public.user_oauth_links", "id")),
         ExportDomain::UserGroups => Ok(("public.user_groups", "id")),
         ExportDomain::UserGroupMembers => Ok(("public.user_group_members", "group_id")),
-        ExportDomain::ProxyNodes => Ok(("public.proxy_nodes", "id")),
         ExportDomain::SystemConfigs => Ok(("public.system_configs", "id")),
         ExportDomain::Wallets => Err(DataLayerError::InvalidInput(
             "postgres wallet export uses multiple tables and must be handled as a domain"
@@ -689,20 +688,7 @@ async fn import_postgres_wallet_row(
 }
 
 fn postgres_wallet_tables() -> &'static [(&'static str, &'static str, &'static str)] {
-    &[
-        ("public.wallets", "wallets", "id"),
-        ("public.wallet_transactions", "wallet_transactions", "id"),
-        (
-            "public.wallet_daily_usage_ledgers",
-            "wallet_daily_usage_ledgers",
-            "id",
-        ),
-        ("public.payment_orders", "payment_orders", "id"),
-        ("public.payment_callbacks", "payment_callbacks", "id"),
-        ("public.refund_requests", "refund_requests", "id"),
-        ("public.redeem_code_batches", "redeem_code_batches", "id"),
-        ("public.redeem_codes", "redeem_codes", "id"),
-    ]
+    &[("public.wallets", "wallets", "id")]
 }
 
 fn postgres_wallet_table_name(

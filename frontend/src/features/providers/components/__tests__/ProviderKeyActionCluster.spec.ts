@@ -22,24 +22,6 @@ vi.mock('@/components/ui', async () => {
   }
 })
 
-vi.mock('@/features/providers/components/ProxyNodeSelect.vue', async () => {
-  const { defineComponent, h } = await import('vue')
-
-  return {
-    default: defineComponent({
-      name: 'ProxyNodeSelectStub',
-      emits: ['update:modelValue'],
-      setup(_, { emit }) {
-        return () => h('button', {
-          type: 'button',
-          'data-testid': 'proxy-node-select',
-          onClick: () => emit('update:modelValue', 'proxy-node-2'),
-        }, 'select proxy')
-      },
-    }),
-  }
-})
-
 vi.mock('lucide-vue-next', async () => {
   const { defineComponent, h } = await import('vue')
   const Icon = defineComponent({
@@ -50,9 +32,7 @@ vi.mock('lucide-vue-next', async () => {
   })
 
   return {
-    BarChart3: Icon,
     Edit: Icon,
-    Globe: Icon,
     Power: Icon,
     RefreshCw: Icon,
     Shield: Icon,
@@ -106,77 +86,56 @@ function mount(props: Record<string, unknown>) {
 }
 
 describe('ProviderKeyActionCluster', () => {
-  it('renders circuit, health, proxy and antigravity actions', () => {
+  it('renders circuit, health and key actions', () => {
     const { root, unmount } = mount({
       apiKey: createProviderKey({
         circuit_breaker_open: true,
-        proxy: { node_id: 'proxy-node-1' },
       }),
-      providerType: 'antigravity',
       recoverable: true,
       recoverTitle: 'Recover key',
       circuitBreakerTitle: 'Circuit is open',
       circuitProbeCountdown: ' 2m',
       healthScoreBarClass: 'bg-red-500',
       healthScoreTextClass: 'text-red-600',
-      proxyPopoverOpen: true,
-      proxyNodeName: 'Tokyo',
     })
 
     expect(root.querySelector('[data-testid="provider-key-circuit-badge"]')?.textContent).toContain('熔断 2m')
     expect(root.querySelector('[data-testid="provider-key-health"]')?.textContent).toContain('42%')
     expect(root.querySelector('button[title="Recover key"]')).toBeTruthy()
-    expect(root.querySelector('button[title="代理: Tokyo"]')).toBeTruthy()
-    expect(root.querySelector('button[title="配额详情"]')).toBeTruthy()
     expect(root.querySelector('[data-testid="provider-key-toggle-active"]')?.getAttribute('aria-label')).toBe('点击停用')
 
     unmount()
   })
 
-  it('emits operation and proxy events without owning business logic', () => {
+  it('emits key operation events without owning business logic', () => {
     const onRecover = vi.fn()
     const onPermissions = vi.fn()
     const onEdit = vi.fn()
-    const onOpenAntigravityQuota = vi.fn()
     const onToggleActive = vi.fn()
     const onDelete = vi.fn()
-    const onClearProxy = vi.fn()
-    const onSetProxy = vi.fn()
 
     const { root, unmount } = mount({
-      apiKey: createProviderKey({ proxy: { node_id: 'proxy-node-1' } }),
-      providerType: 'antigravity',
+      apiKey: createProviderKey(),
       recoverable: true,
       recoverTitle: 'Recover key',
-      proxyPopoverOpen: true,
-      proxyNodeName: 'Tokyo',
       onRecover,
       onPermissions,
       onEdit,
-      onOpenAntigravityQuota,
       onToggleActive,
       onDelete,
-      onClearProxy,
-      onSetProxy,
     })
 
     ;(root.querySelector('button[title="Recover key"]') as HTMLButtonElement).click()
     ;(root.querySelector('button[title="模型权限"]') as HTMLButtonElement).click()
     ;(root.querySelector('button[title="编辑密钥"]') as HTMLButtonElement).click()
-    ;(root.querySelector('button[title="配额详情"]') as HTMLButtonElement).click()
     ;(root.querySelector('button[title="点击停用"]') as HTMLButtonElement).click()
     ;(root.querySelector('button[title="删除密钥"]') as HTMLButtonElement).click()
-    ;(Array.from(root.querySelectorAll('button')).find(button => button.textContent?.includes('清除')) as HTMLButtonElement).click()
-    ;(root.querySelector('[data-testid="proxy-node-select"]') as HTMLButtonElement).click()
 
     expect(onRecover).toHaveBeenCalledTimes(1)
     expect(onPermissions).toHaveBeenCalledTimes(1)
     expect(onEdit).toHaveBeenCalledTimes(1)
-    expect(onOpenAntigravityQuota).toHaveBeenCalledTimes(1)
     expect(onToggleActive).toHaveBeenCalledTimes(1)
     expect(onDelete).toHaveBeenCalledTimes(1)
-    expect(onClearProxy).toHaveBeenCalledTimes(1)
-    expect(onSetProxy).toHaveBeenCalledWith('proxy-node-2')
 
     unmount()
   })

@@ -1,12 +1,10 @@
 use crate::backup::config::S3BackupConfig;
-use crate::bark_push::bark_push_configured;
 use crate::handlers::admin::request::AdminAppState;
 use crate::handlers::shared::{module_available_from_env, system_config_bool};
 use crate::important_notification::{
     important_notification_configured, IMPORTANT_NOTIFICATION_ENABLED_KEY,
     LEGACY_NOTIFICATION_EMAIL_ENABLED_KEY,
 };
-use crate::server_chan_push::server_chan_push_configured;
 use crate::system_features::ENABLE_MODEL_DIRECTIVES_CONFIG_KEY;
 use crate::GatewayError;
 use aether_admin::system as admin_system_kernel;
@@ -87,30 +85,6 @@ pub(crate) const ADMIN_MODULE_DEFINITIONS: &[AdminModuleDefinition] = &[
         admin_menu_order: 58,
     },
     AdminModuleDefinition {
-        name: "server_chan_push",
-        display_name: "Server 酱推送",
-        description: "第三方推送服务，配置 Server 酱 Turbo SendKey 并测试微信推送",
-        category: "integration",
-        env_key: "SERVER_CHAN_PUSH_AVAILABLE",
-        default_available: true,
-        admin_route: Some("/admin/modules/server-chan"),
-        admin_menu_icon: Some("Send"),
-        admin_menu_group: Some("system"),
-        admin_menu_order: 59,
-    },
-    AdminModuleDefinition {
-        name: "bark_push",
-        display_name: "Bark 推送",
-        description: "第三方推送服务，配置 Bark Device Key 并测试 iOS 推送",
-        category: "integration",
-        env_key: "BARK_PUSH_AVAILABLE",
-        default_available: true,
-        admin_route: Some("/admin/modules/bark"),
-        admin_menu_icon: Some("Send"),
-        admin_menu_group: Some("system"),
-        admin_menu_order: 59,
-    },
-    AdminModuleDefinition {
         name: "model_directives",
         display_name: "模型后缀参数",
         description: "允许通过模型名后缀覆盖推理参数或服务层级",
@@ -146,42 +120,6 @@ pub(crate) const ADMIN_MODULE_DEFINITIONS: &[AdminModuleDefinition] = &[
         admin_menu_group: Some("system"),
         admin_menu_order: 60,
     },
-    AdminModuleDefinition {
-        name: "proxy_nodes",
-        display_name: "代理节点",
-        description: "添加Http/Socket代理节点, 或使用Aether-Proxy自动连接代理节点.",
-        category: "integration",
-        env_key: "PROXY_NODES_AVAILABLE",
-        default_available: true,
-        admin_route: Some("/admin/proxy-nodes"),
-        admin_menu_icon: Some("Server"),
-        admin_menu_group: Some("system"),
-        admin_menu_order: 60,
-    },
-    AdminModuleDefinition {
-        name: "payment_gateways",
-        display_name: "支付配置",
-        description: "配置易支付、支付宝官方、微信支付官方和 Stripe 等支付网关",
-        category: "integration",
-        env_key: "PAYMENT_GATEWAYS_AVAILABLE",
-        default_available: true,
-        admin_route: Some("/admin/payment-gateways"),
-        admin_menu_icon: Some("CreditCard"),
-        admin_menu_group: None,
-        admin_menu_order: 70,
-    },
-    AdminModuleDefinition {
-        name: "referral",
-        display_name: "邀请返利",
-        description: "管理用户邀请关系与返利记录，支持比例返利和人头返利",
-        category: "integration",
-        env_key: "REFERRAL_AVAILABLE",
-        default_available: true,
-        admin_route: Some("/admin/referrals"),
-        admin_menu_icon: Some("Gift"),
-        admin_menu_group: Some("management"),
-        admin_menu_order: 75,
-    },
 ];
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -194,8 +132,6 @@ pub(crate) struct AdminModuleRuntimeState {
     ldap_config: Option<aether_data::repository::auth_modules::StoredLdapModuleConfig>,
     gemini_files_has_capable_key: bool,
     important_notification_configured: bool,
-    server_chan_push_configured: bool,
-    bark_push_configured: bool,
     s3_backup_configured: bool,
 }
 
@@ -286,8 +222,6 @@ pub(crate) async fn build_admin_module_runtime_state(
     };
 
     let notification_configured = important_notification_configured(state.app()).await?;
-    let server_chan_configured = server_chan_push_configured(state.app()).await?;
-    let bark_configured = bark_push_configured(state.app()).await?;
     let backup_configured = s3_backup_configured(state.app()).await;
 
     Ok(AdminModuleRuntimeState {
@@ -295,8 +229,6 @@ pub(crate) async fn build_admin_module_runtime_state(
         ldap_config,
         gemini_files_has_capable_key,
         important_notification_configured: notification_configured,
-        server_chan_push_configured: server_chan_configured,
-        bark_push_configured: bark_configured,
         s3_backup_configured: backup_configured,
     })
 }
@@ -323,8 +255,6 @@ pub(crate) fn build_admin_module_validation_result(
             ldap_config: runtime.ldap_config.as_ref(),
             gemini_files_has_capable_key: runtime.gemini_files_has_capable_key,
             important_notification_configured: runtime.important_notification_configured,
-            server_chan_push_configured: runtime.server_chan_push_configured,
-            bark_push_configured: runtime.bark_push_configured,
             s3_backup_configured: runtime.s3_backup_configured,
         },
     )

@@ -153,7 +153,6 @@ impl<'a> AdminAppState<'a> {
                 .compare_and_update_provider_catalog_key_adaptive_state(
                     &ProviderCatalogKeyAdaptiveStateUpdate {
                         key_id: key.id.clone(),
-                        expected_encrypted_auth_config: None,
                         expected,
                         next,
                         status_snapshot_patch: json!({

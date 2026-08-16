@@ -113,16 +113,6 @@ impl<'a> AdminAppState<'a> {
             .await
     }
 
-    pub(crate) async fn read_provider_quota_snapshots(
-        &self,
-        provider_ids: &[String],
-    ) -> Result<
-        Vec<aether_data_contracts::repository::quota::StoredProviderQuotaSnapshot>,
-        GatewayError,
-    > {
-        self.app.read_provider_quota_snapshots(provider_ids).await
-    }
-
     pub(crate) async fn update_provider_catalog_key_health_state(
         &self,
         key_id: &str,
@@ -186,15 +176,6 @@ impl<'a> AdminAppState<'a> {
         self.app.update_provider_catalog_key(key).await
     }
 
-    pub(crate) async fn compare_and_update_provider_catalog_key_admin_state(
-        &self,
-        update: &aether_data_contracts::repository::provider_catalog::ProviderCatalogKeyAdminCasUpdate,
-    ) -> Result<bool, GatewayError> {
-        self.app
-            .compare_and_update_provider_catalog_key_admin_state(update)
-            .await
-    }
-
     pub(crate) async fn compare_and_update_provider_catalog_key_adaptive_state(
         &self,
         update: &aether_data_contracts::repository::provider_catalog::ProviderCatalogKeyAdaptiveStateUpdate,
@@ -236,7 +217,6 @@ impl<'a> AdminAppState<'a> {
                 .compare_and_update_provider_catalog_key_adaptive_state(
                     &ProviderCatalogKeyAdaptiveStateUpdate {
                         key_id: key_id.to_string(),
-                        expected_encrypted_auth_config: None,
                         expected,
                         next,
                         status_snapshot_patch: serde_json::json!({
@@ -268,33 +248,6 @@ impl<'a> AdminAppState<'a> {
         Option<aether_data_contracts::repository::provider_catalog::StoredProviderCatalogKey>,
         GatewayError,
     > {
-        self.reset_provider_catalog_key_recovery_state_inner(key_id, None)
-            .await
-    }
-
-    pub(crate) async fn reset_provider_catalog_key_recovery_state_fenced(
-        &self,
-        key_id: &str,
-        expected_encrypted_auth_config: &str,
-    ) -> Result<
-        Option<aether_data_contracts::repository::provider_catalog::StoredProviderCatalogKey>,
-        GatewayError,
-    > {
-        self.reset_provider_catalog_key_recovery_state_inner(
-            key_id,
-            Some(expected_encrypted_auth_config),
-        )
-        .await
-    }
-
-    async fn reset_provider_catalog_key_recovery_state_inner(
-        &self,
-        key_id: &str,
-        expected_auth_config: Option<&str>,
-    ) -> Result<
-        Option<aether_data_contracts::repository::provider_catalog::StoredProviderCatalogKey>,
-        GatewayError,
-    > {
         use aether_data_contracts::repository::provider_catalog::ProviderCatalogKeyHealthStateUpdate;
 
         let empty = serde_json::json!({});
@@ -308,11 +261,6 @@ impl<'a> AdminAppState<'a> {
             else {
                 return Ok(None);
             };
-            if expected_auth_config
-                .is_some_and(|expected| current.encrypted_auth_config.as_deref() != Some(expected))
-            {
-                return Ok(None);
-            }
             if current.health_by_format.as_ref() == Some(&empty)
                 && current.circuit_breaker_by_format.as_ref() == Some(&empty)
             {
@@ -324,7 +272,6 @@ impl<'a> AdminAppState<'a> {
                 .compare_and_update_provider_catalog_key_health_state(
                     &ProviderCatalogKeyHealthStateUpdate {
                         key_id: key_id.to_string(),
-                        expected_encrypted_auth_config: expected_auth_config.map(ToOwned::to_owned),
                         expected_health_by_format: current.health_by_format,
                         expected_circuit_breaker_by_format: current.circuit_breaker_by_format,
                         health_by_format: Some(empty.clone()),
@@ -339,27 +286,18 @@ impl<'a> AdminAppState<'a> {
         }
         if !health_reset {
             return Err(GatewayError::Internal(format!(
-                "provider key {key_id} health state changed repeatedly while resetting OAuth recovery state"
+                "provider key {key_id} health state changed repeatedly while resetting recovery state"
             )));
         }
-        if expected_auth_config.is_none()
-            && !self.reset_provider_catalog_key_error_count(key_id).await?
-        {
+        if !self.reset_provider_catalog_key_error_count(key_id).await? {
             return Ok(None);
         }
 
-        let current = self
+        Ok(self
             .read_provider_catalog_keys_by_ids(&[key_id.to_string()])
             .await?
             .into_iter()
-            .next();
-        if current.as_ref().is_some_and(|key| {
-            expected_auth_config
-                .is_some_and(|expected| key.encrypted_auth_config.as_deref() != Some(expected))
-        }) {
-            return Ok(None);
-        }
-        Ok(current)
+            .next())
     }
 
     pub(crate) async fn update_provider_catalog_key_status_snapshot(
@@ -396,15 +334,6 @@ impl<'a> AdminAppState<'a> {
         key_id: &str,
     ) -> Result<bool, GatewayError> {
         self.app.delete_provider_catalog_key(key_id).await
-    }
-
-    pub(crate) async fn compare_and_delete_provider_catalog_key_oauth_credential(
-        &self,
-        delete: &aether_data_contracts::repository::provider_catalog::ProviderCatalogKeyOAuthCredentialCasDelete,
-    ) -> Result<bool, GatewayError> {
-        self.app
-            .compare_and_delete_provider_catalog_key_oauth_credential(delete)
-            .await
     }
 
     pub(crate) async fn create_provider_catalog_provider(

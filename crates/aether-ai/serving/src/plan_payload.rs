@@ -100,7 +100,6 @@ mod tests {
             client_api_format: "openai:chat".to_string(),
             provider_api_format: "openai:chat".to_string(),
             model_name: Some("model".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         }

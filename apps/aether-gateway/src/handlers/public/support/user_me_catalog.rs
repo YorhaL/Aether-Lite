@@ -107,7 +107,6 @@ async fn resolve_users_me_allowed_global_model_ids(
         .filter(|provider| {
             allowed_provider_names.contains(&provider.id.to_ascii_lowercase())
                 || allowed_provider_names.contains(&provider.name.to_ascii_lowercase())
-                || allowed_provider_names.contains(&provider.provider_type.to_ascii_lowercase())
         })
         .map(|provider| provider.id)
         .collect::<Vec<_>>();
@@ -340,7 +339,6 @@ pub(super) async fn handle_users_me_providers_get(
         providers.retain(|provider| {
             allowed_provider_names.contains(&provider.id.to_ascii_lowercase())
                 || allowed_provider_names.contains(&provider.name.to_ascii_lowercase())
-                || allowed_provider_names.contains(&provider.provider_type.to_ascii_lowercase())
         });
     }
     providers.sort_by(|left, right| {

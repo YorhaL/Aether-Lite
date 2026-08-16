@@ -1,4 +1,4 @@
-use aether_crypto::{encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
+use aether_crypto::{encrypt_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
 use aether_data::repository::auth::{
     InMemoryAuthApiKeySnapshotRepository, StoredAuthApiKeySnapshot,
 };
@@ -46,7 +46,6 @@ async fn gateway_executes_openai_video_create_via_local_decision_gate_with_local
         metadata_mode: String,
         metadata_source: String,
         store_present: bool,
-        proxy_node_id: String,
         transport_profile_id: String,
     }
 
@@ -137,7 +136,7 @@ async fn gateway_executes_openai_video_create_via_local_decision_gate_with_local
             false,
             None,
             Some(2),
-            Some(serde_json::json!({"enabled": true, "node_id":"proxy-node-openai-video-local"})),
+            None,
             Some(20.0),
             None,
             None,
@@ -188,7 +187,7 @@ async fn gateway_executes_openai_video_create_via_local_decision_gate_with_local
         .expect("key should build")
         .with_transport_fields(
             Some(json!(["openai:video"])),
-            encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-upstream-openai-video")
+            encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-upstream-openai-video")
                 .expect("api key should encrypt"),
             None,
             None,
@@ -358,12 +357,6 @@ async fn gateway_executes_openai_video_create_via_local_decision_gate_with_local
                         .and_then(|value| value.get("json_body"))
                         .and_then(|value| value.get("store"))
                         .is_some(),
-                    proxy_node_id: payload
-                        .get("proxy")
-                        .and_then(|value| value.get("node_id"))
-                        .and_then(|value| value.as_str())
-                        .unwrap_or_default()
-                        .to_string(),
                     transport_profile_id: payload
                         .get("transport_profile")
                         .and_then(|value| value.get("profile_id"))
@@ -478,10 +471,6 @@ async fn gateway_executes_openai_video_create_via_local_decision_gate_with_local
         "desktop-openai-video"
     );
     assert!(!seen_execution_runtime_request.store_present);
-    assert_eq!(
-        seen_execution_runtime_request.proxy_node_id,
-        "proxy-node-openai-video-local"
-    );
     assert_eq!(
         seen_execution_runtime_request.transport_profile_id,
         "chrome_136"
@@ -661,7 +650,6 @@ async fn gateway_executes_openai_video_remix_via_data_backed_local_follow_up_wit
             key_id: Some("key-openai-video-local-1".to_string()),
             client_api_format: Some("openai:video".to_string()),
             provider_api_format: Some("openai:video".to_string()),
-            format_converted: false,
             model: Some("sora-2".to_string()),
             prompt: Some("original prompt".to_string()),
             original_request_body: Some(json!({"prompt": "original prompt"})),
@@ -713,7 +701,6 @@ async fn gateway_executes_openai_video_remix_via_data_backed_local_follow_up_wit
                             "original_request_body": {
                                 "prompt": "original prompt"
                             },
-                            "format_converted": false
                         },
                         "transport": {
                             "upstream_base_url": "https://api.openai.example/v1",

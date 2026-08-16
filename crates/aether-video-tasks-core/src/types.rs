@@ -1,29 +1,15 @@
 use std::collections::BTreeMap;
 
-use aether_contracts::{ExecutionPlan, ExecutionTimeouts, ProxySnapshot, ResolvedTransportProfile};
+use aether_contracts::{ExecutionPlan, ExecutionTimeouts, ResolvedTransportProfile};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub const DEFAULT_VIDEO_TASK_POLL_INTERVAL_SECONDS: u32 = 10;
 pub const DEFAULT_VIDEO_TASK_MAX_POLL_COUNT: u32 = 360;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VideoTaskSyncReportMode {
-    InlineSync,
-    Background,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum VideoTaskTruthSourceMode {
-    #[default]
-    PythonSyncReport,
-    RustAuthoritative,
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct LocalVideoTaskSuccessPlan {
     pub seed: LocalVideoTaskSeed,
-    pub report_mode: VideoTaskSyncReportMode,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -99,7 +85,6 @@ pub struct LocalVideoTaskTransport {
     pub headers: BTreeMap<String, String>,
     pub content_type: Option<String>,
     pub model_name: Option<String>,
-    pub proxy: Option<ProxySnapshot>,
     pub transport_profile: Option<ResolvedTransportProfile>,
     pub timeouts: Option<ExecutionTimeouts>,
 }
@@ -115,7 +100,6 @@ pub struct LocalVideoTaskTransportBridgeInput {
     pub auth_value: String,
     pub content_type: Option<String>,
     pub model_name: Option<String>,
-    pub proxy: Option<ProxySnapshot>,
     pub transport_profile: Option<ResolvedTransportProfile>,
     pub timeouts: Option<ExecutionTimeouts>,
 }
@@ -128,7 +112,6 @@ pub struct LocalVideoTaskPersistence {
     pub client_api_format: String,
     pub provider_api_format: String,
     pub original_request_body: Value,
-    pub format_converted: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

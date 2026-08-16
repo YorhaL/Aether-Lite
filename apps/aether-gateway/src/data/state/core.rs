@@ -408,8 +408,6 @@ impl GatewayDataState {
                 management_token_writer: None,
                 oauth_provider_reader: None,
                 oauth_provider_writer: None,
-                proxy_node_reader: None,
-                proxy_node_writer: None,
                 billing_reader: None,
                 background_task_reader: None,
                 background_task_writer: None,
@@ -422,10 +420,6 @@ impl GatewayDataState {
                 request_candidate_writer: None,
                 provider_catalog_reader: None,
                 provider_catalog_writer: None,
-                pool_score_reader: None,
-                pool_score_writer: None,
-                provider_quota_reader: None,
-                provider_quota_writer: None,
                 routing_group_reader: None,
                 routing_group_writer: None,
                 usage_reader: None,
@@ -459,8 +453,6 @@ impl GatewayDataState {
         let management_token_writer = backends.write().management_tokens();
         let oauth_provider_reader = backends.read().oauth_providers();
         let oauth_provider_writer = backends.write().oauth_providers();
-        let proxy_node_reader = backends.read().proxy_nodes();
-        let proxy_node_writer = backends.write().proxy_nodes();
         let billing_reader = backends.read().billing();
         let background_task_reader = backends.read().background_tasks();
         let background_task_writer = backends.write().background_tasks();
@@ -493,10 +485,6 @@ impl GatewayDataState {
             ) as Arc<dyn ProviderCatalogReadRepository>
         });
         let provider_catalog_writer = backends.write().provider_catalog();
-        let pool_score_reader = backends.read().pool_scores();
-        let pool_score_writer = backends.write().pool_scores();
-        let provider_quota_reader = backends.read().provider_quotas();
-        let provider_quota_writer = backends.write().provider_quotas();
         let routing_group_reader = backends.read().routing_groups().map(|repository| {
             Arc::new(super::routing_group_cache::CachedRoutingGroupReadRepository::new(
                 repository,
@@ -526,8 +514,6 @@ impl GatewayDataState {
             management_token_writer,
             oauth_provider_reader,
             oauth_provider_writer,
-            proxy_node_reader,
-            proxy_node_writer,
             billing_reader,
             background_task_reader,
             background_task_writer,
@@ -540,10 +526,6 @@ impl GatewayDataState {
             request_candidate_writer,
             provider_catalog_reader,
             provider_catalog_writer,
-            pool_score_reader,
-            pool_score_writer,
-            provider_quota_reader,
-            provider_quota_writer,
             routing_group_reader,
             routing_group_writer,
             usage_reader,
@@ -584,12 +566,6 @@ impl GatewayDataState {
         self.backends
             .as_ref()
             .is_some_and(|backends| backends.has_database_pool_summary())
-    }
-
-    pub(crate) fn has_wallet_daily_usage_aggregation_backend(&self) -> bool {
-        self.backends
-            .as_ref()
-            .is_some_and(|backends| backends.has_wallet_daily_usage_aggregation_backend())
     }
 
     pub(crate) fn has_stats_hourly_aggregation_backend(&self) -> bool {
@@ -718,22 +694,6 @@ impl GatewayDataState {
         self.provider_catalog_writer.is_some()
     }
 
-    pub(crate) fn has_pool_score_reader(&self) -> bool {
-        self.pool_score_reader.is_some()
-    }
-
-    pub(crate) fn has_pool_score_writer(&self) -> bool {
-        self.pool_score_writer.is_some()
-    }
-
-    pub(crate) fn has_proxy_node_reader(&self) -> bool {
-        self.proxy_node_reader.is_some()
-    }
-
-    pub(crate) fn has_proxy_node_writer(&self) -> bool {
-        self.proxy_node_writer.is_some()
-    }
-
     pub(crate) fn has_system_config_store(&self) -> bool {
         self.system_config_values.is_some()
             || self
@@ -746,10 +706,6 @@ impl GatewayDataState {
         self.backends
             .as_ref()
             .and_then(|backends| backends.database_driver())
-    }
-
-    pub(crate) fn has_provider_quota_writer(&self) -> bool {
-        self.provider_quota_writer.is_some()
     }
 
     pub(crate) fn has_usage_reader(&self) -> bool {
@@ -1081,7 +1037,7 @@ impl GatewayDataState {
 fn database_driver_supports_usage_counter_flush(driver: Option<DatabaseDriver>) -> bool {
     matches!(
         driver,
-        Some(DatabaseDriver::Postgres | DatabaseDriver::Mysql | DatabaseDriver::Sqlite)
+        Some(DatabaseDriver::Postgres | DatabaseDriver::Sqlite)
     )
 }
 
@@ -1094,9 +1050,6 @@ mod usage_counter_flush_backend_tests {
     fn every_sql_driver_supports_usage_counter_flush() {
         assert!(database_driver_supports_usage_counter_flush(Some(
             DatabaseDriver::Postgres
-        )));
-        assert!(database_driver_supports_usage_counter_flush(Some(
-            DatabaseDriver::Mysql
         )));
         assert!(database_driver_supports_usage_counter_flush(Some(
             DatabaseDriver::Sqlite

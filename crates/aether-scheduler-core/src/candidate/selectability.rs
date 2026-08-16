@@ -26,10 +26,6 @@ pub struct CandidateRuntimeSelectabilityInput<'a> {
     pub provider_concurrent_limits: &'a BTreeMap<String, usize>,
     pub provider_key_rpm_states: &'a BTreeMap<String, StoredProviderCatalogKey>,
     pub now_unix_secs: u64,
-    pub provider_quota_blocks_requests: bool,
-    pub account_quota_exhausted: bool,
-    pub oauth_invalid: bool,
-    pub enforce_key_circuit_breaker: bool,
     pub rpm_reset_at: Option<u64>,
 }
 
@@ -48,22 +44,9 @@ pub fn candidate_runtime_skip_reason_with_state(
         provider_concurrent_limits,
         provider_key_rpm_states,
         now_unix_secs,
-        provider_quota_blocks_requests,
-        account_quota_exhausted,
-        oauth_invalid,
-        enforce_key_circuit_breaker,
         rpm_reset_at,
     } = input;
 
-    if provider_quota_blocks_requests {
-        return Some("provider_quota_blocked");
-    }
-    if account_quota_exhausted {
-        return Some("account_quota_exhausted");
-    }
-    if oauth_invalid {
-        return Some("oauth_invalid");
-    }
     if provider_concurrent_limits
         .get(&candidate.provider_id)
         .is_some_and(|limit| {
@@ -96,13 +79,11 @@ pub fn candidate_runtime_skip_reason_with_state(
     }
 
     if let Some(provider_key) = provider_key {
-        if enforce_key_circuit_breaker
-            && crate::is_provider_key_circuit_open_at(
-                provider_key,
-                candidate.endpoint_api_format.as_str(),
-                now_unix_secs,
-            )
-        {
+        if crate::is_provider_key_circuit_open_at(
+            provider_key,
+            candidate.endpoint_api_format.as_str(),
+            now_unix_secs,
+        ) {
             return Some("key_circuit_open");
         }
         if crate::provider_key_health_score(provider_key, candidate.endpoint_api_format.as_str())

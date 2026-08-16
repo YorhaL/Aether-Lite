@@ -16,7 +16,6 @@ import {
   removePerModelRoutingConfig,
   routingModelScopeLabel,
   savePerModelRoutingConfig,
-  setDefaultPoolPriorityOverrides,
   setDefaultProviderPriorityOverrides,
   setRoutingSortingScope,
   updateAllowedModelsFromInput,
@@ -61,18 +60,6 @@ describe('routingPolicy', () => {
       'provider-a': 0,
       'provider-b': 2,
     })
-  })
-
-  it('stores pool priority overrides separately from key overrides', () => {
-    const next = setDefaultPoolPriorityOverrides(createEmptyRoutingGroupConfig(), {
-      'provider-pool': 3,
-    })
-
-    const policy = getDefaultModelPolicy(next)
-    expect(policy.pool_priority_overrides).toEqual({
-      'provider-pool': 3,
-    })
-    expect(policy.key_priority_overrides).toEqual({})
   })
 
   it('stores per-model scheduling as generated routing rules', () => {
@@ -224,7 +211,6 @@ describe('routingTrace', () => {
       resolved_model: 'gpt-5',
       client_api_format: 'openai:chat',
       global_candidates: [candidate('provider-a', 0)],
-      pool_expansion: [],
       runtime_facts: {},
     }
 

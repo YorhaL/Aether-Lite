@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use aether_contracts::ExecutionPlan;
 use aether_crypto::{
-    decrypt_python_fernet_ciphertext, encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY,
+    decrypt_fernet_ciphertext, encrypt_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY,
 };
 use aether_data::repository::provider_catalog::InMemoryProviderCatalogReadRepository;
 use aether_data_contracts::repository::provider_catalog::{
@@ -227,7 +227,7 @@ async fn gateway_handles_admin_provider_keys_locally_with_trusted_admin_principa
         .get(format!(
             "{gateway_url}/api/admin/endpoints/providers/provider-openai/keys?skip=0&limit=50"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -299,7 +299,7 @@ async fn gateway_provider_keys_expose_circuit_breaker_and_recover_clears_it() {
         .get(format!(
             "{gateway_url}/api/admin/endpoints/providers/provider-1/keys?skip=0&limit=50"
         ))
-        .header(GATEWAY_HEADER, "rust-phase3b")
+        .header(GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -327,7 +327,7 @@ async fn gateway_provider_keys_expose_circuit_breaker_and_recover_clears_it() {
         .patch(format!(
             "{gateway_url}/api/admin/endpoints/health/keys/key-1"
         ))
-        .header(GATEWAY_HEADER, "rust-phase3b")
+        .header(GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -340,7 +340,7 @@ async fn gateway_provider_keys_expose_circuit_breaker_and_recover_clears_it() {
         .get(format!(
             "{gateway_url}/api/admin/endpoints/providers/provider-1/keys?skip=0&limit=50"
         ))
-        .header(GATEWAY_HEADER, "rust-phase3b")
+        .header(GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -416,7 +416,7 @@ async fn gateway_handles_admin_provider_keys_page_locally_with_total() {
         .get(format!(
             "{gateway_url}/api/admin/endpoints/providers/provider-openai/keys?page=2&page_size=1"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -432,165 +432,6 @@ async fn gateway_handles_admin_provider_keys_page_locally_with_total() {
     let items = payload["keys"].as_array().expect("keys should be an array");
     assert_eq!(items.len(), 1);
     assert_eq!(items[0]["id"], "key-openai-b");
-    assert_eq!(*upstream_hits.lock().expect("mutex should lock"), 0);
-
-    gateway_handle.abort();
-    upstream_handle.abort();
-}
-
-#[tokio::test]
-async fn gateway_admin_provider_keys_prefers_upstream_plan_type_over_auth_config() {
-    let upstream_hits = Arc::new(Mutex::new(0usize));
-    let upstream_hits_clone = Arc::clone(&upstream_hits);
-    let upstream = Router::new().route(
-        "/api/admin/endpoints/providers/provider-codex/keys",
-        any(move |_request: Request| {
-            let upstream_hits_inner = Arc::clone(&upstream_hits_clone);
-            async move {
-                *upstream_hits_inner.lock().expect("mutex should lock") += 1;
-                (StatusCode::OK, Body::from("unexpected upstream hit"))
-            }
-        }),
-    );
-
-    let mut provider = sample_provider("provider-codex", "codex", 10);
-    provider.provider_type = "codex".to_string();
-    let mut key = sample_key(
-        "key-codex-oauth",
-        "provider-codex",
-        "openai:responses",
-        "oauth-placeholder",
-    );
-    key.auth_type = "oauth".to_string();
-    key.encrypted_auth_config = Some(
-        encrypt_python_fernet_plaintext(
-            DEVELOPMENT_ENCRYPTION_KEY,
-            &json!({
-                "plan_type": "free",
-                "account_id": "acct-codex-legacy"
-            })
-            .to_string(),
-        )
-        .expect("auth config should encrypt"),
-    );
-    key.upstream_metadata = Some(json!({
-        "codex": {
-            "plan_type": "plus",
-            "updated_at": 1_775_553_285u64
-        }
-    }));
-
-    let provider_catalog_repository = Arc::new(InMemoryProviderCatalogReadRepository::seed(
-        vec![provider],
-        vec![],
-        vec![key],
-    ));
-
-    let (_upstream_url, upstream_handle) = start_server(upstream).await;
-    let gateway = build_router_with_state(
-        AppState::new()
-            .expect("gateway should build")
-            .with_data_state_for_tests(
-                GatewayDataState::with_provider_catalog_reader_for_tests(
-                    provider_catalog_repository,
-                )
-                .with_encryption_key_for_tests(DEVELOPMENT_ENCRYPTION_KEY),
-            ),
-    );
-    let (gateway_url, gateway_handle) = start_server(gateway).await;
-
-    let response = reqwest::Client::new()
-        .get(format!(
-            "{gateway_url}/api/admin/endpoints/providers/provider-codex/keys?skip=0&limit=50"
-        ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
-        .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
-        .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
-        .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
-        .send()
-        .await
-        .expect("request should succeed");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let payload: serde_json::Value = response.json().await.expect("json body should parse");
-    let items = payload.as_array().expect("payload should be an array");
-    assert_eq!(items.len(), 1);
-    assert_eq!(items[0]["oauth_plan_type"], "plus");
-    assert_eq!(*upstream_hits.lock().expect("mutex should lock"), 0);
-
-    gateway_handle.abort();
-    upstream_handle.abort();
-}
-
-#[tokio::test]
-async fn gateway_admin_provider_keys_marks_oauth_header_auth() {
-    let upstream_hits = Arc::new(Mutex::new(0usize));
-    let upstream_hits_clone = Arc::clone(&upstream_hits);
-    let upstream = Router::new().route(
-        "/api/admin/endpoints/providers/provider-codex/keys",
-        any(move |_request: Request| {
-            let upstream_hits_inner = Arc::clone(&upstream_hits_clone);
-            async move {
-                *upstream_hits_inner.lock().expect("mutex should lock") += 1;
-                (StatusCode::OK, Body::from("unexpected upstream hit"))
-            }
-        }),
-    );
-
-    let mut provider = sample_provider("provider-codex", "codex", 10);
-    provider.provider_type = "codex".to_string();
-    let mut key = sample_key(
-        "key-codex-oauth-header",
-        "provider-codex",
-        "openai:responses",
-        "imported-session-token",
-    );
-    key.auth_type = "oauth".to_string();
-    key.encrypted_auth_config = Some(
-        encrypt_python_fernet_plaintext(
-            DEVELOPMENT_ENCRYPTION_KEY,
-            r#"{"provider_type":"codex","headers":{"authorization":"Bearer imported-session-token"}}"#,
-        )
-        .expect("auth config should encrypt"),
-    );
-
-    let provider_catalog_repository = Arc::new(InMemoryProviderCatalogReadRepository::seed(
-        vec![provider],
-        vec![],
-        vec![key],
-    ));
-
-    let (_upstream_url, upstream_handle) = start_server(upstream).await;
-    let gateway = build_router_with_state(
-        AppState::new()
-            .expect("gateway should build")
-            .with_data_state_for_tests(
-                GatewayDataState::with_provider_catalog_reader_for_tests(
-                    provider_catalog_repository,
-                )
-                .with_encryption_key_for_tests(DEVELOPMENT_ENCRYPTION_KEY),
-            ),
-    );
-    let (gateway_url, gateway_handle) = start_server(gateway).await;
-
-    let response = reqwest::Client::new()
-        .get(format!(
-            "{gateway_url}/api/admin/endpoints/providers/provider-codex/keys?skip=0&limit=50"
-        ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
-        .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
-        .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
-        .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
-        .send()
-        .await
-        .expect("request should succeed");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let payload: serde_json::Value = response.json().await.expect("json body should parse");
-    let items = payload.as_array().expect("payload should be an array");
-    assert_eq!(items.len(), 1);
-    assert_eq!(items[0]["api_key_masked"], "[OAuth Header]");
-    assert_eq!(items[0]["oauth_header_auth"], true);
     assert_eq!(*upstream_hits.lock().expect("mutex should lock"), 0);
 
     gateway_handle.abort();
@@ -635,7 +476,7 @@ async fn gateway_creates_admin_provider_key_locally_with_trusted_admin_principal
         .post(format!(
             "{gateway_url}/api/admin/endpoints/providers/provider-openai/keys"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -712,7 +553,7 @@ async fn generic_key_routes_reject_agent_identity_credential_writes() {
         .post(format!(
             "{gateway_url}/api/admin/endpoints/providers/provider-codex/keys"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -738,7 +579,7 @@ async fn generic_key_routes_reject_agent_identity_credential_writes() {
         .put(format!(
             "{gateway_url}/api/admin/endpoints/keys/key-codex-existing"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -775,105 +616,6 @@ async fn generic_key_routes_reject_agent_identity_credential_writes() {
 }
 
 #[tokio::test]
-async fn generic_codex_key_credential_switch_rotates_generation_and_clears_quota() {
-    let mut existing_key = sample_key(
-        "key-codex-existing",
-        "provider-codex",
-        "openai:responses",
-        "old-oauth-access-token",
-    );
-    existing_key.auth_type = "oauth".to_string();
-    existing_key.encrypted_auth_config = Some(
-        encrypt_python_fernet_plaintext(
-            DEVELOPMENT_ENCRYPTION_KEY,
-            r#"{"provider_type":"codex","refresh_token":"old-refresh-token"}"#,
-        )
-        .expect("old auth config should encrypt"),
-    );
-    existing_key.upstream_metadata = Some(json!({
-        "codex": {
-            "credential_generation": "generation-before-switch",
-            "primary_used_percent": 80.0,
-        },
-        "unrelated": {"preserved": true},
-    }));
-    existing_key.status_snapshot = Some(json!({
-        "oauth": {"status": "valid"},
-        "quota": {"used_ratio": 0.8},
-    }));
-    let mut provider = sample_provider("provider-codex", "codex", 10);
-    provider.provider_type = "codex".to_string();
-    let provider_catalog_repository = Arc::new(InMemoryProviderCatalogReadRepository::seed(
-        vec![provider],
-        vec![],
-        vec![existing_key],
-    ));
-    let gateway = build_router_with_state(
-        AppState::new()
-            .expect("gateway should build")
-            .with_data_state_for_tests(
-                GatewayDataState::with_provider_catalog_repository_for_tests(
-                    provider_catalog_repository.clone(),
-                )
-                .with_encryption_key_for_tests(DEVELOPMENT_ENCRYPTION_KEY),
-            ),
-    );
-    let (gateway_url, gateway_handle) = start_server(gateway).await;
-
-    let response = reqwest::Client::new()
-        .put(format!(
-            "{gateway_url}/api/admin/endpoints/keys/key-codex-existing"
-        ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
-        .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
-        .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
-        .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
-        .json(&json!({
-            "auth_type": "api_key",
-            "api_key": "new-codex-api-key"
-        }))
-        .send()
-        .await
-        .expect("credential switch should complete");
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let reloaded = provider_catalog_repository
-        .list_keys_by_ids(&["key-codex-existing".to_string()])
-        .await
-        .expect("key should reload");
-    assert_eq!(reloaded.len(), 1);
-    let key = &reloaded[0];
-    assert_eq!(key.auth_type, "api_key");
-    let codex = key
-        .upstream_metadata
-        .as_ref()
-        .and_then(|metadata| metadata.get("codex"))
-        .and_then(serde_json::Value::as_object)
-        .expect("codex metadata should exist");
-    assert_eq!(codex.len(), 1, "unexpected Codex metadata: {codex:?}");
-    assert_ne!(
-        codex
-            .get(aether_admin::provider::quota::CODEX_CREDENTIAL_GENERATION_KEY)
-            .and_then(serde_json::Value::as_str),
-        Some("generation-before-switch")
-    );
-    assert_eq!(
-        key.upstream_metadata
-            .as_ref()
-            .and_then(|metadata| metadata.pointer("/unrelated/preserved")),
-        Some(&json!(true))
-    );
-    assert_eq!(
-        key.status_snapshot
-            .as_ref()
-            .and_then(|snapshot| snapshot.get("quota")),
-        Some(&serde_json::Value::Null)
-    );
-
-    gateway_handle.abort();
-}
-
-#[tokio::test]
 async fn provider_key_concurrent_limit_create_and_list_responses() {
     let provider_catalog_repository = Arc::new(InMemoryProviderCatalogReadRepository::seed(
         vec![sample_provider("provider-openai", "openai", 10)],
@@ -897,7 +639,7 @@ async fn provider_key_concurrent_limit_create_and_list_responses() {
         .post(format!(
             "{gateway_url}/api/admin/endpoints/providers/provider-openai/keys"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -928,7 +670,7 @@ async fn provider_key_concurrent_limit_create_and_list_responses() {
         .post(format!(
             "{gateway_url}/api/admin/endpoints/providers/provider-openai/keys"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -957,7 +699,7 @@ async fn provider_key_concurrent_limit_create_and_list_responses() {
         .post(format!(
             "{gateway_url}/api/admin/endpoints/providers/provider-openai/keys"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -985,7 +727,7 @@ async fn provider_key_concurrent_limit_create_and_list_responses() {
         .get(format!(
             "{gateway_url}/api/admin/endpoints/providers/provider-openai/keys?skip=0&limit=50"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1073,7 +815,7 @@ async fn provider_key_concurrent_limit_reads_existing_list_response() {
         .get(format!(
             "{gateway_url}/api/admin/endpoints/providers/test-provider-a/keys?skip=0&limit=50"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1169,7 +911,7 @@ async fn gateway_fetches_allowed_models_immediately_when_creating_key_with_auto_
         .post(format!(
             "{gateway_url}/api/admin/endpoints/providers/provider-openai/keys"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1257,7 +999,7 @@ async fn gateway_reveals_admin_provider_key_locally_with_trusted_admin_principal
         .get(format!(
             "{gateway_url}/api/admin/endpoints/keys/key-openai-a/reveal"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1269,602 +1011,6 @@ async fn gateway_reveals_admin_provider_key_locally_with_trusted_admin_principal
     let payload: serde_json::Value = response.json().await.expect("json body should parse");
     assert_eq!(payload["auth_type"], "api_key");
     assert_eq!(payload["api_key"], "sk-test-a");
-    assert_eq!(*upstream_hits.lock().expect("mutex should lock"), 0);
-
-    gateway_handle.abort();
-    upstream_handle.abort();
-}
-
-#[tokio::test]
-async fn gateway_exports_admin_provider_key_locally_with_trusted_admin_principal() {
-    let upstream_hits = Arc::new(Mutex::new(0usize));
-    let upstream_hits_clone = Arc::clone(&upstream_hits);
-    let upstream = Router::new().route(
-        "/api/admin/endpoints/keys/key-kiro-a/export",
-        any(move |_request: Request| {
-            let upstream_hits_inner = Arc::clone(&upstream_hits_clone);
-            async move {
-                *upstream_hits_inner.lock().expect("mutex should lock") += 1;
-                (StatusCode::OK, Body::from("unexpected upstream hit"))
-            }
-        }),
-    );
-
-    let mut key = sample_key(
-        "key-kiro-a",
-        "provider-kiro",
-        "claude:messages",
-        "oauth-access-token",
-    );
-    key.auth_type = "oauth".to_string();
-    key.encrypted_auth_config = Some(
-        encrypt_python_fernet_plaintext(
-            DEVELOPMENT_ENCRYPTION_KEY,
-            r#"{"provider_type":"kiro","auth_method":"idc","refresh_token":"rt-kiro-123"}"#,
-        )
-        .expect("auth config ciphertext should build"),
-    );
-    key.upstream_metadata = Some(json!({"kiro": {"email": "alice@example.com"}}));
-
-    let provider_catalog_repository = Arc::new(InMemoryProviderCatalogReadRepository::seed(
-        vec![sample_provider("provider-kiro", "kiro", 10)],
-        vec![],
-        vec![key],
-    ));
-
-    let (upstream_url, upstream_handle) = start_server(upstream).await;
-    let gateway = build_router_with_state(
-        AppState::new()
-            .expect("gateway should build")
-            .with_data_state_for_tests(
-                GatewayDataState::with_provider_catalog_reader_for_tests(
-                    provider_catalog_repository,
-                )
-                .with_encryption_key_for_tests(DEVELOPMENT_ENCRYPTION_KEY),
-            ),
-    );
-    let (gateway_url, gateway_handle) = start_server(gateway).await;
-
-    let response = reqwest::Client::new()
-        .get(format!(
-            "{gateway_url}/api/admin/endpoints/keys/key-kiro-a/export"
-        ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
-        .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
-        .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
-        .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
-        .send()
-        .await
-        .expect("request should succeed");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let payload: serde_json::Value = response.json().await.expect("json body should parse");
-    assert_eq!(payload["provider_type"], "kiro");
-    assert_eq!(payload["auth_method"], "idc");
-    assert_eq!(payload["refresh_token"], "rt-kiro-123");
-    assert_eq!(payload["email"], "alice@example.com");
-    assert_eq!(payload["name"], "default");
-    assert!(payload.get("exported_at").is_some());
-    assert_eq!(*upstream_hits.lock().expect("mutex should lock"), 0);
-
-    gateway_handle.abort();
-    upstream_handle.abort();
-}
-
-#[tokio::test]
-async fn gateway_exports_admin_provider_key_access_token_when_refresh_token_is_missing() {
-    let upstream_hits = Arc::new(Mutex::new(0usize));
-    let upstream_hits_clone = Arc::clone(&upstream_hits);
-    let upstream = Router::new().route(
-        "/api/admin/endpoints/keys/key-codex-a/export",
-        any(move |_request: Request| {
-            let upstream_hits_inner = Arc::clone(&upstream_hits_clone);
-            async move {
-                *upstream_hits_inner.lock().expect("mutex should lock") += 1;
-                (StatusCode::OK, Body::from("unexpected upstream hit"))
-            }
-        }),
-    );
-
-    let mut key = sample_key(
-        "key-codex-a",
-        "provider-codex",
-        "openai:responses",
-        "codex-access-token",
-    );
-    key.auth_type = "oauth".to_string();
-    key.encrypted_auth_config = Some(
-        encrypt_python_fernet_plaintext(
-            DEVELOPMENT_ENCRYPTION_KEY,
-            r#"{"provider_type":"codex","email":"codex@example.com","updated_at":1710000000}"#,
-        )
-        .expect("auth config ciphertext should build"),
-    );
-
-    let provider_catalog_repository = Arc::new(InMemoryProviderCatalogReadRepository::seed(
-        vec![sample_provider("provider-codex", "codex", 10)],
-        vec![],
-        vec![key],
-    ));
-
-    let (upstream_url, upstream_handle) = start_server(upstream).await;
-    let gateway = build_router_with_state(
-        AppState::new()
-            .expect("gateway should build")
-            .with_data_state_for_tests(
-                GatewayDataState::with_provider_catalog_reader_for_tests(
-                    provider_catalog_repository,
-                )
-                .with_encryption_key_for_tests(DEVELOPMENT_ENCRYPTION_KEY),
-            ),
-    );
-    let (gateway_url, gateway_handle) = start_server(gateway).await;
-
-    let response = reqwest::Client::new()
-        .get(format!(
-            "{gateway_url}/api/admin/endpoints/keys/key-codex-a/export"
-        ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
-        .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
-        .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
-        .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
-        .send()
-        .await
-        .expect("request should succeed");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let payload: serde_json::Value = response.json().await.expect("json body should parse");
-    assert_eq!(payload["provider_type"], "codex");
-    assert_eq!(payload["email"], "codex@example.com");
-    assert_eq!(payload["access_token"], "codex-access-token");
-    assert!(payload.get("refresh_token").is_none());
-    assert!(payload.get("updated_at").is_none());
-    assert_eq!(*upstream_hits.lock().expect("mutex should lock"), 0);
-
-    gateway_handle.abort();
-    upstream_handle.abort();
-}
-
-#[tokio::test]
-async fn gateway_export_does_not_emit_access_token_from_imported_authorization_header() {
-    let upstream_hits = Arc::new(Mutex::new(0usize));
-    let upstream_hits_clone = Arc::clone(&upstream_hits);
-    let upstream = Router::new().route(
-        "/api/admin/endpoints/keys/key-codex-a/export",
-        any(move |_request: Request| {
-            let upstream_hits_inner = Arc::clone(&upstream_hits_clone);
-            async move {
-                *upstream_hits_inner.lock().expect("mutex should lock") += 1;
-                (StatusCode::OK, Body::from("unexpected upstream hit"))
-            }
-        }),
-    );
-
-    let mut key = sample_key(
-        "key-codex-a",
-        "provider-codex",
-        "openai:responses",
-        "imported-session-token",
-    );
-    key.auth_type = "oauth".to_string();
-    key.encrypted_auth_config = Some(
-        encrypt_python_fernet_plaintext(
-            DEVELOPMENT_ENCRYPTION_KEY,
-            r#"{"provider_type":"codex","email":"codex@example.com","headers":{"authorization":"Bearer imported-session-token"}}"#,
-        )
-        .expect("auth config ciphertext should build"),
-    );
-
-    let provider_catalog_repository = Arc::new(InMemoryProviderCatalogReadRepository::seed(
-        vec![sample_provider("provider-codex", "codex", 10)],
-        vec![],
-        vec![key],
-    ));
-
-    let (upstream_url, upstream_handle) = start_server(upstream).await;
-    let gateway = build_router_with_state(
-        AppState::new()
-            .expect("gateway should build")
-            .with_data_state_for_tests(
-                GatewayDataState::with_provider_catalog_reader_for_tests(
-                    provider_catalog_repository,
-                )
-                .with_encryption_key_for_tests(DEVELOPMENT_ENCRYPTION_KEY),
-            ),
-    );
-    let (gateway_url, gateway_handle) = start_server(gateway).await;
-
-    let response = reqwest::Client::new()
-        .get(format!(
-            "{gateway_url}/api/admin/endpoints/keys/key-codex-a/export"
-        ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
-        .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
-        .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
-        .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
-        .send()
-        .await
-        .expect("request should succeed");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let payload: serde_json::Value = response.json().await.expect("json body should parse");
-    assert_eq!(payload["provider_type"], "codex");
-    assert_eq!(payload["email"], "codex@example.com");
-    assert_eq!(
-        payload["headers"]["authorization"],
-        "Bearer imported-session-token"
-    );
-    assert!(payload.get("access_token").is_none());
-    assert_eq!(*upstream_hits.lock().expect("mutex should lock"), 0);
-
-    gateway_handle.abort();
-    upstream_handle.abort();
-}
-
-#[tokio::test]
-async fn gateway_export_preserves_distinct_imported_access_token_with_authorization_header() {
-    let upstream_hits = Arc::new(Mutex::new(0usize));
-    let upstream_hits_clone = Arc::clone(&upstream_hits);
-    let upstream = Router::new().route(
-        "/api/admin/endpoints/keys/key-codex-a/export",
-        any(move |_request: Request| {
-            let upstream_hits_inner = Arc::clone(&upstream_hits_clone);
-            async move {
-                *upstream_hits_inner.lock().expect("mutex should lock") += 1;
-                (StatusCode::OK, Body::from("unexpected upstream hit"))
-            }
-        }),
-    );
-
-    let mut key = sample_key(
-        "key-codex-a",
-        "provider-codex",
-        "openai:responses",
-        "jwt-access-token",
-    );
-    key.auth_type = "oauth".to_string();
-    key.encrypted_auth_config = Some(
-        encrypt_python_fernet_plaintext(
-            DEVELOPMENT_ENCRYPTION_KEY,
-            r#"{"provider_type":"codex","email":"codex@example.com","access_token":"jwt-access-token","headers":{"authorization":"Bearer imported-session-token"}}"#,
-        )
-        .expect("auth config ciphertext should build"),
-    );
-
-    let provider_catalog_repository = Arc::new(InMemoryProviderCatalogReadRepository::seed(
-        vec![sample_provider("provider-codex", "codex", 10)],
-        vec![],
-        vec![key],
-    ));
-
-    let (_upstream_url, upstream_handle) = start_server(upstream).await;
-    let gateway = build_router_with_state(
-        AppState::new()
-            .expect("gateway should build")
-            .with_data_state_for_tests(
-                GatewayDataState::with_provider_catalog_reader_for_tests(
-                    provider_catalog_repository,
-                )
-                .with_encryption_key_for_tests(DEVELOPMENT_ENCRYPTION_KEY),
-            ),
-    );
-    let (gateway_url, gateway_handle) = start_server(gateway).await;
-
-    let response = reqwest::Client::new()
-        .get(format!(
-            "{gateway_url}/api/admin/endpoints/keys/key-codex-a/export"
-        ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
-        .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
-        .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
-        .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
-        .send()
-        .await
-        .expect("request should succeed");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let payload: serde_json::Value = response.json().await.expect("json body should parse");
-    assert_eq!(payload["provider_type"], "codex");
-    assert_eq!(payload["access_token"], "jwt-access-token");
-    assert_eq!(
-        payload["headers"]["authorization"],
-        "Bearer imported-session-token"
-    );
-    assert_eq!(*upstream_hits.lock().expect("mutex should lock"), 0);
-
-    gateway_handle.abort();
-    upstream_handle.abort();
-}
-
-#[tokio::test]
-async fn gateway_generic_export_rejects_agent_identity_without_exposing_private_key() {
-    let private_key = "agent-private-key-must-not-leak";
-    let mut provider = sample_provider("provider-codex", "codex", 10);
-    provider.provider_type = "codex".to_string();
-    let mut key = sample_key(
-        "key-codex-agent",
-        "provider-codex",
-        "openai:responses",
-        "__placeholder__",
-    );
-    key.auth_type = "oauth".to_string();
-    key.encrypted_auth_config = Some(
-        encrypt_python_fernet_plaintext(
-            DEVELOPMENT_ENCRYPTION_KEY,
-            &json!({
-                "provider_type": "codex",
-                "auth_mode": "agentIdentity",
-                "agent_runtime_id": "runtime-must-not-leak",
-                "agent_private_key": private_key,
-                "task_id": "task-must-not-leak"
-            })
-            .to_string(),
-        )
-        .expect("Agent Identity auth config should encrypt"),
-    );
-    let provider_catalog_repository = Arc::new(InMemoryProviderCatalogReadRepository::seed(
-        vec![provider],
-        vec![],
-        vec![key],
-    ));
-    let gateway = build_router_with_state(
-        AppState::new()
-            .expect("gateway should build")
-            .with_data_state_for_tests(
-                GatewayDataState::with_provider_catalog_reader_for_tests(
-                    provider_catalog_repository,
-                )
-                .with_encryption_key_for_tests(DEVELOPMENT_ENCRYPTION_KEY),
-            ),
-    );
-    let (gateway_url, gateway_handle) = start_server(gateway).await;
-    let client = reqwest::Client::new();
-
-    let reveal_response = client
-        .get(format!(
-            "{gateway_url}/api/admin/endpoints/keys/key-codex-agent/reveal"
-        ))
-        .header(GATEWAY_HEADER, "rust-phase3b")
-        .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
-        .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
-        .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
-        .send()
-        .await
-        .expect("reveal request should complete");
-
-    assert_eq!(reveal_response.status(), StatusCode::BAD_REQUEST);
-    let reveal_body = reveal_response
-        .text()
-        .await
-        .expect("reveal error body should read");
-    assert!(reveal_body.contains("专属 provider-oauth 管理面"));
-    assert!(!reveal_body.contains(private_key));
-    assert!(!reveal_body.contains("runtime-must-not-leak"));
-    assert!(!reveal_body.contains("task-must-not-leak"));
-
-    let export_response = client
-        .get(format!(
-            "{gateway_url}/api/admin/endpoints/keys/key-codex-agent/export"
-        ))
-        .header(GATEWAY_HEADER, "rust-phase3b")
-        .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
-        .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
-        .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
-        .send()
-        .await
-        .expect("export request should complete");
-
-    assert_eq!(export_response.status(), StatusCode::BAD_REQUEST);
-    let export_body = export_response
-        .text()
-        .await
-        .expect("export error body should read");
-    assert!(export_body.contains("专属 provider-oauth 管理面"));
-    assert!(!export_body.contains(private_key));
-    assert!(!export_body.contains("runtime-must-not-leak"));
-    assert!(!export_body.contains("task-must-not-leak"));
-
-    let list_response = client
-        .get(format!(
-            "{gateway_url}/api/admin/endpoints/providers/provider-codex/keys"
-        ))
-        .header(GATEWAY_HEADER, "rust-phase3b")
-        .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
-        .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
-        .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
-        .send()
-        .await
-        .expect("list request should complete");
-
-    assert_eq!(list_response.status(), StatusCode::OK);
-    let list_payload: serde_json::Value = list_response
-        .json()
-        .await
-        .expect("list body should be JSON");
-    let agent = list_payload
-        .as_array()
-        .and_then(|items| items.iter().find(|item| item["id"] == "key-codex-agent"))
-        .expect("Agent Identity key should be listed");
-    assert_eq!(agent["agent_identity"], true);
-    assert_eq!(agent["can_export_oauth"], false);
-
-    gateway_handle.abort();
-}
-
-#[tokio::test]
-async fn gateway_clears_admin_provider_key_oauth_invalid_locally_with_trusted_admin_principal() {
-    let upstream_hits = Arc::new(Mutex::new(0usize));
-    let upstream_hits_clone = Arc::clone(&upstream_hits);
-    let upstream = Router::new().route(
-        "/api/admin/endpoints/keys/key-openai-a/clear-oauth-invalid",
-        any(move |_request: Request| {
-            let upstream_hits_inner = Arc::clone(&upstream_hits_clone);
-            async move {
-                *upstream_hits_inner.lock().expect("mutex should lock") += 1;
-                (StatusCode::OK, Body::from("unexpected upstream hit"))
-            }
-        }),
-    );
-
-    let mut key = sample_key(
-        "key-openai-a",
-        "provider-openai",
-        "openai:chat",
-        "sk-test-a",
-    );
-    key.auth_type = "oauth".to_string();
-    key.oauth_invalid_at_unix_secs = Some(1_710_000_000);
-    key.oauth_invalid_reason = Some("token expired".to_string());
-    key.expires_at_unix_secs = Some(1_900_000_000);
-    key.status_snapshot = Some(json!({
-        "oauth": {
-            "code": "invalid",
-            "label": "已失效",
-            "reason": "token expired",
-            "expires_at": 1_900_000_000u64,
-            "invalid_at": 1_710_000_000u64,
-            "source": "oauth_invalid",
-            "requires_reauth": true,
-            "expiring_soon": false
-        },
-        "account": {
-            "code": "ok",
-            "label": serde_json::Value::Null,
-            "reason": serde_json::Value::Null,
-            "blocked": false,
-            "source": serde_json::Value::Null,
-            "recoverable": false
-        },
-        "quota": {
-            "code": "unknown",
-            "label": serde_json::Value::Null,
-            "reason": serde_json::Value::Null,
-            "exhausted": false,
-            "usage_ratio": serde_json::Value::Null,
-            "updated_at": serde_json::Value::Null,
-            "reset_seconds": serde_json::Value::Null,
-            "plan_type": serde_json::Value::Null
-        }
-    }));
-
-    let provider_catalog_repository = Arc::new(InMemoryProviderCatalogReadRepository::seed(
-        vec![sample_provider("provider-openai", "openai", 10)],
-        vec![],
-        vec![key],
-    ));
-
-    let (upstream_url, upstream_handle) = start_server(upstream).await;
-    let gateway = build_router_with_state(
-        AppState::new()
-            .expect("gateway should build")
-            .with_data_state_for_tests(
-                GatewayDataState::with_provider_catalog_repository_for_tests(
-                    provider_catalog_repository.clone(),
-                )
-                .with_encryption_key_for_tests(DEVELOPMENT_ENCRYPTION_KEY),
-            ),
-    );
-    let (gateway_url, gateway_handle) = start_server(gateway).await;
-
-    let response = reqwest::Client::new()
-        .post(format!(
-            "{gateway_url}/api/admin/endpoints/keys/key-openai-a/clear-oauth-invalid"
-        ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
-        .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
-        .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
-        .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
-        .send()
-        .await
-        .expect("request should succeed");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let payload: serde_json::Value = response.json().await.expect("json body should parse");
-    assert_eq!(payload["message"], "已清除 OAuth 失效标记");
-    assert_eq!(*upstream_hits.lock().expect("mutex should lock"), 0);
-
-    let reloaded = provider_catalog_repository
-        .list_keys_by_ids(&["key-openai-a".to_string()])
-        .await
-        .expect("keys should read");
-    assert_eq!(reloaded.len(), 1);
-    assert_eq!(reloaded[0].oauth_invalid_at_unix_secs, None);
-    assert_eq!(reloaded[0].oauth_invalid_reason, None);
-    let oauth_snapshot = reloaded[0]
-        .status_snapshot
-        .as_ref()
-        .and_then(serde_json::Value::as_object)
-        .and_then(|snapshot| snapshot.get("oauth"))
-        .and_then(serde_json::Value::as_object)
-        .expect("oauth snapshot should exist");
-    assert_eq!(oauth_snapshot.get("code"), Some(&json!("valid")));
-    assert_eq!(oauth_snapshot.get("label"), Some(&json!("有效")));
-    assert_eq!(oauth_snapshot.get("reason"), Some(&serde_json::Value::Null));
-    assert_eq!(
-        oauth_snapshot.get("invalid_at"),
-        Some(&serde_json::Value::Null)
-    );
-    assert_eq!(oauth_snapshot.get("source"), Some(&json!("expires_at")));
-    assert_eq!(oauth_snapshot.get("requires_reauth"), Some(&json!(false)));
-
-    gateway_handle.abort();
-    upstream_handle.abort();
-}
-
-#[tokio::test]
-async fn gateway_noops_admin_provider_key_oauth_invalid_clear_when_marker_absent() {
-    let upstream_hits = Arc::new(Mutex::new(0usize));
-    let upstream_hits_clone = Arc::clone(&upstream_hits);
-    let upstream = Router::new().route(
-        "/api/admin/endpoints/keys/key-openai-a/clear-oauth-invalid",
-        any(move |_request: Request| {
-            let upstream_hits_inner = Arc::clone(&upstream_hits_clone);
-            async move {
-                *upstream_hits_inner.lock().expect("mutex should lock") += 1;
-                (StatusCode::OK, Body::from("unexpected upstream hit"))
-            }
-        }),
-    );
-
-    let provider_catalog_repository = Arc::new(InMemoryProviderCatalogReadRepository::seed(
-        vec![sample_provider("provider-openai", "openai", 10)],
-        vec![],
-        vec![sample_key(
-            "key-openai-a",
-            "provider-openai",
-            "openai:chat",
-            "sk-test-a",
-        )],
-    ));
-
-    let (upstream_url, upstream_handle) = start_server(upstream).await;
-    let gateway = build_router_with_state(
-        AppState::new()
-            .expect("gateway should build")
-            .with_data_state_for_tests(
-                GatewayDataState::with_provider_catalog_repository_for_tests(
-                    provider_catalog_repository,
-                )
-                .with_encryption_key_for_tests(DEVELOPMENT_ENCRYPTION_KEY),
-            ),
-    );
-    let (gateway_url, gateway_handle) = start_server(gateway).await;
-
-    let response = reqwest::Client::new()
-        .post(format!(
-            "{gateway_url}/api/admin/endpoints/keys/key-openai-a/clear-oauth-invalid"
-        ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
-        .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
-        .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
-        .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
-        .send()
-        .await
-        .expect("request should succeed");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let payload: serde_json::Value = response.json().await.expect("json body should parse");
-    assert_eq!(payload["message"], "该 Key 当前无失效标记，无需清除");
     assert_eq!(*upstream_hits.lock().expect("mutex should lock"), 0);
 
     gateway_handle.abort();
@@ -1919,7 +1065,7 @@ async fn gateway_updates_admin_provider_key_locally_with_trusted_admin_principal
         .put(format!(
             "{gateway_url}/api/admin/endpoints/keys/key-openai-a"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1961,7 +1107,7 @@ async fn gateway_updates_admin_provider_key_locally_with_trusted_admin_principal
     assert_eq!(reloaded[0].allowed_models, None);
     assert_eq!(reloaded[0].note.as_deref(), Some("updated from rust"));
     assert!(!reloaded[0].is_active);
-    let decrypted = decrypt_python_fernet_ciphertext(
+    let decrypted = decrypt_fernet_ciphertext(
         DEVELOPMENT_ENCRYPTION_KEY,
         reloaded[0]
             .encrypted_api_key
@@ -2007,7 +1153,7 @@ async fn provider_key_concurrent_limit_update_presence_semantics() {
         .put(format!(
             "{gateway_url}/api/admin/endpoints/keys/key-openai-a"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2030,7 +1176,7 @@ async fn provider_key_concurrent_limit_update_presence_semantics() {
         .put(format!(
             "{gateway_url}/api/admin/endpoints/keys/key-openai-a"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2049,7 +1195,7 @@ async fn provider_key_concurrent_limit_update_presence_semantics() {
         .put(format!(
             "{gateway_url}/api/admin/endpoints/keys/key-openai-a"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2069,7 +1215,7 @@ async fn provider_key_concurrent_limit_update_presence_semantics() {
         .put(format!(
             "{gateway_url}/api/admin/endpoints/keys/key-openai-a"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2155,7 +1301,7 @@ async fn gateway_clears_allowed_models_when_disabling_auto_fetch_on_provider_key
         .put(format!(
             "{gateway_url}/api/admin/endpoints/keys/key-openai-a"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2264,7 +1410,7 @@ async fn gateway_overwrites_allowed_models_immediately_when_enabling_auto_fetch_
         .put(format!(
             "{gateway_url}/api/admin/endpoints/keys/key-openai-a"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2380,7 +1526,7 @@ async fn gateway_fetches_allowed_models_immediately_when_enabling_auto_fetch_fro
         .put(format!(
             "{gateway_url}/api/admin/endpoints/keys/key-openai-a"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2496,7 +1642,7 @@ async fn gateway_refreshes_allowed_models_when_updating_include_patterns_with_au
         .put(format!(
             "{gateway_url}/api/admin/endpoints/keys/key-openai-a"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2608,7 +1754,7 @@ async fn gateway_refreshes_allowed_models_when_updating_exclude_patterns_with_au
         .put(format!(
             "{gateway_url}/api/admin/endpoints/keys/key-openai-a"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2699,7 +1845,7 @@ async fn gateway_rejects_admin_provider_key_update_when_api_key_duplicates_exist
         .put(format!(
             "{gateway_url}/api/admin/endpoints/keys/key-openai-a"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2765,7 +1911,7 @@ async fn gateway_deletes_admin_provider_key_locally_with_trusted_admin_principal
         .delete(format!(
             "{gateway_url}/api/admin/endpoints/keys/key-openai-a"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2839,7 +1985,7 @@ async fn gateway_batch_deletes_admin_provider_keys_locally_with_trusted_admin_pr
         .post(format!(
             "{gateway_url}/api/admin/endpoints/keys/batch-delete"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2912,29 +2058,11 @@ async fn gateway_handles_admin_keys_grouped_by_format_locally_with_trusted_admin
     key_b.created_at_unix_ms = Some(1_711_100_000);
     key_b.updated_at_unix_secs = Some(1_711_100_100);
 
-    let mut key_agent = sample_key(
-        "key-codex-agent",
-        "provider-codex",
-        "openai:responses",
-        "__placeholder__",
-    );
-    key_agent.auth_type = "oauth".to_string();
-    key_agent.encrypted_auth_config = Some(
-        encrypt_python_fernet_plaintext(
-            DEVELOPMENT_ENCRYPTION_KEY,
-            r#"{"provider_type":"codex","auth_mode":"agentIdentity","agent_runtime_id":"runtime-1","agent_private_key":"base64-private-key","task_id":"task-1"}"#,
-        )
-        .expect("Agent Identity auth config should encrypt"),
-    );
-
-    let mut codex_provider = sample_provider("provider-codex", "codex", 30);
-    codex_provider.provider_type = "codex".to_string();
     let provider_catalog_repository = Arc::new(SummaryNullingProviderCatalogReadRepository::seed(
         vec![
             sample_provider("provider-openai", "openai", 10),
             sample_provider("provider-claude", "claude", 20)
                 .with_transport_fields(false, false, true, None, None, None, None, None, None),
-            codex_provider,
         ],
         vec![
             sample_endpoint(
@@ -2949,14 +2077,8 @@ async fn gateway_handles_admin_keys_grouped_by_format_locally_with_trusted_admin
                 "claude:messages",
                 "https://api.claude.example",
             ),
-            sample_endpoint(
-                "endpoint-codex-responses",
-                "provider-codex",
-                "openai:responses",
-                "https://api.codex.example",
-            ),
         ],
-        vec![key_a, key_b, key_agent],
+        vec![key_a, key_b],
     ));
 
     let (upstream_url, upstream_handle) = start_server(upstream).await;
@@ -2976,7 +2098,7 @@ async fn gateway_handles_admin_keys_grouped_by_format_locally_with_trusted_admin
         .get(format!(
             "{gateway_url}/api/admin/endpoints/keys/grouped-by-format"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")

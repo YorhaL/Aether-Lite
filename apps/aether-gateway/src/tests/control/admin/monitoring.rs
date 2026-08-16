@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use aether_crypto::{encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
+use aether_crypto::{encrypt_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
 use aether_data::repository::auth::{
     InMemoryAuthApiKeySnapshotRepository, StoredAuthApiKeyExportRecord,
 };
@@ -52,7 +52,7 @@ async fn assert_admin_monitoring_route_returns_local_503(method: http::Method, p
 
     let response = reqwest::Client::new()
         .request(method, format!("{gateway_url}{path}"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -92,7 +92,7 @@ async fn gateway_handles_admin_monitoring_audit_logs_locally_with_trusted_admin_
         .get(format!(
             "{gateway_url}/api/admin/monitoring/audit-logs?days=14&limit=20&offset=5&username=alice&event_type=login_failed"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -250,7 +250,7 @@ async fn gateway_handles_admin_monitoring_system_status_locally_with_trusted_adm
 
     let response = reqwest::Client::new()
         .get(format!("{gateway_url}/api/admin/monitoring/system-status"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -269,9 +269,6 @@ async fn gateway_handles_admin_monitoring_system_status_locally_with_trusted_adm
     assert_eq!(payload["today_stats"]["requests"], json!(2));
     assert_eq!(payload["today_stats"]["tokens"], json!(30));
     assert_eq!(payload["today_stats"]["cost_usd"], json!("$0.3500"));
-    assert_eq!(payload["tunnel"]["proxy_connections"], json!(0));
-    assert_eq!(payload["tunnel"]["nodes"], json!(0));
-    assert_eq!(payload["tunnel"]["active_streams"], json!(0));
     assert_eq!(payload["recent_errors"], json!(1));
     assert_eq!(payload["usage_counter"]["status"], json!("idle"));
     assert_eq!(payload["usage_counter"]["outbox_pending_rows"], json!(0));
@@ -402,7 +399,7 @@ fn sample_monitoring_export_api_key(
         api_key_id.to_string(),
         format!("hash-{api_key_id}"),
         Some(
-            encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-user-monitoring-1234")
+            encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-user-monitoring-1234")
                 .expect("user key should encrypt"),
         ),
         Some("Alice Key".to_string()),
@@ -442,7 +439,7 @@ fn sample_monitoring_catalog_key() -> StoredProviderCatalogKey {
     sample_key()
         .with_transport_fields(
             None,
-            encrypt_python_fernet_plaintext(
+            encrypt_fernet_plaintext(
                 DEVELOPMENT_ENCRYPTION_KEY,
                 "sk-upstream-monitoring-5678",
             )
@@ -511,7 +508,7 @@ async fn gateway_handles_admin_monitoring_trace_request_locally_with_trusted_adm
         .get(format!(
             "{gateway_url}/api/admin/monitoring/trace/request-1?attempted_only=true"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -620,7 +617,7 @@ async fn gateway_handles_admin_monitoring_trace_provider_stats_locally_with_trus
         .get(format!(
             "{gateway_url}/api/admin/monitoring/trace/stats/provider/provider-1?limit=10"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -701,7 +698,7 @@ async fn gateway_handles_admin_monitoring_cache_stats_locally_with_trusted_admin
 
     let response = reqwest::Client::new()
         .get(format!("{gateway_url}/api/admin/monitoring/cache/stats"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -785,7 +782,7 @@ async fn gateway_handles_admin_monitoring_cache_affinities_locally_with_trusted_
         .get(format!(
             "{gateway_url}/api/admin/monitoring/cache/affinities?keyword=alice&limit=20&offset=0"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -872,7 +869,7 @@ async fn gateway_handles_admin_monitoring_cache_affinity_locally_with_trusted_ad
         .get(format!(
             "{gateway_url}/api/admin/monitoring/cache/affinity/alice"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -915,7 +912,7 @@ async fn gateway_handles_admin_monitoring_cache_affinities_locally_without_redis
         .get(format!(
             "{gateway_url}/api/admin/monitoring/cache/affinities?limit=20&offset=0"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -976,7 +973,7 @@ async fn gateway_handles_admin_monitoring_cache_affinity_locally_without_redis_o
         .get(format!(
             "{gateway_url}/api/admin/monitoring/cache/affinity/alice"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1050,7 +1047,7 @@ async fn gateway_handles_admin_monitoring_cache_users_delete_locally_with_truste
         .delete(format!(
             "{gateway_url}/api/admin/monitoring/cache/users/alice"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1125,7 +1122,7 @@ async fn gateway_handles_admin_monitoring_cache_affinity_delete_locally_with_tru
         .delete(format!(
             "{gateway_url}/api/admin/monitoring/cache/affinity/user-key-1/endpoint-1/model-alpha/openai"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1192,7 +1189,7 @@ async fn gateway_handles_admin_monitoring_cache_flush_locally_with_trusted_admin
 
     let response = reqwest::Client::new()
         .delete(format!("{gateway_url}/api/admin/monitoring/cache"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1258,7 +1255,7 @@ async fn gateway_handles_admin_monitoring_cache_provider_delete_locally_with_tru
         .delete(format!(
             "{gateway_url}/api/admin/monitoring/cache/providers/provider-1"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1301,7 +1298,7 @@ async fn gateway_handles_admin_monitoring_cache_redis_keys_delete_locally_with_t
         .delete(format!(
             "{gateway_url}/api/admin/monitoring/cache/redis-keys/upstream_models"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1376,7 +1373,7 @@ async fn gateway_handles_admin_monitoring_cache_metrics_locally_with_trusted_adm
 
     let response = reqwest::Client::new()
         .get(format!("{gateway_url}/api/admin/monitoring/cache/metrics"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1423,7 +1420,7 @@ async fn gateway_handles_admin_monitoring_cache_config_locally_with_trusted_admi
 
     let response = reqwest::Client::new()
         .get(format!("{gateway_url}/api/admin/monitoring/cache/config"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1478,7 +1475,7 @@ async fn gateway_handles_admin_monitoring_model_mapping_stats_locally_with_trust
         .get(format!(
             "{gateway_url}/api/admin/monitoring/cache/model-mapping/stats"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1533,7 +1530,7 @@ async fn gateway_handles_admin_monitoring_model_mapping_delete_locally_with_trus
         .delete(format!(
             "{gateway_url}/api/admin/monitoring/cache/model-mapping"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1592,7 +1589,7 @@ async fn gateway_handles_admin_monitoring_model_mapping_delete_model_locally_wit
         .delete(format!(
             "{gateway_url}/api/admin/monitoring/cache/model-mapping/model-alpha"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1652,7 +1649,7 @@ async fn gateway_handles_admin_monitoring_model_mapping_delete_provider_locally_
         .delete(format!(
             "{gateway_url}/api/admin/monitoring/cache/model-mapping/provider/provider-1/model-alpha"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1698,7 +1695,7 @@ async fn gateway_handles_admin_monitoring_redis_keys_locally_with_trusted_admin_
         .get(format!(
             "{gateway_url}/api/admin/monitoring/cache/redis-keys"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1746,7 +1743,7 @@ async fn gateway_handles_admin_monitoring_redis_keys_delete_locally_with_trusted
         .delete(format!(
             "{gateway_url}/api/admin/monitoring/cache/redis-keys/dashboard"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1793,7 +1790,7 @@ async fn gateway_handles_admin_monitoring_suspicious_activities_locally_with_tru
         .get(format!(
             "{gateway_url}/api/admin/monitoring/suspicious-activities?hours=48"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1874,7 +1871,7 @@ async fn gateway_handles_admin_monitoring_resilience_status_locally_with_trusted
         .get(format!(
             "{gateway_url}/api/admin/monitoring/resilience-status"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1968,7 +1965,7 @@ async fn gateway_resets_admin_monitoring_error_stats_locally_with_trusted_admin_
         .delete(format!(
             "{gateway_url}/api/admin/monitoring/resilience/error-stats"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1987,7 +1984,7 @@ async fn gateway_resets_admin_monitoring_error_stats_locally_with_trusted_admin_
         .get(format!(
             "{gateway_url}/api/admin/monitoring/resilience-status"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2064,7 +2061,7 @@ async fn gateway_handles_admin_monitoring_resilience_circuit_history_locally_wit
         .get(format!(
             "{gateway_url}/api/admin/monitoring/resilience/circuit-history?limit=10"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2114,7 +2111,7 @@ async fn gateway_handles_admin_monitoring_user_behavior_locally_with_trusted_adm
         .get(format!(
             "{gateway_url}/api/admin/monitoring/user-behavior/user-1?days=30"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")

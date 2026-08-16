@@ -6,7 +6,7 @@ import { legacyTemplateI18nPlugin } from './src/i18n/legacy-template-transform'
 
 function normalizeVersion(version: string): string {
   const trimmed = version.trim()
-  if (!trimmed || trimmed.startsWith('tunnel-v')) {
+  if (!trimmed) {
     return ''
   }
   return trimmed.startsWith('v') || trimmed.startsWith('V') ? trimmed.slice(1) : trimmed

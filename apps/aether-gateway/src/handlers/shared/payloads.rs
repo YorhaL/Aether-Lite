@@ -2,48 +2,6 @@ use serde::Deserialize;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct InternalTunnelHeartbeatRequest {
-    pub(crate) node_id: String,
-    pub(crate) heartbeat_id: u64,
-    #[serde(default)]
-    pub(crate) heartbeat_interval: Option<i32>,
-    #[serde(default)]
-    pub(crate) active_connections: Option<i32>,
-    #[serde(default)]
-    pub(crate) total_requests: Option<i64>,
-    #[serde(default)]
-    pub(crate) window_total_requests: Option<i64>,
-    #[serde(default)]
-    pub(crate) avg_latency_ms: Option<f64>,
-    #[serde(default)]
-    pub(crate) failed_requests: Option<i64>,
-    #[serde(default)]
-    pub(crate) window_failed_requests: Option<i64>,
-    #[serde(default)]
-    pub(crate) dns_failures: Option<i64>,
-    #[serde(default)]
-    pub(crate) window_dns_failures: Option<i64>,
-    #[serde(default)]
-    pub(crate) stream_errors: Option<i64>,
-    #[serde(default)]
-    pub(crate) window_stream_errors: Option<i64>,
-    #[serde(default)]
-    pub(crate) proxy_metadata: Option<serde_json::Value>,
-    #[serde(default)]
-    pub(crate) proxy_version: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct InternalTunnelNodeStatusRequest {
-    pub(crate) node_id: String,
-    pub(crate) connected: bool,
-    #[serde(default)]
-    pub(crate) conn_count: i32,
-    #[serde(default)]
-    pub(crate) observed_at_unix_secs: Option<u64>,
-}
-
-#[derive(Debug, Deserialize)]
 pub(crate) struct InternalGatewayResolveRequest {
     #[serde(default)]
     pub(crate) trace_id: Option<String>,

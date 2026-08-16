@@ -1,5 +1,5 @@
 use super::super::{
-    admin_default_user_initial_gift, build_admin_users_read_only_response,
+    admin_default_user_initial_balance, build_admin_users_read_only_response,
     disabled_user_policy_detail, disabled_user_policy_field, normalize_admin_feature_settings,
     normalize_admin_optional_user_email, normalize_admin_user_group_ids, normalize_admin_user_role,
     normalize_admin_username, validate_admin_user_password, AdminCreateUserRequest,
@@ -119,12 +119,12 @@ pub(in super::super) async fn build_admin_create_user_response(
             .into_response());
     }
     if payload
-        .initial_gift_usd
+        .initial_balance_usd
         .is_some_and(|value| !value.is_finite() || !(0.0..=10000.0).contains(&value))
     {
         return Ok((
             http::StatusCode::BAD_REQUEST,
-            Json(json!({ "detail": "初始赠款必须在 0-10000 范围内" })),
+            Json(json!({ "detail": "初始额度必须在 0-10000 范围内" })),
         )
             .into_response());
     }
@@ -177,14 +177,14 @@ pub(in super::super) async fn build_admin_create_user_response(
                 .into_response())
         }
     };
-    let initial_gift_usd = if payload.unlimited {
+    let initial_balance_usd = if payload.unlimited {
         0.0
-    } else if let Some(value) = payload.initial_gift_usd {
+    } else if let Some(value) = payload.initial_balance_usd {
         value
     } else {
-        admin_default_user_initial_gift(
+        admin_default_user_initial_balance(
             state
-                .read_system_config_json_value("default_user_initial_gift_usd")
+                .read_system_config_json_value("default_user_initial_balance_usd")
                 .await?
                 .as_ref(),
         )
@@ -210,7 +210,7 @@ pub(in super::super) async fn build_admin_create_user_response(
     };
 
     if state
-        .initialize_auth_user_wallet(&user.id, initial_gift_usd, payload.unlimited)
+        .initialize_auth_user_wallet(&user.id, initial_balance_usd, payload.unlimited)
         .await?
         .is_none()
     {

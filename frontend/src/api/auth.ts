@@ -69,7 +69,6 @@ export interface RegisterRequest {
   username: string
   password: string
   turnstile_token?: string
-  invite_code?: string
   privacy_policy_accepted?: boolean
   privacy_policy_version?: string
 }
@@ -108,17 +107,11 @@ export interface AuthSettingsResponse {
 export interface BillingSummary {
   id?: string | null
   balance: number
-  recharge_balance: number
-  gift_balance: number
-  refundable_balance: number
   currency: string
   status: string
   limit_mode: 'finite' | 'unlimited'
   unlimited: boolean
-  total_recharged: number
   total_consumed: number
-  total_refunded: number
-  total_adjusted: number
   updated_at?: string | null
 }
 

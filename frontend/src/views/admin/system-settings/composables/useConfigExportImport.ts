@@ -36,7 +36,6 @@ function hasArrayField(value: JsonObject, key: string): boolean {
 function looksLikeConfigExport(value: JsonObject): boolean {
   return hasArrayField(value, 'global_models')
     || hasArrayField(value, 'providers')
-    || hasArrayField(value, 'proxy_nodes')
     || hasArrayField(value, 'oauth_providers')
     || hasArrayField(value, 'system_configs')
     || Object.prototype.hasOwnProperty.call(value, 'ldap_config')

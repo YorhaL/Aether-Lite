@@ -1141,7 +1141,6 @@ APP_PORT=${APP_PORT:-8084}
 AETHER_BASE_DIR=${INSTALL_ROOT}
 AETHER_UPDATE_STRATEGY=self
 AETHER_GATEWAY_STATIC_DIR=${INSTALL_ROOT}/current/frontend
-AETHER_GATEWAY_VIDEO_TASK_TRUTH_SOURCE_MODE=rust-authoritative
 AETHER_GATEWAY_AUTO_PREPARE_DATABASE=true
 AETHER_RUNTIME_BACKEND=memory
 API_KEY_PREFIX=sk
@@ -1184,7 +1183,6 @@ AETHER_UPDATE_STRATEGY=manual
 AETHER_GATEWAY_DEPLOYMENT_TOPOLOGY=multi-node
 AETHER_GATEWAY_NODE_ROLE=${role}
 AETHER_GATEWAY_STATIC_DIR=${INSTALL_ROOT}/current/frontend
-AETHER_GATEWAY_VIDEO_TASK_TRUTH_SOURCE_MODE=rust-authoritative
 AETHER_GATEWAY_AUTO_PREPARE_DATABASE=true
 AETHER_RUNTIME_BACKEND=redis
 API_KEY_PREFIX=sk
@@ -1293,7 +1291,6 @@ APP_PORT=$(compose_app_port)
 AETHER_UPDATE_STRATEGY=docker
 AETHER_DOCKER_UPDATE_COMMAND=./update.sh
 AETHER_GATEWAY_STATIC_DIR=${COMPOSE_RELEASE_FRONTEND_DIR}
-AETHER_GATEWAY_VIDEO_TASK_TRUTH_SOURCE_MODE=rust-authoritative
 AETHER_GATEWAY_AUTO_PREPARE_DATABASE=true
 AETHER_RUNTIME_BACKEND=memory
 API_KEY_PREFIX=sk
@@ -1592,7 +1589,7 @@ validate_env_file() {
     if [[ "${topology}" == "multi-node" ]]; then
         [[ "${node_role}" != "all" ]] || die "multi-node deployment requires AETHER_GATEWAY_NODE_ROLE=frontdoor or background"
         [[ -n "${database_url}" ]] || die "multi-node deployment requires AETHER_DATABASE_URL, DATABASE_URL, or AETHER_GATEWAY_DATA_POSTGRES_URL"
-        [[ "${database_is_sqlite}" != "true" ]] || die "multi-node deployment must use shared Postgres/MySQL, not SQLite"
+        [[ "${database_is_sqlite}" != "true" ]] || die "multi-node deployment must use shared PostgreSQL, not SQLite"
         [[ -n "${redis_url}" ]] || die "multi-node deployment requires REDIS_URL or AETHER_GATEWAY_DATA_REDIS_URL"
         [[ "${runtime_backend}" != "memory" ]] || die "multi-node deployment must not use AETHER_RUNTIME_BACKEND=memory"
         [[ -z "${video_task_store_path}" ]] || die "multi-node deployment must not set AETHER_GATEWAY_VIDEO_TASK_STORE_PATH"

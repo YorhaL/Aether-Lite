@@ -2,13 +2,13 @@
   <PageContainer>
     <PageHeader
       title="通知服务"
-      description="统一管理通知项、通知模板和推送服务选择"
+      description="统一管理通知项、通知模板和邮件投递"
     />
 
     <div class="mt-6 space-y-6">
       <CardSection
         title="通知服务配置"
-        description="选择全局推送服务，并配置邮件和第三方推送渠道"
+        description="配置通知邮件的投递策略"
       >
         <template #actions>
           <Button
@@ -21,49 +21,22 @@
         </template>
 
         <div class="space-y-6">
-          <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div class="flex items-center justify-between gap-4">
             <div>
-              <Label class="block text-sm font-medium">
-                全局推送服务
+              <Label class="text-sm font-medium">
+                启用通知服务
               </Label>
-              <Select v-model="config.default_channel">
-                <SelectTrigger class="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">
-                    所有可用服务
-                  </SelectItem>
-                  <SelectItem value="email">
-                    邮件
-                  </SelectItem>
-                  <SelectItem value="server_chan">
-                    Server 酱
-                  </SelectItem>
-                  <SelectItem value="bark">
-                    Bark
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <p class="mt-1 text-xs text-muted-foreground">
+                {{ canEnableService ? '邮件投递已就绪' : '请先完成邮件配置' }}
+              </p>
             </div>
-
-            <div class="flex items-center justify-between gap-4">
-              <div>
-                <Label class="text-sm font-medium">
-                  启用通知服务
-                </Label>
-                <p class="mt-1 text-xs text-muted-foreground">
-                  {{ canEnableService ? '当前策略有可用推送服务' : '当前策略没有可用推送服务' }}
-                </p>
-              </div>
-              <Switch
-                v-model="config.enabled"
-                :disabled="!canEnableService"
-              />
-            </div>
+            <Switch
+              v-model="config.enabled"
+              :disabled="!canEnableService"
+            />
           </div>
 
-          <div class="grid gap-6 border-t border-border/60 pt-5 lg:grid-cols-3">
+          <div class="border-t border-border/60 pt-5">
             <section class="space-y-4">
               <div class="flex items-center justify-between gap-3">
                 <div>
@@ -108,63 +81,13 @@
                 />
               </div>
             </section>
-
-            <section class="space-y-4">
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <div class="flex items-center gap-2">
-                    <Label class="text-sm font-medium">
-                      Server 酱
-                    </Label>
-                    <Badge :variant="serverChanReady ? 'success' : 'outline'">
-                      {{ serverChanReady ? '可用' : '未就绪' }}
-                    </Badge>
-                  </div>
-                  <p class="mt-1 text-xs text-muted-foreground">
-                    第三方推送服务在扩展模块中独立启用
-                  </p>
-                </div>
-              </div>
-
-              <RouterLink
-                to="/admin/modules/server-chan"
-                class="inline-flex h-11 items-center rounded-xl border border-border/60 bg-card/60 px-4 text-sm font-semibold text-foreground hover:border-primary/60 hover:bg-primary/10 hover:text-primary"
-              >
-                配置 Server 酱推送
-              </RouterLink>
-            </section>
-
-            <section class="space-y-4">
-              <div class="flex items-center justify-between gap-3">
-                <div>
-                  <div class="flex items-center gap-2">
-                    <Label class="text-sm font-medium">
-                      Bark
-                    </Label>
-                    <Badge :variant="barkReady ? 'success' : 'outline'">
-                      {{ barkReady ? '可用' : '未就绪' }}
-                    </Badge>
-                  </div>
-                  <p class="mt-1 text-xs text-muted-foreground">
-                    通过 Bark 向 iOS 设备推送通知
-                  </p>
-                </div>
-              </div>
-
-              <RouterLink
-                to="/admin/modules/bark"
-                class="inline-flex h-11 items-center rounded-xl border border-border/60 bg-card/60 px-4 text-sm font-semibold text-foreground hover:border-primary/60 hover:bg-primary/10 hover:text-primary"
-              >
-                配置 Bark 推送
-              </RouterLink>
-            </section>
           </div>
         </div>
       </CardSection>
 
       <CardSection
         title="通知项"
-        description="每个通知项可以继承全局服务，也可以单独指定推送服务"
+        description="每个通知项可以继承全局邮件策略，也可以单独关闭投递"
       >
         <template #actions>
           <Button
@@ -250,17 +173,8 @@
                     <SelectItem value="global">
                       使用全局
                     </SelectItem>
-                    <SelectItem value="all">
-                      所有可用服务
-                    </SelectItem>
                     <SelectItem value="email">
                       邮件
-                    </SelectItem>
-                    <SelectItem value="server_chan">
-                      Server 酱
-                    </SelectItem>
-                    <SelectItem value="bark">
-                      Bark
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -348,17 +262,8 @@
               <SelectItem value="global">
                 按通知项
               </SelectItem>
-              <SelectItem value="all">
-                所有可用服务
-              </SelectItem>
               <SelectItem value="email">
                 邮件
-              </SelectItem>
-              <SelectItem value="server_chan">
-                Server 酱
-              </SelectItem>
-              <SelectItem value="bark">
-                Bark
               </SelectItem>
             </SelectContent>
           </Select>
@@ -411,12 +316,11 @@ import {
 } from '@/components/ui'
 import { PageHeader, PageContainer, CardSection } from '@/components/layout'
 import { adminApi } from '@/api/admin'
-import { modulesApi, type ModuleStatus } from '@/api/modules'
 import { useToast } from '@/composables/useToast'
 import { parseApiError } from '@/utils/errorParser'
 import { log } from '@/utils/logger'
 
-type DeliveryChannel = 'global' | 'all' | 'email' | 'server_chan' | 'bark'
+type DeliveryChannel = 'global' | 'email'
 
 interface NotificationItem {
   local_id: string
@@ -445,35 +349,9 @@ const CONFIG_KEYS = {
   email_recipients: 'module.important_notification.email_recipients',
   default_channel: 'module.important_notification.default_channel',
   items: 'module.important_notification.items',
-  server_chan_send_key: 'module.server_chan_push.send_key',
-  bark_device_key: 'module.bark_push.device_key',
 } as const
 
 const DEFAULT_ITEMS: NotificationItem[] = [
-  {
-    local_id: 'provider_quota_alert',
-    key: 'provider_quota_alert',
-    name: '号池额度不足',
-    enabled: true,
-    channel: 'global',
-    title_template: '',
-    markdown_template: '',
-    text_template: '',
-    user_email_enabled: false,
-    system: true,
-  },
-  {
-    local_id: 'provider_pool_abnormal',
-    key: 'provider_pool_abnormal',
-    name: '号池异常',
-    enabled: true,
-    channel: 'global',
-    title_template: '号池异常：{provider_name}',
-    markdown_template: '号池 `{provider_name}` 出现异常，请检查服务状态。',
-    text_template: '号池 {provider_name} 出现异常，请检查服务状态。',
-    user_email_enabled: false,
-    system: true,
-  },
   {
     local_id: 'user_balance_low',
     key: 'user_balance_low',
@@ -493,11 +371,7 @@ const { success, error } = useToast()
 const saving = ref(false)
 const testing = ref(false)
 const smtpConfigured = ref(false)
-const serverChanKeyIsSet = ref(false)
-const serverChanStatus = ref<ModuleStatus | null>(null)
-const barkKeyIsSet = ref(false)
-const barkStatus = ref<ModuleStatus | null>(null)
-const testItemKey = ref('provider_quota_alert')
+const testItemKey = ref('user_balance_low')
 const testChannel = ref<DeliveryChannel>('global')
 const lastTestResult = ref<Array<{ channel: string; success: boolean; message: string }>>([])
 
@@ -505,20 +379,12 @@ const config = ref<NotificationConfig>({
   enabled: false,
   email_enabled: false,
   email_recipients: '',
-  default_channel: 'all',
+  default_channel: 'email',
   items: cloneDefaultItems(),
 })
 
 const emailReady = computed(() => {
   return config.value.email_enabled && smtpConfigured.value && config.value.email_recipients.trim() !== ''
-})
-
-const serverChanReady = computed(() => {
-  return serverChanStatus.value?.enabled === true && serverChanKeyIsSet.value
-})
-
-const barkReady = computed(() => {
-  return barkStatus.value?.enabled === true && barkKeyIsSet.value
 })
 
 const canEnableService = computed(() => {
@@ -532,32 +398,21 @@ onMounted(() => {
 
 async function loadConfig() {
   try {
-    const [moduleStatuses, configs] = await Promise.all([
-      modulesApi.getAllStatus(),
-      adminApi.getAllSystemConfigs({ cacheTtlMs: 30_000 }),
-    ])
-    const moduleStatus = moduleStatuses.important_notification
-    const serverChanModuleStatus = moduleStatuses.server_chan_push
-    const barkModuleStatus = moduleStatuses.bark_push
+    const configs = await adminApi.getAllSystemConfigs({ cacheTtlMs: 30_000 })
     const configsByKey = new Map(configs.map(config => [config.key, config]))
+    const enabled = configsByKey.get(CONFIG_KEYS.enabled)
     const emailEnabled = configsByKey.get(CONFIG_KEYS.email_enabled)
     const recipients = configsByKey.get(CONFIG_KEYS.email_recipients)
     const defaultChannel = configsByKey.get(CONFIG_KEYS.default_channel)
     const items = configsByKey.get(CONFIG_KEYS.items)
-    const serverChanKey = configsByKey.get(CONFIG_KEYS.server_chan_send_key)
-    const barkDeviceKey = configsByKey.get(CONFIG_KEYS.bark_device_key)
     const smtpHost = configsByKey.get('smtp_host')
     const smtpFromEmail = configsByKey.get('smtp_from_email')
 
-    config.value.enabled = moduleStatus.enabled === true
+    config.value.enabled = enabled?.value === true
     config.value.email_enabled = emailEnabled?.value === true
     config.value.email_recipients = normalizeRecipients(recipients?.value)
     config.value.default_channel = normalizeDefaultChannel(defaultChannel?.value)
     config.value.items = normalizeItems(items?.value)
-    serverChanStatus.value = serverChanModuleStatus
-    serverChanKeyIsSet.value = serverChanKey?.is_set === true
-    barkStatus.value = barkModuleStatus
-    barkKeyIsSet.value = barkDeviceKey?.is_set === true
     smtpConfigured.value = isNonEmptyString(smtpHost?.value) && isNonEmptyString(smtpFromEmail?.value)
     if (!config.value.items.some(item => item.key === testItemKey.value)) {
       testItemKey.value = config.value.items[0]?.key || ''
@@ -642,11 +497,7 @@ function isItemReady(item: NotificationItem): boolean {
 }
 
 function deliveryReady(channel: Exclude<DeliveryChannel, 'global'>): boolean {
-  if (channel === 'all') return emailReady.value || serverChanReady.value || barkReady.value
-  if (channel === 'email') return emailReady.value
-  if (channel === 'server_chan') return serverChanReady.value
-  if (channel === 'bark') return barkReady.value
-  return false
+  return channel === 'email' && emailReady.value
 }
 
 function resolveItemChannel(item: NotificationItem): Exclude<DeliveryChannel, 'global'> {
@@ -700,13 +551,12 @@ function normalizeItemKey(value: unknown): string {
 }
 
 function normalizeItemChannel(value: unknown): DeliveryChannel {
-  if (value === 'all' || value === 'email' || value === 'server_chan' || value === 'bark') return value
+  if (value === 'email') return value
   return 'global'
 }
 
 function normalizeDefaultChannel(value: unknown): Exclude<DeliveryChannel, 'global'> {
-  if (value === 'email' || value === 'server_chan' || value === 'bark') return value
-  return 'all'
+  return value === 'email' ? value : 'email'
 }
 
 function cloneDefaultItems(): NotificationItem[] {
@@ -729,8 +579,6 @@ function normalizeRecipients(value: unknown): string {
 
 function formatChannel(channel: string): string {
   if (channel === 'email') return '邮件'
-  if (channel === 'server_chan') return 'Server 酱'
-  if (channel === 'bark') return 'Bark'
   if (channel === 'user_email') return '用户邮件'
   if (channel === 'module') return '模块'
   if (channel === 'item') return '通知项'

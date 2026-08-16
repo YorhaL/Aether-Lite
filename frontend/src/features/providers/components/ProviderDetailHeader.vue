@@ -13,17 +13,6 @@
         </Badge>
       </div>
       <div class="flex items-center gap-1 shrink-0">
-        <span :title="formatConversionTitle">
-          <Button
-            variant="ghost"
-            size="icon"
-            :class="(provider.enable_format_conversion || systemFormatConversionEnabled) ? 'text-primary' : ''"
-            :disabled="systemFormatConversionEnabled"
-            @click="$emit('toggleFormatConversion')"
-          >
-            <Shuffle class="w-4 h-4" />
-          </Button>
-        </span>
         <span :title="legacyT(hasFailoverRules ? '已配置故障转移规则（点击编辑）' : '配置故障转移规则')">
           <Button
             variant="ghost"
@@ -34,51 +23,6 @@
             <GitBranch class="w-4 h-4" />
           </Button>
         </span>
-        <Popover
-          :open="providerProxyPopoverOpen"
-          @update:open="$emit('update:providerProxyPopoverOpen', $event)"
-        >
-          <PopoverTrigger as-child>
-            <Button
-              variant="ghost"
-              size="icon"
-              :class="provider.proxy?.node_id ? 'text-blue-500' : ''"
-              :disabled="savingProviderProxy"
-              :title="provider.proxy?.node_id ? `${legacyT('代理')}: ${providerProxyNodeName}` : legacyT('设置代理节点')"
-            >
-              <Globe class="w-4 h-4" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent
-            class="w-72 p-3"
-            side="bottom"
-            align="end"
-          >
-            <div class="space-y-2">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-medium">{{ legacyT('代理节点') }}</span>
-                <Button
-                  v-if="provider.proxy?.node_id"
-                  variant="ghost"
-                  size="sm"
-                  class="h-6 px-2 text-[10px] text-muted-foreground"
-                  :disabled="savingProviderProxy"
-                  @click="$emit('clearProviderProxy')"
-                >
-                  {{ legacyT('清除') }}
-                </Button>
-              </div>
-              <ProxyNodeSelect
-                :model-value="provider.proxy?.node_id || ''"
-                trigger-class="h-8"
-                @update:model-value="$emit('setProviderProxy', $event)"
-              />
-              <p class="text-[10px] text-muted-foreground">
-                {{ legacyT(provider.proxy?.node_id ? '当前使用独立代理' : '未设置代理节点') }}
-              </p>
-            </div>
-          </PopoverContent>
-        </Popover>
         <Button
           variant="ghost"
           size="icon"
@@ -162,33 +106,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { Edit, GitBranch, Globe, Loader2, Plus, Power, Shuffle, X } from 'lucide-vue-next'
+import { Edit, GitBranch, Loader2, Plus, Power, X } from 'lucide-vue-next'
 import Button from '@/components/ui/button.vue'
 import Badge from '@/components/ui/badge.vue'
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui'
 import { useI18n } from '@/i18n'
 import { formatApiFormat } from '@/api/endpoints/types/api-format'
 import type { ProviderEndpoint, ProviderWithEndpointsSummary } from '@/api/endpoints'
-import ProxyNodeSelect from './ProxyNodeSelect.vue'
 
-const props = defineProps<{
+defineProps<{
   provider: ProviderWithEndpointsSummary
   endpoints: ProviderEndpoint[]
   loadingProviderEndpoints: boolean
-  systemFormatConversionEnabled: boolean
   hasFailoverRules: boolean
-  providerProxyPopoverOpen: boolean
-  providerProxyNodeName: string
-  savingProviderProxy: boolean
 }>()
 
 defineEmits<{
-  (e: 'toggleFormatConversion'): void
   (e: 'openFailoverRules'): void
-  (e: 'update:providerProxyPopoverOpen', value: boolean): void
-  (e: 'setProviderProxy', value: string): void
-  (e: 'clearProviderProxy'): void
   (e: 'edit', provider: ProviderWithEndpointsSummary): void
   (e: 'toggleStatus', provider: ProviderWithEndpointsSummary): void
   (e: 'close'): void
@@ -197,10 +130,4 @@ defineEmits<{
 }>()
 
 const { legacyT } = useI18n()
-
-const formatConversionTitle = computed(() => {
-  if (props.systemFormatConversionEnabled) return legacyT('系统级格式转换已启用')
-  if (props.provider.enable_format_conversion) return legacyT('已启用格式转换（点击关闭）')
-  return legacyT('启用格式转换')
-})
 </script>

@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use aether_crypto::{
-    decrypt_python_fernet_ciphertext, encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY,
+    decrypt_fernet_ciphertext, encrypt_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY,
 };
 use aether_data::repository::auth::{
     InMemoryAuthApiKeySnapshotRepository, StoredAuthApiKeySnapshot,
@@ -19,10 +19,6 @@ use aether_data::repository::oauth_providers::{
     InMemoryOAuthProviderRepository, OAuthProviderReadRepository, StoredOAuthProviderConfig,
 };
 use aether_data::repository::provider_catalog::InMemoryProviderCatalogReadRepository;
-use aether_data::repository::proxy_nodes::{
-    InMemoryProxyNodeRepository, ProxyNodeReadRepository, StoredProxyNode, StoredProxyNodeEvent,
-};
-use aether_data::repository::quota::InMemoryProviderQuotaRepository;
 use aether_data::repository::wallet::InMemoryWalletRepository;
 use aether_data_contracts::repository::{
     candidates::{RequestCandidateStatus, StoredRequestCandidate},
@@ -34,7 +30,6 @@ use aether_data_contracts::repository::{
         ProviderCatalogReadRepository, StoredProviderCatalogEndpoint, StoredProviderCatalogKey,
         StoredProviderCatalogProvider,
     },
-    quota::StoredProviderQuotaSnapshot,
 };
 use axum::body::{to_bytes, Body, Bytes};
 use axum::response::Response;
@@ -46,14 +41,13 @@ use serde_json::json;
 
 mod admin;
 mod helpers;
-mod internal;
 mod proxy;
 
 use super::{
     build_router, build_router_with_execution_runtime_override, build_router_with_state,
     build_state_with_execution_runtime_override, start_server, wait_until, AppState,
     FrontdoorCorsConfig, FrontdoorUserRpmConfig, GatewayFallbackMetricKind, GatewayFallbackReason,
-    Infallible, UsageRuntimeConfig, VideoTaskTruthSourceMode,
+    Infallible, UsageRuntimeConfig,
 };
 use crate::constants::*;
 use crate::data::GatewayDataState;

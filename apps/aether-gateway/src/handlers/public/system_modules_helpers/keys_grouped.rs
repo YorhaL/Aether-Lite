@@ -1,9 +1,6 @@
 use super::enabled_key_capability_short_names;
-use crate::handlers::shared::{parse_catalog_auth_config_json, unix_secs_to_rfc3339};
-use crate::provider_key_auth::{
-    provider_key_auth_config_is_agent_identity, provider_key_auth_config_uses_header_authorization,
-    provider_key_effective_api_formats,
-};
+use crate::handlers::shared::unix_secs_to_rfc3339;
+use crate::provider_key_auth::provider_key_effective_api_formats;
 use crate::AppState;
 use aether_data_contracts::repository::provider_catalog::StoredProviderCatalogKey;
 use aether_scheduler_core::provider_key_circuit_payload_is_active_open_at;
@@ -11,25 +8,8 @@ use serde_json::json;
 use std::collections::{BTreeMap, HashMap};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-fn grouped_key_masked_label(
-    state: &AppState,
-    key: &StoredProviderCatalogKey,
-    provider_type: &str,
-) -> &'static str {
-    match key.auth_type.trim() {
-        "service_account" | "vertex_ai" => "[Service Account]",
-        "oauth" => {
-            let auth_config = parse_catalog_auth_config_json(state, key);
-            if provider_key_auth_config_is_agent_identity(provider_type, auth_config.as_ref()) {
-                "[Agent Identity]"
-            } else if provider_key_auth_config_uses_header_authorization(auth_config.as_ref()) {
-                "[OAuth Header]"
-            } else {
-                "[OAuth Token]"
-            }
-        }
-        _ => "[API Key]",
-    }
+fn grouped_key_masked_label(_state: &AppState, _key: &StoredProviderCatalogKey) -> &'static str {
+    "[API Key]"
 }
 
 pub(crate) async fn build_admin_keys_grouped_by_format_payload(
@@ -53,11 +33,7 @@ pub(crate) async fn build_admin_keys_grouped_by_format_payload(
         .map(|provider| {
             (
                 provider.id.clone(),
-                (
-                    provider.name.clone(),
-                    provider.is_active,
-                    provider.provider_type.clone(),
-                ),
+                (provider.name.clone(), provider.is_active),
             )
         })
         .collect::<HashMap<_, _>>();
@@ -105,7 +81,7 @@ pub(crate) async fn build_admin_keys_grouped_by_format_payload(
 
     let mut grouped = BTreeMap::<String, Vec<serde_json::Value>>::new();
     for key in keys {
-        let Some((provider_name, provider_is_active, provider_type)) =
+        let Some((provider_name, provider_is_active)) =
             provider_metadata_by_id.get(&key.provider_id)
         else {
             continue;
@@ -141,14 +117,7 @@ pub(crate) async fn build_admin_keys_grouped_by_format_payload(
             .cloned()
             .unwrap_or_default();
         let capability_names = enabled_key_capability_short_names(key.capabilities.as_ref());
-        let api_formats = provider_key_effective_api_formats(
-            &key,
-            provider_type,
-            endpoints_by_provider
-                .get(&key.provider_id)
-                .map(Vec::as_slice)
-                .unwrap_or(&[]),
-        );
+        let api_formats = provider_key_effective_api_formats(&key);
         if api_formats.is_empty() {
             continue;
         }
@@ -167,7 +136,7 @@ pub(crate) async fn build_admin_keys_grouped_by_format_payload(
                 "provider_id": key.provider_id,
                 "name": key.name,
                 "auth_type": key.auth_type,
-                "api_key_masked": grouped_key_masked_label(state, &key, provider_type),
+                "api_key_masked": grouped_key_masked_label(state, &key),
                 "internal_priority": key.internal_priority,
                 "global_priority_by_format": key.global_priority_by_format,
                 "rate_multipliers": key.rate_multipliers,

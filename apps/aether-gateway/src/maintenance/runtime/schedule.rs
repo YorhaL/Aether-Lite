@@ -8,27 +8,10 @@ use tracing::warn;
 use crate::data::GatewayDataState;
 
 use super::{
-    system_config_string, WalletDailyUsageAggregationTarget, DB_MAINTENANCE_HOUR,
-    DB_MAINTENANCE_MINUTE, DB_MAINTENANCE_WEEKDAY, DB_MAINTENANCE_WEEKLY_INTERVAL,
-    MAINTENANCE_DEFAULT_TIMEZONE, PROVIDER_CHECKIN_DEFAULT_TIME, STATS_DAILY_AGGREGATION_HOUR,
+    system_config_string, DB_MAINTENANCE_HOUR, DB_MAINTENANCE_MINUTE, DB_MAINTENANCE_WEEKDAY,
+    DB_MAINTENANCE_WEEKLY_INTERVAL, MAINTENANCE_DEFAULT_TIMEZONE, STATS_DAILY_AGGREGATION_HOUR,
     STATS_DAILY_AGGREGATION_MINUTE, STATS_HOURLY_AGGREGATION_MINUTE,
 };
-
-pub(super) async fn provider_checkin_schedule(
-    data: &GatewayDataState,
-) -> Result<(u32, u32), DataLayerError> {
-    let configured =
-        system_config_string(data, "provider_checkin_time", PROVIDER_CHECKIN_DEFAULT_TIME).await?;
-    Ok(parse_hhmm_time(&configured).unwrap_or_else(|| {
-        warn!(
-            value = %configured,
-            fallback = PROVIDER_CHECKIN_DEFAULT_TIME,
-            "gateway provider checkin time invalid; falling back"
-        );
-        parse_hhmm_time(PROVIDER_CHECKIN_DEFAULT_TIME)
-            .expect("default provider checkin time should parse")
-    }))
-}
 
 pub(super) fn maintenance_timezone() -> Tz {
     let configured = std::env::var("APP_TIMEZONE")
@@ -191,30 +174,6 @@ pub(super) fn stats_hourly_aggregation_target_hour(now_utc: DateTime<Utc>) -> Da
             .and_hms_opt(previous_hour.hour(), 0, 0)
             .expect("stats hourly aggregation target hour should be valid"),
     )
-}
-
-pub(super) fn wallet_daily_usage_aggregation_target(
-    now_utc: DateTime<Utc>,
-    timezone: Tz,
-) -> WalletDailyUsageAggregationTarget {
-    let local_today = now_utc.with_timezone(&timezone).date_naive();
-    let billing_date = local_today - chrono::Duration::days(1);
-    let next_billing_date = billing_date + chrono::Duration::days(1);
-
-    WalletDailyUsageAggregationTarget {
-        billing_date,
-        billing_timezone: timezone.to_string(),
-        window_start_utc: local_day_start_utc(billing_date, timezone),
-        window_end_utc: local_day_start_utc(next_billing_date, timezone),
-    }
-}
-
-pub(super) fn local_day_start_utc(date: chrono::NaiveDate, timezone: Tz) -> DateTime<Utc> {
-    let local_start = date
-        .and_hms_opt(0, 0, 0)
-        .and_then(|naive| resolve_local_scheduled_time(timezone, naive))
-        .expect("local day start should resolve");
-    local_start.with_timezone(&Utc)
 }
 
 pub(super) fn resolve_local_scheduled_time(

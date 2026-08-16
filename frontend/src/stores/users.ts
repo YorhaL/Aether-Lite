@@ -20,9 +20,6 @@ import {
   type UserGroupMember,
   type UpsertUserGroupRequest,
   type ListUserGroupsResponse,
-  type AdminUserPlanEntitlementsResponse,
-  type GrantUserPlanRequest,
-  type GrantUserPlanResponse,
 } from '@/api/users'
 import { parseApiError } from '@/utils/errorParser'
 
@@ -293,29 +290,6 @@ export const useUsersStore = defineStore('users', () => {
     }
   }
 
-  async function listUserPlanEntitlements(
-    userId: string,
-  ): Promise<AdminUserPlanEntitlementsResponse> {
-    try {
-      return await usersApi.listUserPlanEntitlements(userId)
-    } catch (err: unknown) {
-      error.value = parseApiError(err, '获取用户套餐失败')
-      throw err
-    }
-  }
-
-  async function grantUserPlan(
-    userId: string,
-    payload: GrantUserPlanRequest,
-  ): Promise<GrantUserPlanResponse> {
-    try {
-      return await usersApi.grantUserPlan(userId, payload)
-    } catch (err: unknown) {
-      error.value = parseApiError(err, '发放用户套餐失败')
-      throw err
-    }
-  }
-
   async function revokeUserSession(userId: string, sessionId: string): Promise<{ message: string }> {
     try {
       return await usersApi.revokeUserSession(userId, sessionId)
@@ -364,8 +338,6 @@ export const useUsersStore = defineStore('users', () => {
     deleteApiKey,
     getFullApiKey,
     getUserSessions,
-    listUserPlanEntitlements,
-    grantUserPlan,
     revokeUserSession,
     revokeAllUserSessions,
   }

@@ -28,15 +28,7 @@ pub(crate) struct VideoTaskStatsResponse {
 
 #[derive(Debug, Clone)]
 pub(crate) enum VideoTaskVideoSource {
-    Redirect {
-        url: String,
-    },
-    Proxy {
-        url: String,
-        header_name: String,
-        header_value: String,
-        filename: String,
-    },
+    Redirect { url: String },
 }
 
 pub(crate) async fn read_video_task_page(
@@ -119,48 +111,7 @@ pub(crate) async fn read_video_task_video_source(
         return Ok(None);
     };
 
-    if !video_url.contains("generativelanguage.googleapis.com") {
-        return Ok(Some(VideoTaskVideoSource::Redirect { url: video_url }));
-    }
-
-    let Some(provider_id) = task.provider_id.as_deref() else {
-        return Err(GatewayError::Internal(
-            "video task is missing provider_id for proxied video".to_string(),
-        ));
-    };
-    let Some(endpoint_id) = task.endpoint_id.as_deref() else {
-        return Err(GatewayError::Internal(
-            "video task is missing endpoint_id for proxied video".to_string(),
-        ));
-    };
-    let Some(key_id) = task.key_id.as_deref() else {
-        return Err(GatewayError::Internal(
-            "video task is missing key_id for proxied video".to_string(),
-        ));
-    };
-
-    let Some(transport) = state
-        .read_provider_transport_snapshot(provider_id, endpoint_id, key_id)
-        .await?
-    else {
-        return Err(GatewayError::Internal(
-            "provider transport snapshot is unavailable for proxied video".to_string(),
-        ));
-    };
-
-    let api_key = transport.key.decrypted_api_key.trim();
-    if api_key.is_empty() {
-        return Err(GatewayError::Internal(
-            "provider transport key is unavailable for proxied video".to_string(),
-        ));
-    }
-
-    Ok(Some(VideoTaskVideoSource::Proxy {
-        url: video_url,
-        header_name: "x-goog-api-key".to_string(),
-        header_value: api_key.to_string(),
-        filename: format!("video_{task_id}.mp4"),
-    }))
+    Ok(Some(VideoTaskVideoSource::Redirect { url: video_url }))
 }
 
 pub(crate) async fn read_video_task_stats(

@@ -134,25 +134,6 @@
                   {{ mapping.name }}
                 </span>
               </div>
-              <!-- 测试按钮 -->
-              <Button
-                v-if="group.operations.length === 0"
-                variant="ghost"
-                size="icon"
-                class="h-7 w-7 shrink-0"
-                title="测试映射"
-                :disabled="testingMapping === `${getAliasGroupKey(group)}-${mapping.name}`"
-                @click="testMapping(group, mapping)"
-              >
-                <Loader2
-                  v-if="testingMapping === `${getAliasGroupKey(group)}-${mapping.name}`"
-                  class="w-3 h-3 animate-spin"
-                />
-                <Play
-                  v-else
-                  class="w-3 h-3"
-                />
-              </Button>
             </div>
           </div>
         </div>
@@ -200,23 +181,21 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { Tag, Plus, Edit, Trash2, ChevronRight, Loader2, Play } from 'lucide-vue-next'
+import { Tag, Plus, Edit, Trash2, ChevronRight } from 'lucide-vue-next'
 import { Card, Button, Badge } from '@/components/ui'
 import AlertDialog from '@/components/common/AlertDialog.vue'
 import ModelMappingDialog, { type AliasGroup } from '../ModelMappingDialog.vue'
 import { useToast } from '@/composables/useToast'
 import {
   getProviderModels,
-  testModel,
   API_FORMAT_LABELS,
   type Model,
   type ProviderModelAlias
 } from '@/api/endpoints'
 import { updateModel } from '@/api/endpoints/models'
 import { useI18n } from '@/i18n'
-import { parseApiError, parseTestModelError } from '@/utils/errorParser'
+import { parseApiError } from '@/utils/errorParser'
 import { formatApiFormat } from '@/api/endpoints/types/api-format'
-import { buildExactModelMappingTestRequest } from './model-test-request'
 import type { ProviderWithEndpointsSummary } from '@/api/endpoints'
 import {
   formatModelMappingRequestScope,
@@ -242,7 +221,6 @@ const dialogOpen = ref(false)
 const deleteConfirmOpen = ref(false)
 const editingGroup = ref<AliasGroup | null>(null)
 const deletingGroup = ref<AliasGroup | null>(null)
-const testingMapping = ref<string | null>(null)
 const preselectedModelId = ref<string | null>(null)
 
 // 列表展开状态
@@ -454,45 +432,6 @@ async function confirmDelete() {
 async function onDialogSaved() {
   await loadModels()
   emit('refresh')
-}
-
-// 测试模型映射
-async function testMapping(group: AliasGroup, mapping: ProviderModelAlias) {
-  const testingKey = `${getAliasGroupKey(group)}-${mapping.name}`
-  testingMapping.value = testingKey
-
-  try {
-    // 根据分组的 API 格式来确定应该使用的格式
-    let apiFormat = null
-    if (group.apiFormats.length === 1) {
-      apiFormat = group.apiFormats[0]
-    } else if (group.apiFormats.length === 0) {
-      // 如果没有指定格式，但分组显示为"全部"，则使用模型的默认格式
-      apiFormat = group.model.effective_api_format || group.model.api_format
-    }
-
-    const result = await testModel(
-      buildExactModelMappingTestRequest(props.provider.id, mapping.name, apiFormat)
-    )
-
-    if (result.success) {
-      showSuccess(`映射 "${mapping.name}" 测试成功`)
-
-      // 如果有响应内容，可以显示更多信息
-      if (result.data?.response?.choices?.[0]?.message?.content) {
-        const content = result.data.response.choices[0].message.content
-        showSuccess(`测试成功，响应: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`)
-      } else if (result.data?.content_preview) {
-        showSuccess(`流式测试成功，预览: ${result.data.content_preview}`)
-      }
-    } else {
-      showError(`映射测试失败: ${parseTestModelError(result)}`)
-    }
-  } catch (err: unknown) {
-    showError(`映射测试失败: ${parseApiError(err, '测试请求失败')}`)
-  } finally {
-    testingMapping.value = null
-  }
 }
 
 // 监听 provider 变化

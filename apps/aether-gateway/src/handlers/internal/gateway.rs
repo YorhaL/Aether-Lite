@@ -1,12 +1,9 @@
 use super::{
     attach_execution_path_header, build_internal_control_error_response,
-    build_internal_finalize_decision, build_internal_gateway_fallback_plan_payload,
-    build_internal_gateway_header_map, build_internal_gateway_passthrough_payload,
-    build_internal_gateway_proxy_public_response, build_internal_gateway_request_parts,
-    build_internal_gateway_resolve_payload, build_internal_gateway_uri,
-    build_internal_tunnel_heartbeat_ack, build_management_token_payload, gateway_error_message,
-    maybe_build_internal_finalize_video_response, parse_internal_tunnel_heartbeat_request,
-    parse_internal_tunnel_node_status_request,
+    build_internal_gateway_fallback_plan_payload, build_internal_gateway_header_map,
+    build_internal_gateway_passthrough_payload, build_internal_gateway_proxy_public_response,
+    build_internal_gateway_request_parts, build_internal_gateway_resolve_payload,
+    build_internal_gateway_uri, build_management_token_payload,
 };
 use crate::ai_serving::api;
 use crate::constants::{
@@ -19,11 +16,7 @@ use crate::execution_runtime::{execute_execution_runtime_stream, execute_executi
 use crate::handlers::shared::{
     InternalGatewayAuthContextRequest, InternalGatewayExecuteRequest, InternalGatewayResolveRequest,
 };
-use crate::tunnel::{is_tunnel_heartbeat_path, is_tunnel_node_status_path, TUNNEL_ROUTE_FAMILY};
 use crate::{AppState, GatewayError};
-use aether_data::repository::proxy_nodes::{
-    ProxyNodeHeartbeatMutation, ProxyNodeTunnelStatusMutation,
-};
 use axum::body::{Body, Bytes};
 use axum::http::{self, HeaderName, HeaderValue, Response};
 use axum::response::IntoResponse;
@@ -715,63 +708,6 @@ pub(crate) async fn maybe_build_local_internal_proxy_response_impl(
                 crate::usage::submit_stream_report(state, payload).await?;
                 return Ok(Some(Json(json!({ "ok": true })).into_response()));
             }
-            Some("finalize_sync")
-                if request_context.request_path == "/api/internal/gateway/finalize-sync" =>
-            {
-                let Some(request_body) = request_body else {
-                    return Ok(Some(build_internal_control_error_response(
-                        http::StatusCode::BAD_REQUEST,
-                        "invalid internal gateway finalize-sync payload",
-                    )));
-                };
-                let payload = match serde_json::from_slice::<crate::usage::GatewaySyncReportRequest>(
-                    request_body,
-                ) {
-                    Ok(payload) => payload,
-                    Err(_) => {
-                        return Ok(Some(build_internal_control_error_response(
-                            http::StatusCode::BAD_REQUEST,
-                            "invalid internal gateway finalize-sync payload",
-                        )));
-                    }
-                };
-                let Some(synthetic_decision) = build_internal_finalize_decision(&payload) else {
-                    return Ok(Some(build_internal_control_error_response(
-                        http::StatusCode::BAD_REQUEST,
-                        "Unsupported gateway sync finalize kind",
-                    )));
-                };
-                let trace_id = payload.trace_id.clone();
-                if let Some(outcome) = api::maybe_build_sync_finalize_outcome(
-                    trace_id.as_str(),
-                    &synthetic_decision,
-                    &payload,
-                )? {
-                    if let Some(background_report) = outcome.background_report {
-                        crate::usage::spawn_sync_report(state.clone(), background_report);
-                    }
-                    let mut response = outcome.response;
-                    response.headers_mut().insert(
-                        HeaderName::from_static(CONTROL_EXECUTED_HEADER),
-                        HeaderValue::from_static("true"),
-                    );
-                    return Ok(Some(response));
-                }
-                if let Some(response) = maybe_build_internal_finalize_video_response(
-                    state,
-                    trace_id.as_str(),
-                    &synthetic_decision,
-                    payload,
-                )
-                .await?
-                {
-                    return Ok(Some(response));
-                }
-                return Ok(Some(build_internal_control_error_response(
-                    http::StatusCode::BAD_REQUEST,
-                    "Unsupported gateway sync finalize kind",
-                )));
-            }
             _ => {
                 return Ok(Some(build_internal_control_error_response(
                     http::StatusCode::NOT_FOUND,
@@ -780,94 +716,5 @@ pub(crate) async fn maybe_build_local_internal_proxy_response_impl(
             }
         }
     }
-    if !remote_addr.ip().is_loopback() {
-        return Ok(Some(build_internal_control_error_response(
-            http::StatusCode::FORBIDDEN,
-            "loopback access only",
-        )));
-    }
-
-    if decision.route_family.as_deref() != Some(TUNNEL_ROUTE_FAMILY)
-        || request_context.request_method != http::Method::POST
-    {
-        return Ok(None);
-    }
-
-    match decision.route_kind.as_deref() {
-        Some("heartbeat") if is_tunnel_heartbeat_path(request_context.request_path.as_str()) => {
-            let Some(request_body) = request_body else {
-                return Ok(Some(build_internal_control_error_response(
-                    http::StatusCode::BAD_REQUEST,
-                    "invalid heartbeat payload",
-                )));
-            };
-            let payload = match parse_internal_tunnel_heartbeat_request(request_body) {
-                Ok(payload) => payload,
-                Err(response) => return Ok(Some(response)),
-            };
-            let node_id = payload.node_id.trim().to_string();
-            let mutation = ProxyNodeHeartbeatMutation {
-                node_id: node_id.clone(),
-                heartbeat_interval: payload.heartbeat_interval,
-                active_connections: payload.active_connections,
-                total_requests_delta: payload.window_total_requests.or(payload.total_requests),
-                avg_latency_ms: payload.avg_latency_ms,
-                failed_requests_delta: payload.window_failed_requests.or(payload.failed_requests),
-                dns_failures_delta: payload.window_dns_failures.or(payload.dns_failures),
-                stream_errors_delta: payload.window_stream_errors.or(payload.stream_errors),
-                proxy_metadata: payload.proxy_metadata,
-                proxy_version: payload.proxy_version,
-            };
-
-            let response = match state.apply_proxy_node_heartbeat(&mutation).await {
-                Ok(Some(node)) => Json(build_internal_tunnel_heartbeat_ack(
-                    &node,
-                    payload.heartbeat_id,
-                ))
-                .into_response(),
-                Ok(None) => build_internal_control_error_response(
-                    http::StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("heartbeat sync failed: ProxyNode {node_id} 不存在"),
-                ),
-                Err(err) => build_internal_control_error_response(
-                    http::StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("heartbeat sync failed: {}", gateway_error_message(err)),
-                ),
-            };
-            return Ok(Some(response));
-        }
-        Some("node_status")
-            if is_tunnel_node_status_path(request_context.request_path.as_str()) =>
-        {
-            let Some(request_body) = request_body else {
-                return Ok(Some(build_internal_control_error_response(
-                    http::StatusCode::BAD_REQUEST,
-                    "invalid node-status payload",
-                )));
-            };
-            let payload = match parse_internal_tunnel_node_status_request(request_body) {
-                Ok(payload) => payload,
-                Err(response) => return Ok(Some(response)),
-            };
-            let mutation = ProxyNodeTunnelStatusMutation {
-                node_id: payload.node_id.trim().to_string(),
-                connected: payload.connected,
-                conn_count: payload.conn_count,
-                detail: None,
-                observed_at_unix_secs: payload.observed_at_unix_secs,
-            };
-
-            let response = match state.update_proxy_node_tunnel_status(&mutation).await {
-                Ok(node) => Json(json!({ "updated": node.is_some() })).into_response(),
-                Err(err) => build_internal_control_error_response(
-                    http::StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("node status sync failed: {}", gateway_error_message(err)),
-                ),
-            };
-            return Ok(Some(response));
-        }
-        _ => {}
-    }
-
     Ok(None)
 }

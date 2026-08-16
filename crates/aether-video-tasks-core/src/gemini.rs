@@ -167,7 +167,6 @@ impl GeminiVideoTaskSeed {
             client_api_format: "gemini:video".to_string(),
             provider_api_format: "gemini:video".to_string(),
             model_name: Some(self.model.clone()),
-            proxy: self.transport.proxy.clone(),
             transport_profile: self.transport.transport_profile.clone(),
             timeouts: self.transport.timeouts.clone(),
         })
@@ -227,7 +226,6 @@ impl GeminiVideoTaskSeed {
                 client_api_format: "gemini:video".to_string(),
                 provider_api_format: "gemini:video".to_string(),
                 model_name: Some(self.model.clone()),
-                proxy: self.transport.proxy.clone(),
                 transport_profile: self.transport.transport_profile.clone(),
                 timeouts: self.transport.timeouts.clone(),
             },
@@ -312,7 +310,6 @@ impl GeminiVideoTaskSeed {
             key_id: Some(self.transport.key_id.clone()),
             client_api_format: Some(self.persistence.client_api_format.clone()),
             provider_api_format: Some(self.persistence.provider_api_format.clone()),
-            format_converted: self.persistence.format_converted,
             model: Some(self.model.clone()),
             prompt: request_body_string(&self.persistence.original_request_body, "prompt")
                 .or_else(|| Some(String::new())),
@@ -385,7 +382,6 @@ mod tests {
             key_id: None,
             client_api_format: Some("gemini:video".to_string()),
             provider_api_format: Some("gemini:video".to_string()),
-            format_converted: false,
             model: Some("veo-3".to_string()),
             prompt: None,
             original_request_body: None,

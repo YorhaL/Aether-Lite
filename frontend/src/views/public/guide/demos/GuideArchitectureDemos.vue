@@ -100,9 +100,9 @@ const demos = [
         <div class="flex gap-24 w-full justify-center">
           <div class="w-72 h-32 bg-[#a855f7]/10 border-2 border-[#a855f7] rounded-xl flex flex-col items-center justify-center text-[#a855f7]">
             <h3 class="font-bold text-lg mb-2">
-              3. 格式转换引擎
+              3. 同格式透传
             </h3>
-            <span class="text-xs font-mono">Protocols Translate</span>
+            <span class="text-xs font-mono">Native Passthrough</span>
           </div>
           <div class="w-72 h-32 bg-[#3b82f6]/10 border-2 border-[#3b82f6] rounded-xl flex flex-col items-center justify-center text-[#3b82f6]">
             <h3 class="font-bold text-lg mb-2">
@@ -130,7 +130,7 @@ const demos = [
             Gemini
           </div>
           <div class="px-6 py-2 bg-amber-500/10 text-amber-600 rounded-lg font-bold">
-            Custom Reverse Proxies (Codex, Kiro...)
+            Custom upstream APIs
           </div>
         </div>
       </div>
@@ -173,7 +173,7 @@ const demos = [
         <!-- Engines Top/Bottom -->
         <div class="absolute top-24 left-1/2 -translate-x-1/2 flex flex-col items-center">
           <div class="w-48 h-16 bg-[#a855f7]/10 border-2 border-[#a855f7] rounded-xl flex items-center justify-center text-sm font-bold text-[#a855f7]">
-            格式转换引擎
+            同格式透传管道
           </div>
           <div class="w-[1px] h-12 bg-[#a855f7]" />
         </div>
@@ -254,21 +254,18 @@ const demos = [
               LAYER 3: EGRESS & UPSTREAM
             </h3>
             
-            <div class="flex gap-8 mb-6">
-              <div class="flex-1 h-16 bg-[#a855f7]/20 border border-[#a855f7] rounded flex items-center justify-center text-[#a855f7] font-bold">
-                Format Convert
-              </div>
-              <div class="flex-1 h-16 bg-[#3b82f6]/20 border border-[#3b82f6] rounded flex items-center justify-center text-[#3b82f6] font-bold">
+            <div class="flex mb-6">
+              <div class="w-full h-16 bg-[#3b82f6]/20 border border-[#3b82f6] rounded flex items-center justify-center text-[#3b82f6] font-bold">
                 Direct Passthrough
               </div>
             </div>
 
             <div class="w-full flex gap-4 h-16">
               <div class="w-full border border-dashed border-emerald-500 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-600 font-bold">
-                Providers (Claude, OpenAI)
+                Custom providers
               </div>
               <div class="w-full border border-dashed border-amber-500 rounded bg-amber-500/10 flex items-center justify-center text-amber-600 font-bold">
-                Reverse Proxies
+                Custom endpoints
               </div>
             </div>
           </div>

@@ -20,7 +20,6 @@ pub(crate) struct UsageRoutingSnapshot {
     selected_provider_id: Option<String>,
     selected_endpoint_id: Option<String>,
     selected_provider_api_key_id: Option<String>,
-    has_format_conversion: Option<bool>,
 }
 
 impl UsageRoutingSnapshot {
@@ -40,7 +39,6 @@ impl UsageRoutingSnapshot {
             || self.selected_provider_id.is_some()
             || self.selected_endpoint_id.is_some()
             || self.selected_provider_api_key_id.is_some()
-            || self.has_format_conversion.is_some()
     }
 }
 
@@ -68,7 +66,6 @@ pub(crate) struct UsageSettlementPricingSnapshot {
     billing_rule_id: Option<String>,
     billing_rule_version: Option<String>,
     rate_multiplier: Option<f64>,
-    is_free_tier: Option<bool>,
     input_price_per_1m: Option<f64>,
     output_price_per_1m: Option<f64>,
     cache_creation_price_per_1m: Option<f64>,
@@ -100,7 +97,6 @@ impl UsageSettlementPricingSnapshot {
             || self.billing_rule_id.is_some()
             || self.billing_rule_version.is_some()
             || self.rate_multiplier.is_some()
-            || self.is_free_tier.is_some()
             || self.input_price_per_1m.is_some()
             || self.output_price_per_1m.is_some()
             || self.cache_creation_price_per_1m.is_some()
@@ -155,13 +151,11 @@ fn routing_snapshot_from_usage(usage: &UpsertUsageRecord) -> UsageRoutingSnapsho
         selected_provider_id: None,
         selected_endpoint_id: None,
         selected_provider_api_key_id: None,
-        has_format_conversion: None,
     };
     if snapshot.has_metadata_fields() {
         snapshot.selected_provider_id = usage.provider_id.clone();
         snapshot.selected_endpoint_id = usage.provider_endpoint_id.clone();
         snapshot.selected_provider_api_key_id = usage.provider_api_key_id.clone();
-        snapshot.has_format_conversion = usage.has_format_conversion;
     }
     snapshot
 }
@@ -274,15 +268,14 @@ fn settlement_snapshot_from_usage(
             "pricing_snapshot",
             "pricing_source",
         ),
-        billing_rule_id: settlement_nested_string(metadata, "billing_plan_snapshot", "rule_id")
+        billing_rule_id: settlement_nested_string(metadata, "billing_rule_snapshot", "rule_id")
             .or_else(|| billing_snapshot_string_field(metadata, "rule_id")),
         billing_rule_version: settlement_nested_string(
             metadata,
-            "billing_plan_snapshot",
+            "billing_rule_snapshot",
             "rule_version",
         ),
         rate_multiplier: metadata_number(metadata, "rate_multiplier"),
-        is_free_tier: metadata_bool(metadata, "is_free_tier"),
         input_price_per_1m: metadata_number(metadata, "input_price_per_1m")
             .or_else(|| billing_snapshot_resolved_number(metadata, "input_price_per_1m")),
         output_price_per_1m: metadata_number(metadata, "output_price_per_1m")
@@ -322,7 +315,7 @@ async fn sync_routing(
         "INSERT INTO usage_routing_snapshots (request_id, candidate_id, candidate_index, \
          key_name, planner_kind, route_family, route_kind, execution_path, \
          local_execution_runtime_miss_reason, selected_provider_id, selected_endpoint_id, \
-         selected_provider_api_key_id, has_format_conversion, created_at, updated_at) VALUES (",
+         selected_provider_api_key_id, created_at, updated_at) VALUES (",
     );
     {
         let mut values = query.separated(", ");
@@ -339,7 +332,6 @@ async fn sync_routing(
             .push_bind(snapshot.selected_provider_id.as_deref())
             .push_bind(snapshot.selected_endpoint_id.as_deref())
             .push_bind(snapshot.selected_provider_api_key_id.as_deref())
-            .push_bind(snapshot.has_format_conversion)
             .push_bind(now)
             .push_bind(now);
     }
@@ -358,7 +350,6 @@ async fn sync_routing(
             "selected_provider_id",
             "selected_endpoint_id",
             "selected_provider_api_key_id",
-            "has_format_conversion",
         ],
         "usage_routing_snapshots",
         replace_existing,
@@ -390,7 +381,7 @@ async fn sync_settlement(
          billing_total_input_context, billing_cache_creation_cost_usd, \
          billing_cache_read_cost_usd, billing_total_cost_usd, \
          billing_actual_total_cost_usd, billing_pricing_source, billing_rule_id, \
-         billing_rule_version, rate_multiplier, is_free_tier, input_price_per_1m, \
+         billing_rule_version, rate_multiplier, input_price_per_1m, \
          output_price_per_1m, cache_creation_price_per_1m, cache_read_price_per_1m, \
          price_per_request, created_at, updated_at) VALUES (",
     );
@@ -420,7 +411,6 @@ async fn sync_settlement(
             .push_bind(snapshot.billing_rule_id.as_deref())
             .push_bind(snapshot.billing_rule_version.as_deref())
             .push_bind(snapshot.rate_multiplier)
-            .push_bind(snapshot.is_free_tier)
             .push_bind(snapshot.input_price_per_1m)
             .push_bind(snapshot.output_price_per_1m)
             .push_bind(snapshot.cache_creation_price_per_1m)
@@ -457,7 +447,6 @@ async fn sync_settlement(
             "billing_rule_id",
             "billing_rule_version",
             "rate_multiplier",
-            "is_free_tier",
             "input_price_per_1m",
             "output_price_per_1m",
             "cache_creation_price_per_1m",
@@ -596,10 +585,6 @@ fn settlement_snapshot_from_row(
             .try_get("settlement_billing_rule_version")
             .map_sql_err()?,
         rate_multiplier: row.try_get("settlement_rate_multiplier").map_sql_err()?,
-        is_free_tier: row
-            .try_get::<Option<i64>, _>("settlement_is_free_tier")
-            .map_sql_err()?
-            .map(|value| value != 0),
         input_price_per_1m: row.try_get("settlement_input_price_per_1m").map_sql_err()?,
         output_price_per_1m: row
             .try_get("settlement_output_price_per_1m")
@@ -652,7 +637,6 @@ fn attach_settlement_metadata(
         snapshot.billing_dimensions.as_ref(),
     );
     insert_number(&mut metadata, "rate_multiplier", snapshot.rate_multiplier);
-    insert_bool(&mut metadata, "is_free_tier", snapshot.is_free_tier);
     insert_number(
         &mut metadata,
         "input_price_per_1m",
@@ -696,12 +680,6 @@ fn insert_number(metadata: &mut Map<String, Value>, key: &str, value: Option<f64
     }
 }
 
-fn insert_bool(metadata: &mut Map<String, Value>, key: &str, value: Option<bool>) {
-    if let Some(value) = value {
-        metadata.insert(key.to_string(), Value::Bool(value));
-    }
-}
-
 fn insert_value(metadata: &mut Map<String, Value>, key: &str, value: Option<&Value>) {
     if let Some(value) = value {
         metadata.insert(key.to_string(), value.clone());
@@ -732,12 +710,6 @@ fn metadata_u64(metadata: Option<&Map<String, Value>>, key: &str) -> Option<u64>
                 .or_else(|| value.as_i64().and_then(|number| u64::try_from(number).ok()))
         })
     })
-}
-
-fn metadata_bool(metadata: Option<&Map<String, Value>>, key: &str) -> Option<bool> {
-    metadata
-        .and_then(|object| object.get(key))
-        .and_then(Value::as_bool)
 }
 
 fn billing_snapshot_object(metadata: Option<&Map<String, Value>>) -> Option<&Map<String, Value>> {

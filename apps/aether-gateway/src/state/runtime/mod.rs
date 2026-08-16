@@ -1,11 +1,6 @@
 use super::super::error::GatewayError;
 use super::super::{scheduler, usage};
-use super::{
-    AdminBillingCollectorRecord, AdminBillingCollectorWriteInput, AdminBillingPresetApplyResult,
-    AdminBillingRuleRecord, AdminBillingRuleWriteInput, AdminPaymentCallbackRecord,
-    AdminSecurityBlacklistEntry, AdminWalletMutationOutcome, AdminWalletPaymentOrderRecord,
-    AdminWalletRefundRecord, AdminWalletTransactionRecord, AppState, LocalMutationOutcome,
-};
+use super::AppState;
 
 mod announcements;
 mod api_key_exports;
@@ -15,8 +10,6 @@ mod billing;
 mod candidate_queries;
 mod gemini_files;
 mod monitoring;
-mod payments;
-mod referrals;
 mod security;
 mod usage_queries;
 mod user_preferences;
@@ -114,10 +107,6 @@ impl AppState {
         self.data.has_wallet_writer()
     }
 
-    pub fn has_provider_quota_data_writer(&self) -> bool {
-        self.data.has_provider_quota_writer()
-    }
-
     pub(crate) async fn count_active_admin_users(&self) -> Result<u64, GatewayError> {
         #[cfg(test)]
         if let Some(store) = self.auth_user_store.as_ref() {
@@ -134,42 +123,6 @@ impl AppState {
 
         self.data
             .count_active_admin_users()
-            .await
-            .map_err(|err| GatewayError::Internal(err.to_string()))
-    }
-
-    pub(crate) async fn count_user_pending_refunds(
-        &self,
-        user_id: &str,
-    ) -> Result<u64, GatewayError> {
-        #[cfg(test)]
-        {
-            let _ = user_id;
-            if self.auth_user_store.is_some() {
-                return Ok(0);
-            }
-        }
-
-        self.data
-            .count_user_pending_refunds(user_id)
-            .await
-            .map_err(|err| GatewayError::Internal(err.to_string()))
-    }
-
-    pub(crate) async fn count_user_pending_payment_orders(
-        &self,
-        user_id: &str,
-    ) -> Result<u64, GatewayError> {
-        #[cfg(test)]
-        {
-            let _ = user_id;
-            if self.auth_user_store.is_some() {
-                return Ok(0);
-            }
-        }
-
-        self.data
-            .count_user_pending_payment_orders(user_id)
             .await
             .map_err(|err| GatewayError::Internal(err.to_string()))
     }

@@ -95,7 +95,7 @@ async fn gateway_handles_models_support_routes_locally_with_public_support_contr
         .await
         .expect("request should succeed");
 
-    assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
     assert_eq!(
         response
             .headers()
@@ -139,10 +139,7 @@ async fn gateway_handles_models_support_routes_locally_with_public_support_contr
         Some("trace-models-123")
     );
     let payload: serde_json::Value = response.json().await.expect("body should parse");
-    assert_eq!(
-        payload["detail"],
-        "public support route not implemented in rust frontdoor"
-    );
+    assert_eq!(payload["detail"], "Route not found");
     assert_eq!(payload["route_family"], "models");
     assert_eq!(payload["route_kind"], "list");
     assert_eq!(*upstream_hits.lock().expect("mutex should lock"), 0);

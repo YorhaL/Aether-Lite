@@ -1,5 +1,3 @@
-#[cfg(feature = "mysql")]
-mod mysql;
 #[cfg(feature = "postgres")]
 mod postgres;
 #[cfg(feature = "sqlite")]
@@ -10,7 +8,6 @@ use crate::maintenance::{
     DatabaseMaintenanceSummary, DatabasePoolSummary, DatabasePostgresActivityGroup,
     DatabasePostgresObservabilitySnapshot, StatsDailyAggregationInput,
     StatsDailyAggregationSummary, StatsHourlyAggregationInput, StatsHourlyAggregationSummary,
-    WalletDailyUsageAggregationInput, WalletDailyUsageAggregationResult,
 };
 use crate::repository::system::{
     AdminSystemPurgeSummary, AdminSystemPurgeTarget, AdminSystemStats,
@@ -65,10 +62,6 @@ impl DataBackends {
     }
 
     pub fn has_system_config_backend(&self) -> bool {
-        self.sql_backend().is_some()
-    }
-
-    pub fn has_wallet_daily_usage_aggregation_backend(&self) -> bool {
         self.sql_backend().is_some()
     }
 
@@ -159,16 +152,6 @@ impl DataBackends {
         match self.postgres() {
             Some(postgres) => postgres.postgres_activity_groups(limit).await,
             None => Ok(Vec::new()),
-        }
-    }
-
-    pub async fn aggregate_wallet_daily_usage(
-        &self,
-        input: &WalletDailyUsageAggregationInput,
-    ) -> Result<WalletDailyUsageAggregationResult, DataLayerError> {
-        match self.sql_backend() {
-            Some(backend) => backend.aggregate_wallet_daily_usage(input).await,
-            None => Ok(WalletDailyUsageAggregationResult::default()),
         }
     }
 
@@ -299,10 +282,6 @@ impl<'a> SqlBackendRef<'a> {
             Self::Postgres(postgres) => {
                 warm_pool(postgres.pool(), postgres.config().min_connections).await
             }
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => {
-                warm_pool(mysql.pool(), mysql.config().pool.min_connections).await
-            }
             #[cfg(feature = "sqlite")]
             Self::Sqlite(sqlite) => {
                 warm_pool(sqlite.pool(), sqlite.config().pool.min_connections).await
@@ -317,8 +296,6 @@ impl<'a> SqlBackendRef<'a> {
         match self {
             #[cfg(feature = "postgres")]
             Self::Postgres(postgres) => postgres.run_table_maintenance(table_names).await,
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => mysql.run_table_maintenance(table_names).await,
             #[cfg(feature = "sqlite")]
             Self::Sqlite(sqlite) => sqlite.run_table_maintenance(table_names).await,
         }
@@ -329,16 +306,13 @@ impl<'a> SqlBackendRef<'a> {
             #[cfg(feature = "postgres")]
             Self::Postgres(postgres) => {
                 crate::lifecycle::migrate::run_migrations(postgres.pool()).await?;
-                Ok(true)
-            }
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => {
-                crate::lifecycle::migrate::run_mysql_migrations(mysql.pool()).await?;
+                crate::lifecycle::lite_migrate::run_postgres_migrations(postgres.pool()).await?;
                 Ok(true)
             }
             #[cfg(feature = "sqlite")]
             Self::Sqlite(sqlite) => {
                 crate::lifecycle::migrate::run_sqlite_migrations(sqlite.pool()).await?;
+                crate::lifecycle::lite_migrate::run_sqlite_migrations(sqlite.pool()).await?;
                 Ok(true)
             }
         }
@@ -349,11 +323,6 @@ impl<'a> SqlBackendRef<'a> {
             #[cfg(feature = "postgres")]
             Self::Postgres(postgres) => {
                 crate::lifecycle::backfill::run_backfills(postgres.pool()).await?;
-                Ok(true)
-            }
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => {
-                crate::lifecycle::backfill::run_mysql_backfills(mysql.pool()).await?;
                 Ok(true)
             }
             #[cfg(feature = "sqlite")]
@@ -369,17 +338,25 @@ impl<'a> SqlBackendRef<'a> {
     ) -> Result<Option<Vec<crate::lifecycle::migrate::PendingMigrationInfo>>, MigrateError> {
         match self {
             #[cfg(feature = "postgres")]
-            Self::Postgres(postgres) => Ok(Some(
-                crate::lifecycle::migrate::pending_migrations(postgres.pool()).await?,
-            )),
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => Ok(Some(
-                crate::lifecycle::migrate::pending_mysql_migrations(mysql.pool()).await?,
-            )),
+            Self::Postgres(postgres) => {
+                let mut pending =
+                    crate::lifecycle::migrate::pending_migrations(postgres.pool()).await?;
+                pending.extend(
+                    crate::lifecycle::lite_migrate::pending_postgres_migrations(postgres.pool())
+                        .await?,
+                );
+                Ok(Some(pending))
+            }
             #[cfg(feature = "sqlite")]
-            Self::Sqlite(sqlite) => Ok(Some(
-                crate::lifecycle::migrate::pending_sqlite_migrations(sqlite.pool()).await?,
-            )),
+            Self::Sqlite(sqlite) => {
+                let mut pending =
+                    crate::lifecycle::migrate::pending_sqlite_migrations(sqlite.pool()).await?;
+                pending.extend(
+                    crate::lifecycle::lite_migrate::pending_sqlite_migrations(sqlite.pool())
+                        .await?,
+                );
+                Ok(Some(pending))
+            }
         }
     }
 
@@ -388,18 +365,27 @@ impl<'a> SqlBackendRef<'a> {
     ) -> Result<Option<Vec<crate::lifecycle::migrate::PendingMigrationInfo>>, MigrateError> {
         match self {
             #[cfg(feature = "postgres")]
-            Self::Postgres(postgres) => Ok(Some(
-                crate::lifecycle::migrate::prepare_database_for_startup(postgres.pool()).await?,
-            )),
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => Ok(Some(
-                crate::lifecycle::migrate::prepare_mysql_database_for_startup(mysql.pool()).await?,
-            )),
+            Self::Postgres(postgres) => {
+                let mut pending =
+                    crate::lifecycle::migrate::prepare_database_for_startup(postgres.pool())
+                        .await?;
+                pending.extend(
+                    crate::lifecycle::lite_migrate::pending_postgres_migrations(postgres.pool())
+                        .await?,
+                );
+                Ok(Some(pending))
+            }
             #[cfg(feature = "sqlite")]
-            Self::Sqlite(sqlite) => Ok(Some(
-                crate::lifecycle::migrate::prepare_sqlite_database_for_startup(sqlite.pool())
-                    .await?,
-            )),
+            Self::Sqlite(sqlite) => {
+                let mut pending =
+                    crate::lifecycle::migrate::prepare_sqlite_database_for_startup(sqlite.pool())
+                        .await?;
+                pending.extend(
+                    crate::lifecycle::lite_migrate::pending_sqlite_migrations(sqlite.pool())
+                        .await?,
+                );
+                Ok(Some(pending))
+            }
         }
     }
 
@@ -410,10 +396,6 @@ impl<'a> SqlBackendRef<'a> {
             #[cfg(feature = "postgres")]
             Self::Postgres(postgres) => Ok(Some(
                 crate::lifecycle::backfill::pending_backfills(postgres.pool()).await?,
-            )),
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => Ok(Some(
-                crate::lifecycle::backfill::pending_mysql_backfills(mysql.pool()).await?,
             )),
             #[cfg(feature = "sqlite")]
             Self::Sqlite(sqlite) => Ok(Some(
@@ -426,39 +408,18 @@ impl<'a> SqlBackendRef<'a> {
         match self {
             #[cfg(feature = "postgres")]
             Self::Postgres(postgres) => summarize_pool(
-                crate::database::DatabaseDriver::Postgres,
+                crate::DatabaseDriver::Postgres,
                 usize::try_from(postgres.pool().size()).unwrap_or(usize::MAX),
                 postgres.pool().num_idle(),
                 postgres.config().max_connections,
             ),
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => summarize_pool(
-                crate::database::DatabaseDriver::Mysql,
-                usize::try_from(mysql.pool().size()).unwrap_or(usize::MAX),
-                mysql.pool().num_idle(),
-                mysql.config().pool.max_connections,
-            ),
             #[cfg(feature = "sqlite")]
             Self::Sqlite(sqlite) => summarize_pool(
-                crate::database::DatabaseDriver::Sqlite,
+                crate::DatabaseDriver::Sqlite,
                 usize::try_from(sqlite.pool().size()).unwrap_or(usize::MAX),
                 sqlite.pool().num_idle(),
                 sqlite.config().pool.max_connections,
             ),
-        }
-    }
-
-    async fn aggregate_wallet_daily_usage(
-        self,
-        input: &WalletDailyUsageAggregationInput,
-    ) -> Result<WalletDailyUsageAggregationResult, DataLayerError> {
-        match self {
-            #[cfg(feature = "postgres")]
-            Self::Postgres(postgres) => postgres.aggregate_wallet_daily_usage(input).await,
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => mysql.aggregate_wallet_daily_usage(input).await,
-            #[cfg(feature = "sqlite")]
-            Self::Sqlite(sqlite) => sqlite.aggregate_wallet_daily_usage(input).await,
         }
     }
 
@@ -469,8 +430,6 @@ impl<'a> SqlBackendRef<'a> {
         match self {
             #[cfg(feature = "postgres")]
             Self::Postgres(postgres) => postgres.aggregate_stats_hourly(input).await,
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => mysql.aggregate_stats_hourly(input).await,
             #[cfg(feature = "sqlite")]
             Self::Sqlite(sqlite) => sqlite.aggregate_stats_hourly(input).await,
         }
@@ -483,8 +442,6 @@ impl<'a> SqlBackendRef<'a> {
         match self {
             #[cfg(feature = "postgres")]
             Self::Postgres(postgres) => postgres.aggregate_stats_daily(input).await,
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => mysql.aggregate_stats_daily(input).await,
             #[cfg(feature = "sqlite")]
             Self::Sqlite(sqlite) => sqlite.aggregate_stats_daily(input).await,
         }
@@ -497,8 +454,6 @@ impl<'a> SqlBackendRef<'a> {
         match self {
             #[cfg(feature = "postgres")]
             Self::Postgres(postgres) => postgres.find_system_config_value(key).await,
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => mysql.find_system_config_value(key).await,
             #[cfg(feature = "sqlite")]
             Self::Sqlite(sqlite) => sqlite.find_system_config_value(key).await,
         }
@@ -510,8 +465,6 @@ impl<'a> SqlBackendRef<'a> {
         match self {
             #[cfg(feature = "postgres")]
             Self::Postgres(postgres) => postgres.list_system_config_entries().await,
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => mysql.list_system_config_entries().await,
             #[cfg(feature = "sqlite")]
             Self::Sqlite(sqlite) => sqlite.list_system_config_entries().await,
         }
@@ -530,12 +483,6 @@ impl<'a> SqlBackendRef<'a> {
                     .upsert_system_config_entry(key, value, description)
                     .await
             }
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => {
-                mysql
-                    .upsert_system_config_entry(key, value, description)
-                    .await
-            }
             #[cfg(feature = "sqlite")]
             Self::Sqlite(sqlite) => {
                 sqlite
@@ -549,8 +496,6 @@ impl<'a> SqlBackendRef<'a> {
         match self {
             #[cfg(feature = "postgres")]
             Self::Postgres(postgres) => postgres.delete_system_config_value(key).await,
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => mysql.delete_system_config_value(key).await,
             #[cfg(feature = "sqlite")]
             Self::Sqlite(sqlite) => sqlite.delete_system_config_value(key).await,
         }
@@ -560,8 +505,6 @@ impl<'a> SqlBackendRef<'a> {
         match self {
             #[cfg(feature = "postgres")]
             Self::Postgres(postgres) => postgres.read_admin_system_stats().await,
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => mysql.read_admin_system_stats().await,
             #[cfg(feature = "sqlite")]
             Self::Sqlite(sqlite) => sqlite.read_admin_system_stats().await,
         }
@@ -574,8 +517,6 @@ impl<'a> SqlBackendRef<'a> {
         match self {
             #[cfg(feature = "postgres")]
             Self::Postgres(postgres) => postgres.purge_admin_system_data(target).await,
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => mysql.purge_admin_system_data(target).await,
             #[cfg(feature = "sqlite")]
             Self::Sqlite(sqlite) => sqlite.purge_admin_system_data(target).await,
         }
@@ -587,8 +528,6 @@ impl<'a> SqlBackendRef<'a> {
         match self {
             #[cfg(feature = "postgres")]
             Self::Postgres(postgres) => postgres.export_admin_system_usage_aggregates().await,
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => mysql.export_admin_system_usage_aggregates().await,
             #[cfg(feature = "sqlite")]
             Self::Sqlite(sqlite) => sqlite.export_admin_system_usage_aggregates().await,
         }
@@ -605,17 +544,6 @@ impl<'a> SqlBackendRef<'a> {
             #[cfg(feature = "postgres")]
             Self::Postgres(postgres) => {
                 postgres
-                    .import_admin_system_usage_aggregates(
-                        snapshot,
-                        user_id_map,
-                        api_key_id_map,
-                        mode,
-                    )
-                    .await
-            }
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => {
-                mysql
                     .import_admin_system_usage_aggregates(
                         snapshot,
                         user_id_map,
@@ -645,8 +573,6 @@ impl<'a> SqlBackendRef<'a> {
         match self {
             #[cfg(feature = "postgres")]
             Self::Postgres(postgres) => postgres.purge_admin_request_bodies_batch(batch_size).await,
-            #[cfg(feature = "mysql")]
-            Self::Mysql(mysql) => mysql.purge_admin_request_bodies_batch(batch_size).await,
             #[cfg(feature = "sqlite")]
             Self::Sqlite(sqlite) => sqlite.purge_admin_request_bodies_batch(batch_size).await,
         }

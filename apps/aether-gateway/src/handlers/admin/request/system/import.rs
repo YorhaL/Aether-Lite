@@ -1,15 +1,11 @@
 use super::{AdminAppState, ADMIN_SYSTEM_DATA_EXPORT_VERSION};
-use crate::ai_serving::build_provider_key_pool_score_upsert;
 use crate::api::ai::admin_endpoint_signature_parts;
-use crate::handlers::admin::admin_provider_pool_config;
-use crate::handlers::admin::model::ADMIN_EXTERNAL_MODELS_PROXY_NODE_CONFIG_KEY;
 use crate::handlers::admin::provider::endpoints_admin::payloads::AdminProviderEndpointUpdatePatch;
-use crate::handlers::admin::provider::oauth::provisioning::ensure_codex_credential_generation_rotated;
 use crate::handlers::admin::provider::shared::payloads::{
     AdminProviderCreateRequest, AdminProviderKeyCreateRequest, AdminProviderKeyUpdatePatch,
     AdminProviderUpdatePatch,
 };
-use crate::handlers::admin::provider::write::keys::build_provider_catalog_key_admin_cas_update;
+use crate::handlers::admin::provider::write::normalize::retain_supported_provider_config;
 use crate::handlers::admin::shared::{
     normalize_json_array, normalize_json_object, normalize_string_list,
 };
@@ -33,9 +29,7 @@ use aether_admin::system::{
     AdminSystemConfigOAuthProvider as ImportedOAuthProvider,
     AdminSystemConfigProvider as ImportedProvider,
     AdminSystemConfigProviderKey as ImportedProviderKey,
-    AdminSystemConfigProviderModel as ImportedProviderModel,
-    AdminSystemConfigProxyNode as ImportedProxyNode,
-    ADMIN_SYSTEM_PROVIDER_OPS_SENSITIVE_CREDENTIAL_FIELDS, ADMIN_SYSTEM_USERS_SUPPORTED_VERSIONS,
+    AdminSystemConfigProviderModel as ImportedProviderModel, ADMIN_SYSTEM_USERS_SUPPORTED_VERSIONS,
 };
 use aether_data::repository::auth_modules::StoredLdapModuleConfig;
 use aether_data::repository::oauth_providers::{
@@ -50,7 +44,6 @@ use aether_data_contracts::repository::global_models::{
     AdminGlobalModelListQuery, AdminProviderModelListQuery, CreateAdminGlobalModelRecord,
     UpdateAdminGlobalModelRecord, UpsertAdminProviderModelRecord,
 };
-use aether_data_contracts::repository::pool_scores::PoolMemberScoreUpsertMode;
 use axum::{body::Bytes, http};
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -65,12 +58,7 @@ fn invalid_request(detail: impl Into<String>) -> (http::StatusCode, Value) {
 }
 
 fn normalize_imported_system_config_key(key: &str) -> String {
-    let normalized = normalize_admin_system_config_key(key);
-    if normalized.eq_ignore_ascii_case(ADMIN_EXTERNAL_MODELS_PROXY_NODE_CONFIG_KEY) {
-        ADMIN_EXTERNAL_MODELS_PROXY_NODE_CONFIG_KEY.to_string()
-    } else {
-        normalized
-    }
+    normalize_admin_system_config_key(key)
 }
 
 fn build_admin_system_data_import_part_body(
@@ -109,104 +97,23 @@ fn normalize_supported_capabilities(value: Option<Vec<String>>) -> Option<Value>
     normalize_string_list(value).map(|items| json!(items))
 }
 
-fn normalize_import_auth_config(value: Option<Value>) -> Result<Option<Value>, String> {
-    let Some(value) = value else {
-        return Ok(None);
-    };
-    match value {
-        Value::Null => Ok(None),
-        Value::String(raw) => {
-            let trimmed = raw.trim();
-            if trimmed.is_empty() {
-                return Ok(None);
-            }
-            let parsed = serde_json::from_str::<Value>(trimmed)
-                .map_err(|_| "auth_config 必须是 JSON 对象或 JSON 字符串".to_string())?;
-            normalize_json_object(Some(parsed), "auth_config")
-        }
-        other => normalize_json_object(Some(other), "auth_config"),
-    }
-}
-
-fn encrypt_imported_provider_config(
-    state: &AdminAppState<'_>,
-    config: Option<Value>,
-) -> Result<Option<Value>, String> {
+fn normalize_imported_provider_config(config: Option<Value>) -> Result<Option<Value>, String> {
     let Some(mut config) = normalize_json_object(config, "config")? else {
         return Ok(None);
     };
-    let Some(credentials) = config
-        .get_mut("provider_ops")
-        .and_then(Value::as_object_mut)
-        .and_then(|provider_ops| provider_ops.get_mut("connector"))
-        .and_then(Value::as_object_mut)
-        .and_then(|connector| connector.get_mut("credentials"))
-        .and_then(Value::as_object_mut)
-    else {
-        return Ok(Some(config));
-    };
-
-    for field in ADMIN_SYSTEM_PROVIDER_OPS_SENSITIVE_CREDENTIAL_FIELDS {
-        let Some(Value::String(raw)) = credentials.get_mut(*field) else {
-            continue;
-        };
-        if raw.is_empty() {
-            continue;
+    if let Some(config_map) = config.as_object_mut() {
+        retain_supported_provider_config(config_map);
+        if config_map.is_empty() {
+            return Ok(None);
         }
-        let encrypted = state
-            .encrypt_catalog_secret_with_fallbacks(raw)
-            .ok_or_else(|| "gateway 未配置 Provider Ops 加密密钥".to_string())?;
-        *raw = encrypted;
     }
-
     Ok(Some(config))
 }
 
-fn remap_import_proxy(
-    proxy: Option<Value>,
-    node_id_map: &BTreeMap<String, String>,
-) -> Option<Value> {
-    let proxy = match proxy {
-        Some(Value::Object(map)) if map.is_empty() => return None,
-        Some(Value::Object(map)) => map,
-        _ => return None,
-    };
-    let Some(Value::String(old_node_id)) = proxy.get("node_id") else {
-        return Some(Value::Object(proxy));
-    };
-    let old_node_id = old_node_id.trim();
-    if old_node_id.is_empty() {
-        return Some(Value::Object(proxy));
-    }
-    let new_node_id = node_id_map.get(old_node_id)?;
-    let mut remapped = proxy;
-    remapped.insert("node_id".to_string(), json!(new_node_id));
-    Some(Value::Object(remapped))
-}
-
 fn normalize_import_endpoint_format(value: &str) -> Result<String, String> {
-    let normalized = match value.trim().to_ascii_lowercase().as_str() {
-        "openai:cli" => "openai:responses",
-        "openai:compact" => "openai:responses:compact",
-        "openai_image" | "images" | "image" | "/v1/images/generations" | "/v1/images/edits" => {
-            "openai:image"
-        }
-        "claude:chat" | "claude:cli" => "claude:messages",
-        "gemini:chat" | "gemini:cli" => "gemini:generate_content",
-        _ => value.trim(),
-    };
-    admin_endpoint_signature_parts(normalized)
+    admin_endpoint_signature_parts(value.trim())
         .map(|(signature, _, _)| signature.to_string())
         .ok_or_else(|| format!("无效的 api_format: {value}"))
-}
-
-fn fixed_provider_import_endpoint_supported(provider_type: &str, api_format: &str) -> bool {
-    crate::provider_transport::provider_types::fixed_provider_template(provider_type).is_none()
-        || crate::provider_transport::provider_types::fixed_provider_endpoint_template_by_api_format(
-            provider_type,
-            api_format,
-        )
-        .is_some()
 }
 
 fn normalize_import_key_formats(
@@ -258,21 +165,6 @@ fn imported_key_auth_type(item: &ImportedProviderKey) -> String {
         .to_ascii_lowercase()
 }
 
-fn imported_service_account_email(config: Option<&Value>) -> Option<String> {
-    match config {
-        Some(Value::Object(map)) => map
-            .get("client_email")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned),
-        Some(Value::String(raw)) => serde_json::from_str::<Value>(raw)
-            .ok()
-            .and_then(|value| imported_service_account_email(Some(&value))),
-        _ => None,
-    }
-}
-
 fn build_import_key_match_name(item: &ImportedProviderKey) -> Option<String> {
     item.name
         .as_deref()
@@ -281,297 +173,13 @@ fn build_import_key_match_name(item: &ImportedProviderKey) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn normalize_selected_import_key_format(
-    value: &str,
-    allowed_formats: &BTreeSet<String>,
-) -> Option<String> {
-    let normalized = normalize_import_endpoint_format(value).ok()?;
-    allowed_formats.contains(&normalized).then_some(normalized)
-}
-
-fn normalize_import_key_format_scoped_list(
-    value: Option<&Value>,
-    normalized_api_formats: &[String],
-) -> Option<Value> {
-    let value = value?;
-    let Value::Array(items) = value else {
-        return Some(value.clone());
-    };
-    let allowed_formats = normalized_api_formats
-        .iter()
-        .cloned()
-        .collect::<BTreeSet<_>>();
-    let mut seen = BTreeSet::new();
-    let mut normalized = Vec::new();
-    for item in items {
-        let Some(raw) = item
-            .as_str()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        else {
-            continue;
-        };
-        let Some(api_format) = normalize_selected_import_key_format(raw, &allowed_formats) else {
-            continue;
-        };
-        if seen.insert(api_format.clone()) {
-            normalized.push(json!(api_format));
-        }
-    }
-    Some(Value::Array(normalized))
-}
-
-fn normalize_import_key_format_scoped_object(
-    value: Option<&Value>,
-    normalized_api_formats: &[String],
-) -> Option<Value> {
-    let value = value?;
-    let Value::Object(map) = value else {
-        return Some(value.clone());
-    };
-    let allowed_formats = normalized_api_formats
-        .iter()
-        .cloned()
-        .collect::<BTreeSet<_>>();
-    let mut normalized = Map::new();
-    for (key, value) in map {
-        let Some(api_format) = normalize_selected_import_key_format(key, &allowed_formats) else {
-            continue;
-        };
-        normalized.insert(api_format, value.clone());
-    }
-    Some(Value::Object(normalized))
-}
-
 fn normalize_import_key_raw_payload(
     raw_key: &Map<String, Value>,
-    auth_type: &str,
     normalized_api_formats: &[String],
-    normalized_auth_config: Option<Value>,
 ) -> Map<String, Value> {
     let mut payload = raw_key.clone();
-    if auth_type == "oauth" {
-        payload.remove("api_key");
-    }
     payload.insert("api_formats".to_string(), json!(normalized_api_formats));
-    if let Some(auth_type_by_format) = normalize_import_key_format_scoped_object(
-        raw_key.get("auth_type_by_format"),
-        normalized_api_formats,
-    ) {
-        payload.insert("auth_type_by_format".to_string(), auth_type_by_format);
-    }
-    if let Some(allow_auth_channel_mismatch_formats) = normalize_import_key_format_scoped_list(
-        raw_key.get("allow_auth_channel_mismatch_formats"),
-        normalized_api_formats,
-    ) {
-        payload.insert(
-            "allow_auth_channel_mismatch_formats".to_string(),
-            allow_auth_channel_mismatch_formats,
-        );
-    }
-    if let Some(auth_config) = normalized_auth_config {
-        payload.insert("auth_config".to_string(), auth_config);
-    } else if raw_key.contains_key("auth_config") {
-        payload.insert("auth_config".to_string(), Value::Null);
-    }
     payload
-}
-
-fn apply_imported_oauth_key_credentials(
-    state: &AdminAppState<'_>,
-    provider_type: &str,
-    previous_codex_credential_generation: Option<&str>,
-    raw_key: &Map<String, Value>,
-    normalized_auth_config: Option<&Value>,
-    record: &mut aether_data_contracts::repository::provider_catalog::StoredProviderCatalogKey,
-) -> Result<bool, String> {
-    let previous_encrypted_api_key = record.encrypted_api_key.clone();
-    let previous_encrypted_auth_config = record.encrypted_auth_config.clone();
-    let mut credentials_supplied = false;
-    let mut api_key_supplied = false;
-    if let Some(api_key_value) = raw_key.get("api_key") {
-        let plaintext = api_key_value
-            .as_str()
-            .map(str::trim)
-            .filter(|value| !value.is_empty());
-        record.encrypted_api_key = match plaintext {
-            Some(plaintext) => {
-                credentials_supplied = true;
-                api_key_supplied = true;
-                Some(
-                    state
-                        .encrypt_catalog_secret_with_fallbacks(plaintext)
-                        .ok_or_else(|| "gateway 未配置 provider key 加密密钥".to_string())?,
-                )
-            }
-            None => None,
-        };
-    }
-
-    if raw_key.contains_key("auth_config") {
-        record.encrypted_auth_config = match normalized_auth_config {
-            Some(auth_config) => {
-                credentials_supplied |= imported_oauth_auth_config_has_credentials(auth_config);
-                let plaintext =
-                    serde_json::to_string(auth_config).map_err(|err| err.to_string())?;
-                Some(
-                    state
-                        .encrypt_catalog_secret_with_fallbacks(&plaintext)
-                        .ok_or_else(|| "gateway 未配置 provider key 加密密钥".to_string())?,
-                )
-            }
-            None => None,
-        };
-    }
-    record.expires_at_unix_secs = imported_oauth_expiry_after_import(
-        record.expires_at_unix_secs,
-        raw_key.contains_key("auth_config"),
-        normalized_auth_config,
-        api_key_supplied,
-    );
-
-    let credential_material_changed = record.encrypted_api_key != previous_encrypted_api_key
-        || record.encrypted_auth_config != previous_encrypted_auth_config;
-    if credentials_supplied {
-        record.oauth_invalid_at_unix_secs = None;
-        record.oauth_invalid_reason = None;
-    }
-    if credential_material_changed {
-        ensure_codex_credential_generation_rotated(
-            record,
-            provider_type,
-            previous_codex_credential_generation,
-        );
-    }
-
-    Ok(credentials_supplied)
-}
-
-fn imported_oauth_auth_config_has_credentials(value: &Value) -> bool {
-    const CREDENTIAL_FIELDS: &[&str] = &[
-        "access_token",
-        "accessToken",
-        "api_key",
-        "apiKey",
-        "auth_token",
-        "authToken",
-        "cf_clearance",
-        "cfClearance",
-        "cf_cookies",
-        "cfCookies",
-        "cookie",
-        "cookieHeader",
-        "cookies",
-        "id_token",
-        "idToken",
-        "refresh_token",
-        "refreshToken",
-        "session_token",
-        "sessionToken",
-        "sso_rw_token",
-        "ssoRwToken",
-        "sso_token",
-        "ssoToken",
-        "token",
-    ];
-
-    match value {
-        Value::Object(object) => object.iter().any(|(key, value)| {
-            (CREDENTIAL_FIELDS.contains(&key.as_str()) && imported_credential_value_present(value))
-                || imported_oauth_auth_config_has_credentials(value)
-        }),
-        Value::Array(items) => items.iter().any(imported_oauth_auth_config_has_credentials),
-        _ => false,
-    }
-}
-
-fn imported_credential_value_present(value: &Value) -> bool {
-    match value {
-        Value::String(value) => !value.trim().is_empty(),
-        Value::Array(items) => !items.is_empty(),
-        Value::Object(object) => !object.is_empty(),
-        _ => false,
-    }
-}
-
-fn imported_oauth_expires_at_unix_secs(normalized_auth_config: Option<&Value>) -> Option<u64> {
-    let object = normalized_auth_config?.as_object()?;
-    for field in ["expires_at", "expiresAt", "expiry", "exp"] {
-        let Some(value) = object.get(field) else {
-            continue;
-        };
-        match value {
-            Value::Number(number) => {
-                if let Some(expires_at) = number.as_u64() {
-                    return Some(expires_at);
-                }
-            }
-            Value::String(raw) => {
-                if let Ok(expires_at) = raw.trim().parse::<u64>() {
-                    return Some(expires_at);
-                }
-            }
-            _ => {}
-        }
-    }
-    None
-}
-
-fn imported_oauth_expiry_after_import(
-    current: Option<u64>,
-    auth_config_present: bool,
-    normalized_auth_config: Option<&Value>,
-    api_key_supplied: bool,
-) -> Option<u64> {
-    if auth_config_present {
-        imported_oauth_expires_at_unix_secs(normalized_auth_config)
-    } else if api_key_supplied {
-        None
-    } else {
-        current
-    }
-}
-
-async fn seed_imported_oauth_pool_score(
-    state: &AdminAppState<'_>,
-    provider_id: &str,
-    key: &aether_data_contracts::repository::provider_catalog::StoredProviderCatalogKey,
-    now_unix_secs: u64,
-) -> Result<(), GatewayError> {
-    let provider_id = provider_id.to_string();
-    let provider = state
-        .read_provider_catalog_providers_by_ids(std::slice::from_ref(&provider_id))
-        .await?
-        .pop();
-    let Some(provider) = provider else {
-        return Ok(());
-    };
-    let Some(pool_config) = admin_provider_pool_config(&provider) else {
-        return Ok(());
-    };
-    if !key.is_active || key.provider_id != provider.id {
-        return Ok(());
-    }
-
-    let upsert = build_provider_key_pool_score_upsert(
-        key,
-        provider.provider_type.as_str(),
-        None,
-        now_unix_secs,
-        pool_config.score_rules,
-    );
-    state
-        .app()
-        .data
-        .upsert_pool_member_score_with_mode(upsert, PoolMemberScoreUpsertMode::OAuthRecovery)
-        .await
-        .map_err(|error| {
-            GatewayError::Internal(format!(
-                "failed to recover OAuth pool score for key '{}': {error}",
-                key.id
-            ))
-        })?;
-    Ok(())
 }
 
 fn build_import_provider_model_record(
@@ -624,15 +232,10 @@ struct AdminSystemUsersImportStats {
 
 #[derive(Debug, Clone)]
 struct ImportedWalletTarget {
-    recharge_balance: f64,
-    gift_balance: f64,
+    balance: f64,
     limit_mode: String,
     currency: String,
     status: String,
-    total_recharged: f64,
-    total_consumed: f64,
-    total_refunded: f64,
-    total_adjusted: f64,
     updated_at_unix_secs: Option<u64>,
 }
 
@@ -1121,27 +724,9 @@ fn normalize_imported_wallet_target(
     wallet: Option<&Map<String, Value>>,
     unlimited: bool,
 ) -> Result<ImportedWalletTarget, String> {
-    let gift_balance = imported_optional_f64(
-        wallet.and_then(|map| map.get("gift_balance")),
-        "wallet.gift_balance",
-    )?
-    .unwrap_or(0.0)
-    .max(0.0);
-    let recharge_balance = if let Some(map) = wallet {
-        if map.contains_key("recharge_balance") {
-            imported_optional_f64(map.get("recharge_balance"), "wallet.recharge_balance")?
-                .unwrap_or(0.0)
-        } else if map.contains_key("refundable_balance") {
-            imported_optional_f64(map.get("refundable_balance"), "wallet.refundable_balance")?
-                .unwrap_or(0.0)
-        } else {
-            let total_balance =
-                imported_optional_f64(map.get("balance"), "wallet.balance")?.unwrap_or(0.0);
-            total_balance - gift_balance
-        }
-    } else {
-        0.0
-    };
+    let balance =
+        imported_optional_f64(wallet.and_then(|map| map.get("balance")), "wallet.balance")?
+            .unwrap_or(0.0);
     let limit_mode = if let Some(map) = wallet {
         if let Some(mode) = imported_optional_string(map.get("limit_mode"))? {
             match mode.to_ascii_lowercase().as_str() {
@@ -1163,41 +748,16 @@ fn normalize_imported_wallet_target(
         .unwrap_or_else(|| "USD".to_string());
     let status = imported_optional_string(wallet.and_then(|map| map.get("status")))?
         .unwrap_or_else(|| "active".to_string());
-    let total_recharged = imported_optional_f64(
-        wallet.and_then(|map| map.get("total_recharged")),
-        "wallet.total_recharged",
-    )?
-    .unwrap_or(recharge_balance);
-    let total_consumed = imported_optional_f64(
-        wallet.and_then(|map| map.get("total_consumed")),
-        "wallet.total_consumed",
-    )?
-    .unwrap_or(0.0);
-    let total_refunded = imported_optional_f64(
-        wallet.and_then(|map| map.get("total_refunded")),
-        "wallet.total_refunded",
-    )?
-    .unwrap_or(0.0);
-    let total_adjusted = imported_optional_f64(
-        wallet.and_then(|map| map.get("total_adjusted")),
-        "wallet.total_adjusted",
-    )?
-    .unwrap_or(gift_balance);
     let updated_at_unix_secs = imported_rfc3339_to_unix_secs(
         wallet.and_then(|map| map.get("updated_at")),
         "wallet.updated_at",
     )?;
 
     Ok(ImportedWalletTarget {
-        recharge_balance,
-        gift_balance,
+        balance,
         limit_mode,
         currency,
         status,
-        total_recharged,
-        total_consumed,
-        total_refunded,
-        total_adjusted,
         updated_at_unix_secs,
     })
 }
@@ -1326,10 +886,6 @@ impl<'a> AdminAppState<'a> {
             &root,
             "providers"
         ));
-        let imported_proxy_nodes = routed!(parse_admin_system_config_array::<ImportedProxyNode>(
-            &root,
-            "proxy_nodes"
-        ));
         let imported_ldap = routed!(parse_admin_system_config_optional_object::<
             ImportedLdapConfig,
         >(&root, "ldap_config"));
@@ -1342,81 +898,12 @@ impl<'a> AdminAppState<'a> {
 
         let mut stats = AdminSystemConfigImportStats::default();
 
-        // Proxy nodes are deployment-local resources and are intentionally not imported by the
-        // Rust admin backend. Apply the external catalog selector before importing any other
-        // object, and turn a non-empty exported node reference into direct mode. This keeps a
-        // clean-environment restore portable and prevents a late selector validation failure from
-        // leaving the rest of the document partially imported.
-        let (imported_external_models_configs, imported_system_configs): (Vec<_>, Vec<_>) =
-            imported_system_configs.into_iter().partition(|item| {
-                normalize_imported_system_config_key(&item.value.key)
-                    == ADMIN_EXTERNAL_MODELS_PROXY_NODE_CONFIG_KEY
-            });
         let mut existing_system_config_keys = self
             .list_system_config_entries()
             .await?
             .into_iter()
             .map(|entry| normalize_imported_system_config_key(&entry.key))
             .collect::<BTreeSet<_>>();
-        for imported_config_item in imported_external_models_configs {
-            let (_, system_config) = imported_config_item.into_parts();
-            let exists =
-                existing_system_config_keys.contains(ADMIN_EXTERNAL_MODELS_PROXY_NODE_CONFIG_KEY);
-            match (exists, merge_mode) {
-                (true, AdminImportMergeMode::Skip) => {
-                    stats.system_configs.skipped += 1;
-                    continue;
-                }
-                (true, AdminImportMergeMode::Error) => {
-                    return Ok(Err(invalid_request(format!(
-                        "SystemConfig '{ADMIN_EXTERNAL_MODELS_PROXY_NODE_CONFIG_KEY}' 已存在"
-                    ))));
-                }
-                _ => {}
-            }
-
-            let imported_proxy_node_id = match system_config.value {
-                Value::Null => None,
-                Value::String(value) => {
-                    let value = value.trim();
-                    if value.is_empty() {
-                        return Ok(Err(invalid_request(
-                            "external_models_proxy_node_id 不能为空",
-                        )));
-                    }
-                    Some(value.to_string())
-                }
-                _ => {
-                    return Ok(Err(invalid_request(
-                        "external_models_proxy_node_id 必须是字符串或 null",
-                    )))
-                }
-            };
-            let request_bytes = Bytes::from(
-                serde_json::to_vec(&json!({ "proxy_node_id": null }))
-                    .map_err(|err| GatewayError::Internal(err.to_string()))?,
-            );
-            match self
-                .apply_admin_external_models_config_update(&request_bytes)
-                .await?
-            {
-                Ok(_) => {
-                    if exists {
-                        stats.system_configs.updated += 1;
-                    } else {
-                        stats.system_configs.created += 1;
-                        existing_system_config_keys
-                            .insert(ADMIN_EXTERNAL_MODELS_PROXY_NODE_CONFIG_KEY.to_string());
-                    }
-                    if let Some(node_id) = imported_proxy_node_id {
-                        stats.errors.push(format!(
-                            "外部模型目录代理节点 '{node_id}' 是当前部署的本地引用；代理节点未导入，已切换为直连"
-                        ));
-                    }
-                }
-                Err((status, payload)) => return Ok(Err((status, payload))),
-            }
-        }
 
         let mut global_models_by_name = self
             .list_admin_global_models(&AdminGlobalModelListQuery {
@@ -1430,31 +917,6 @@ impl<'a> AdminAppState<'a> {
             .into_iter()
             .map(|model| (model.name.clone(), model))
             .collect::<BTreeMap<_, _>>();
-
-        if !imported_proxy_nodes.is_empty() {
-            let empty_proxy_node_ids = imported_proxy_nodes
-                .iter()
-                .filter(|node| {
-                    node.value
-                        .id
-                        .as_deref()
-                        .map(str::trim)
-                        .is_none_or(|value| value.is_empty())
-                })
-                .count();
-            stats.proxy_nodes.skipped = imported_proxy_nodes.len() as u64;
-            if empty_proxy_node_ids > 0 {
-                stats.errors.push(format!(
-                    "检测到 {empty_proxy_node_ids} 个无效 proxy_nodes 项；当前 Rust 管理后端暂不支持导入代理节点"
-                ));
-            } else {
-                stats.errors.push(
-                    "当前 Rust 管理后端暂不支持导入代理节点；仅引用这些节点(node_id)的自动连接代理配置会被清除，手动 URL 代理配置会保留"
-                        .to_string(),
-                );
-            }
-        }
-        let node_id_map = BTreeMap::<String, String>::new();
 
         for imported_model in imported_global_models {
             let (_, model) = imported_model.into_parts();
@@ -1535,12 +997,6 @@ impl<'a> AdminAppState<'a> {
         for imported_provider_item in imported_providers {
             let (raw_provider, imported_provider) = imported_provider_item.into_parts();
             let provider_name = invalid!(trim_required(&imported_provider.name, "name"));
-            invalid!(
-                crate::provider_transport::validate_anthropic_compatibility_profile_config(
-                    imported_provider.config.as_ref(),
-                )
-                .map_err(|_| "无效的 Anthropic compatibility profile".to_string())
-            );
             let existing_provider = providers_by_name.get(&provider_name).cloned();
 
             let provider = if let Some(existing) = existing_provider {
@@ -1568,10 +1024,7 @@ impl<'a> AdminAppState<'a> {
                             self.build_admin_update_provider_record(&existing, patch)
                                 .await
                         );
-                        updated.proxy =
-                            remap_import_proxy(imported_provider.proxy.clone(), &node_id_map);
-                        updated.config = invalid!(encrypt_imported_provider_config(
-                            self,
+                        updated.config = invalid!(normalize_imported_provider_config(
                             imported_provider.config.clone(),
                         ));
                         let Some(persisted) =
@@ -1599,12 +1052,7 @@ impl<'a> AdminAppState<'a> {
                 };
                 let (mut record, shift_existing_priorities_from) =
                     invalid!(self.build_admin_create_provider_record(payload).await);
-                if let Some(enable_format_conversion) = imported_provider.enable_format_conversion {
-                    record.enable_format_conversion = enable_format_conversion;
-                }
-                record.proxy = remap_import_proxy(imported_provider.proxy.clone(), &node_id_map);
-                record.config = invalid!(encrypt_imported_provider_config(
-                    self,
+                record.config = invalid!(normalize_imported_provider_config(
                     imported_provider.config.clone(),
                 ));
                 let Some(created) = self
@@ -1635,42 +1083,6 @@ impl<'a> AdminAppState<'a> {
                 let normalized_api_format = invalid!(normalize_import_endpoint_format(
                     &imported_endpoint.api_format
                 ));
-                invalid!(
-                    crate::provider_transport::validate_anthropic_compatibility_profile_config(
-                        imported_endpoint.config.as_ref(),
-                    )
-                    .map_err(|_| "无效的 Anthropic compatibility profile".to_string())
-                );
-                if !fixed_provider_import_endpoint_supported(
-                    &provider.provider_type,
-                    &normalized_api_format,
-                ) {
-                    let retired = existing_endpoints_by_format.remove(&normalized_api_format);
-                    if let Some(mut retired) = retired {
-                        if retired.is_active {
-                            retired.is_active = false;
-                            retired.updated_at_unix_secs = SystemTime::now()
-                                .duration_since(UNIX_EPOCH)
-                                .ok()
-                                .map(|duration| duration.as_secs());
-                            let Some(_) = self.update_provider_catalog_endpoint(&retired).await?
-                            else {
-                                return Ok(Err(invalid_request(format!(
-                                    "停用 Provider '{provider_name}' 的已移除 Endpoint '{normalized_api_format}' 失败"
-                                ))));
-                            };
-                            stats.endpoints.updated += 1;
-                        } else {
-                            stats.endpoints.skipped += 1;
-                        }
-                    } else {
-                        stats.endpoints.skipped += 1;
-                    }
-                    stats.errors.push(format!(
-                        "固定 Provider '{provider_name}' 不再支持 Endpoint '{normalized_api_format}'，已跳过或停用"
-                    ));
-                    continue;
-                }
                 let existing_endpoint = existing_endpoints_by_format
                     .get(&normalized_api_format)
                     .cloned();
@@ -1720,8 +1132,6 @@ impl<'a> AdminAppState<'a> {
                                     max_retries: payload.max_retries,
                                     is_active: payload.is_active,
                                     config: payload.config,
-                                    proxy: payload.proxy,
-                                    format_acceptance_config: payload.format_acceptance_config,
                                 };
                             let mut updated = invalid!(
                                 admin_provider_endpoints_pure::apply_admin_provider_endpoint_update_fields(
@@ -1731,12 +1141,6 @@ impl<'a> AdminAppState<'a> {
                                     &update_fields,
                                 )
                             );
-                            if fields.contains("proxy") {
-                                updated.proxy = remap_import_proxy(
-                                    imported_endpoint.proxy.clone(),
-                                    &node_id_map,
-                                );
-                            }
                             updated.api_format = normalized_signature.to_string();
                             updated.api_family = Some(api_family.to_string());
                             updated.endpoint_kind = Some(endpoint_kind.to_string());
@@ -1785,8 +1189,6 @@ impl<'a> AdminAppState<'a> {
                         imported_endpoint.body_rules.clone(),
                         imported_endpoint.max_retries.unwrap_or(2),
                         imported_endpoint.config.clone(),
-                        remap_import_proxy(imported_endpoint.proxy.clone(), &node_id_map),
-                        imported_endpoint.format_acceptance_config.clone(),
                         now_unix_secs,
                     )
                 );
@@ -1833,76 +1235,49 @@ impl<'a> AdminAppState<'a> {
                     continue;
                 }
 
-                let normalized_auth_config = invalid!(normalize_import_auth_config(
-                    imported_key.auth_config.clone()
-                ));
                 let auth_type = imported_key_auth_type(&imported_key);
-                let normalized_raw_key = normalize_import_key_raw_payload(
-                    &raw_key,
-                    &auth_type,
-                    &normalized_api_formats,
-                    normalized_auth_config.clone(),
-                );
-                let existing_key_index = if auth_type == "api_key" {
-                    let target_key = imported_key
-                        .api_key
-                        .as_deref()
-                        .map(str::trim)
-                        .filter(|value| !value.is_empty())
-                        .map(ToOwned::to_owned);
-                    existing_keys.iter().position(|existing_key| {
-                        let decrypted_existing = existing_key
-                            .encrypted_api_key
-                            .as_deref()
-                            .and_then(|ciphertext| {
-                                self.decrypt_catalog_secret_with_fallbacks(ciphertext)
-                            });
-                        target_key
-                            .as_deref()
-                            .zip(decrypted_existing.as_deref())
-                            .is_some_and(|(target, decrypted)| decrypted == target)
-                    })
-                } else if matches!(auth_type.as_str(), "service_account" | "vertex_ai") {
-                    let target_email =
-                        imported_service_account_email(normalized_auth_config.as_ref());
-                    existing_keys.iter().position(|existing_key| {
-                        target_email.as_deref().is_some_and(|target_email| {
-                            self.parse_catalog_auth_config_json(existing_key)
-                                .and_then(|config| {
-                                    config
-                                        .get("client_email")
-                                        .and_then(Value::as_str)
-                                        .map(str::trim)
-                                        .filter(|value| !value.is_empty())
-                                        .map(ToOwned::to_owned)
-                                })
-                                .as_deref()
-                                == Some(target_email)
-                        })
-                    })
-                } else {
-                    build_import_key_match_name(&imported_key).and_then(|target_name| {
+                if !matches!(auth_type.as_str(), "api_key" | "bearer") {
+                    stats.keys.skipped += 1;
+                    continue;
+                }
+                let normalized_raw_key =
+                    normalize_import_key_raw_payload(&raw_key, &normalized_api_formats);
+                let target_key = imported_key
+                    .api_key
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty());
+                let existing_key_index = target_key
+                    .and_then(|target_key| {
                         existing_keys.iter().position(|existing_key| {
                             existing_key
                                 .auth_type
                                 .trim()
                                 .eq_ignore_ascii_case(&auth_type)
-                                && existing_key.name == target_name
+                                && existing_key
+                                    .encrypted_api_key
+                                    .as_deref()
+                                    .and_then(|ciphertext| {
+                                        self.decrypt_catalog_secret_with_fallbacks(ciphertext)
+                                    })
+                                    .as_deref()
+                                    == Some(target_key)
                         })
                     })
-                };
+                    .or_else(|| {
+                        build_import_key_match_name(&imported_key).and_then(|target_name| {
+                            existing_keys.iter().position(|existing_key| {
+                                existing_key
+                                    .auth_type
+                                    .trim()
+                                    .eq_ignore_ascii_case(&auth_type)
+                                    && existing_key.name == target_name
+                            })
+                        })
+                    });
 
                 if let Some(existing_index) = existing_key_index {
                     let existing_key = existing_keys[existing_index].clone();
-                    let previous_codex_credential_generation = existing_key
-                        .upstream_metadata
-                        .as_ref()
-                        .and_then(Value::as_object)
-                        .and_then(|metadata| metadata.get("codex"))
-                        .and_then(|codex| {
-                            aether_admin::provider::quota::codex_credential_generation(Some(codex))
-                        })
-                        .map(ToOwned::to_owned);
                     match merge_mode {
                         AdminImportMergeMode::Skip => {
                             stats.keys.skipped += 1;
@@ -1929,42 +1304,11 @@ impl<'a> AdminAppState<'a> {
                                 )
                                 .await
                             );
-                            let oauth_credentials_supplied = if auth_type == "oauth" {
-                                invalid!(apply_imported_oauth_key_credentials(
-                                    self,
-                                    &provider.provider_type,
-                                    previous_codex_credential_generation.as_deref(),
-                                    &raw_key,
-                                    normalized_auth_config.as_ref(),
-                                    &mut updated,
-                                ))
-                            } else {
-                                false
-                            };
-                            updated.proxy =
-                                remap_import_proxy(imported_key.proxy.clone(), &node_id_map);
                             updated.fingerprint = invalid!(normalize_json_object(
                                 imported_key.fingerprint.clone(),
                                 "fingerprint",
                             ));
-                            let admin_update = build_provider_catalog_key_admin_cas_update(
-                                &existing_key,
-                                updated.clone(),
-                                &provider.provider_type,
-                            );
-                            if !self
-                                .compare_and_update_provider_catalog_key_admin_state(&admin_update)
-                                .await?
-                            {
-                                return Ok(Err((
-                                    http::StatusCode::CONFLICT,
-                                    json!({
-                                        "detail": format!(
-                                            "Provider '{provider_name}' 的 Key 已被其他请求更新，请重试"
-                                        )
-                                    }),
-                                )));
-                            }
+                            self.update_provider_catalog_key(&updated).await?;
                             let Some(mut persisted) = self
                                 .read_provider_catalog_keys_by_ids(std::slice::from_ref(
                                     &updated.id,
@@ -1992,35 +1336,6 @@ impl<'a> AdminAppState<'a> {
                                 };
                                 persisted = reloaded;
                             }
-                            if oauth_credentials_supplied {
-                                let Some(reloaded) = self
-                                    .reset_provider_catalog_key_recovery_state_fenced(
-                                        &updated.id,
-                                        updated.encrypted_auth_config.as_deref().ok_or_else(|| {
-                                            GatewayError::Internal(format!(
-                                                "OAuth Provider '{provider_name}' imported without auth_config"
-                                            ))
-                                        })?,
-                                    )
-                                    .await?
-                                else {
-                                    return Ok(Err(invalid_request(format!(
-                                        "更新 Provider '{provider_name}' 的 Key 失败"
-                                    ))));
-                                };
-                                persisted = reloaded;
-                                let _ = self
-                                    .app()
-                                    .invalidate_local_oauth_refresh_entry(&updated.id)
-                                    .await;
-                                seed_imported_oauth_pool_score(
-                                    self,
-                                    &provider.id,
-                                    &persisted,
-                                    now_unix_secs,
-                                )
-                                .await?;
-                            }
                             existing_keys[existing_index] = persisted;
                             stats.keys.updated += 1;
                         }
@@ -2038,24 +1353,11 @@ impl<'a> AdminAppState<'a> {
                     self.build_admin_create_provider_key_record(&provider, payload)
                         .await
                 );
-                let oauth_credentials_supplied = if auth_type == "oauth" {
-                    invalid!(apply_imported_oauth_key_credentials(
-                        self,
-                        &provider.provider_type,
-                        None,
-                        &raw_key,
-                        normalized_auth_config.as_ref(),
-                        &mut record,
-                    ))
-                } else {
-                    false
-                };
                 record.is_active = imported_key.is_active;
                 record.global_priority_by_format = invalid!(normalize_json_object(
                     imported_key.global_priority_by_format.clone(),
                     "global_priority_by_format",
                 ));
-                record.proxy = remap_import_proxy(imported_key.proxy.clone(), &node_id_map);
                 record.fingerprint = invalid!(normalize_json_object(
                     imported_key.fingerprint.clone(),
                     "fingerprint",
@@ -2065,10 +1367,6 @@ impl<'a> AdminAppState<'a> {
                         "创建 Provider '{provider_name}' 的 Key 失败"
                     ))));
                 };
-                if oauth_credentials_supplied {
-                    seed_imported_oauth_pool_score(self, &provider.id, &created, now_unix_secs)
-                        .await?;
-                }
                 existing_keys.push(created);
                 stats.keys.created += 1;
             }
@@ -3608,15 +2906,11 @@ impl<'a> AdminAppState<'a> {
             WalletOwner::User(user_id) => {
                 self.update_auth_user_wallet_snapshot(
                     user_id,
-                    wallet_target.recharge_balance,
-                    wallet_target.gift_balance,
+                    wallet_target.balance,
                     &wallet_target.limit_mode,
                     &wallet_target.currency,
                     &wallet_target.status,
-                    wallet_target.total_recharged,
-                    wallet_target.total_consumed,
-                    wallet_target.total_refunded,
-                    wallet_target.total_adjusted,
+                    0.0,
                     wallet_target.updated_at_unix_secs,
                 )
                 .await?
@@ -3624,15 +2918,11 @@ impl<'a> AdminAppState<'a> {
             WalletOwner::ApiKey(api_key_id) => {
                 self.update_auth_api_key_wallet_snapshot(
                     api_key_id,
-                    wallet_target.recharge_balance,
-                    wallet_target.gift_balance,
+                    wallet_target.balance,
                     &wallet_target.limit_mode,
                     &wallet_target.currency,
                     &wallet_target.status,
-                    wallet_target.total_recharged,
-                    wallet_target.total_consumed,
-                    wallet_target.total_refunded,
-                    wallet_target.total_adjusted,
+                    0.0,
                     wallet_target.updated_at_unix_secs,
                 )
                 .await?
@@ -3667,399 +2957,4 @@ impl<'a> AdminAppState<'a> {
 enum WalletOwner<'a> {
     User(&'a str),
     ApiKey(&'a str),
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use aether_data::repository::pool_scores::SqlitePoolMemberScoreRepository;
-    use aether_data::repository::provider_catalog::InMemoryProviderCatalogReadRepository;
-    use aether_data_contracts::repository::provider_catalog::{
-        StoredProviderCatalogKey, StoredProviderCatalogProvider,
-    };
-    use serde_json::json;
-
-    use super::{
-        build_imported_user_usage_total_aggregates, imported_oauth_auth_config_has_credentials,
-        imported_oauth_expiry_after_import, imported_optional_bool, imported_optional_f64,
-        imported_optional_i32, imported_optional_u64, imported_rfc3339_to_unix_secs,
-        imported_string_list_from_value, normalize_import_endpoint_format,
-        normalize_import_key_formats, normalize_import_key_raw_payload,
-        normalize_imported_wallet_target, seed_imported_oauth_pool_score,
-        validate_imported_system_users_export_version, ImportedProviderKey,
-    };
-    use crate::admin_api::AdminAppState;
-    use crate::data::GatewayDataState;
-    use crate::AppState;
-
-    #[test]
-    fn users_import_requires_supported_export_version() {
-        assert!(validate_imported_system_users_export_version(Some(&json!("1.3"))).is_ok());
-        assert!(validate_imported_system_users_export_version(Some(&json!("1.4"))).is_ok());
-        assert!(validate_imported_system_users_export_version(Some(&json!("1.5"))).is_ok());
-        assert_eq!(
-            validate_imported_system_users_export_version(Some(&json!("2.2"))).unwrap_err(),
-            "不支持的用户数据版本: 2.2，支持的版本: 1.3, 1.4, 1.5"
-        );
-        assert_eq!(
-            validate_imported_system_users_export_version(Some(&json!(null))).unwrap_err(),
-            "version 必须是 x.y 字符串"
-        );
-    }
-
-    #[test]
-    fn users_import_builds_supplemental_usage_aggregates_from_summary_fields() {
-        let users = vec![
-            json!({
-                "id": "source-user-1",
-                "username": "alice",
-                "request_count": 12,
-                "total_tokens": 3456
-            }),
-            json!({
-                "id": "source-user-zero",
-                "username": "zero",
-                "request_count": 0,
-                "total_tokens": 0
-            }),
-            json!({
-                "username": "no-source-id",
-                "request_count": 5,
-                "total_tokens": 6
-            }),
-        ];
-
-        let rows = build_imported_user_usage_total_aggregates(
-            &users,
-            Some(&json!("2026-05-25T12:34:56Z")),
-        )
-        .expect("supplemental usage aggregates should build");
-
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].user_id, "source-user-1");
-        assert_eq!(rows[0].username.as_deref(), Some("alice"));
-        assert_eq!(rows[0].total_requests, 12);
-        assert_eq!(rows[0].success_requests, 12);
-        assert_eq!(rows[0].input_tokens, 3456);
-        assert_eq!(rows[0].date_unix_secs % 86_400, 0);
-    }
-
-    #[test]
-    fn config_import_normalizes_python_cli_api_format_aliases() {
-        for (raw, expected) in [
-            ("openai:cli", "openai:responses"),
-            ("openai:compact", "openai:responses:compact"),
-            ("openai_image", "openai:image"),
-            ("images", "openai:image"),
-            ("/v1/images/generations", "openai:image"),
-            ("/v1/images/edits", "openai:image"),
-            ("claude:chat", "claude:messages"),
-            ("claude:cli", "claude:messages"),
-            ("gemini:chat", "gemini:generate_content"),
-            ("gemini:cli", "gemini:generate_content"),
-        ] {
-            assert_eq!(normalize_import_endpoint_format(raw).unwrap(), expected);
-        }
-    }
-
-    #[test]
-    fn config_import_normalizes_key_formats_against_imported_endpoint_aliases() {
-        let endpoint_formats = ["claude:messages", "openai:responses:compact"]
-            .into_iter()
-            .map(ToOwned::to_owned)
-            .collect();
-        let item = ImportedProviderKey {
-            api_key: None,
-            auth_type: None,
-            auth_config: None,
-            name: None,
-            note: None,
-            api_formats: Some(vec!["claude:cli".to_string(), "openai:compact".to_string()]),
-            supported_endpoints: None,
-            rate_multipliers: None,
-            internal_priority: None,
-            global_priority_by_format: None,
-            auth_type_by_format: None,
-            allow_auth_channel_mismatch_formats: None,
-            rpm_limit: None,
-            allowed_models: None,
-            capabilities: None,
-            cache_ttl_minutes: None,
-            max_probe_interval_minutes: None,
-            auto_fetch_models: None,
-            locked_models: None,
-            model_include_patterns: None,
-            model_exclude_patterns: None,
-            is_active: true,
-            proxy: None,
-            fingerprint: None,
-        };
-
-        let (formats, missing) = normalize_import_key_formats(&item, &endpoint_formats);
-
-        assert_eq!(formats, vec!["claude:messages", "openai:responses:compact"]);
-        assert!(missing.is_empty());
-    }
-
-    #[test]
-    fn config_import_filters_key_format_scoped_fields_to_selected_api_formats() {
-        let raw_key = json!({
-            "name": "test-key",
-            "api_key": "sk-test",
-            "api_formats": ["openai:responses", "openai:video"],
-            "auth_type_by_format": {
-                "openai:responses": "api_key",
-                "openai:video": "bearer"
-            },
-            "allow_auth_channel_mismatch_formats": [
-                "openai:responses",
-                "openai:video"
-            ]
-        });
-        let raw_key = raw_key.as_object().expect("key should be object");
-
-        let payload = normalize_import_key_raw_payload(
-            raw_key,
-            "api_key",
-            &["openai:responses".to_string()],
-            None,
-        );
-
-        assert_eq!(payload["api_formats"], json!(["openai:responses"]));
-        assert_eq!(
-            payload["auth_type_by_format"],
-            json!({ "openai:responses": "api_key" })
-        );
-        assert_eq!(
-            payload["allow_auth_channel_mismatch_formats"],
-            json!(["openai:responses"])
-        );
-    }
-
-    #[test]
-    fn config_import_preserves_explicit_empty_mismatch_scope_after_filtering() {
-        let raw_key = json!({
-            "name": "test-key",
-            "api_key": "sk-test",
-            "api_formats": ["openai:responses"],
-            "allow_auth_channel_mismatch_formats": ["openai:video"]
-        });
-        let raw_key = raw_key.as_object().expect("key should be object");
-
-        let payload = normalize_import_key_raw_payload(
-            raw_key,
-            "api_key",
-            &["openai:responses".to_string()],
-            None,
-        );
-
-        assert_eq!(payload["allow_auth_channel_mismatch_formats"], json!([]));
-    }
-
-    #[test]
-    fn oauth_import_only_treats_non_empty_secret_fields_as_credentials() {
-        assert!(!imported_oauth_auth_config_has_credentials(&json!({})));
-        assert!(!imported_oauth_auth_config_has_credentials(&json!({
-            "provider_type": "codex",
-            "expires_at": 4_102_444_800u64,
-            "account_id": "acct-1",
-            "refresh_token": "  "
-        })));
-        assert!(imported_oauth_auth_config_has_credentials(&json!({
-            "provider_type": "codex",
-            "refresh_token": "refresh-1"
-        })));
-        assert!(imported_oauth_auth_config_has_credentials(&json!({
-            "session": {"sso_token": "sso-1"}
-        })));
-        for field in [
-            "sso_rw_token",
-            "ssoRwToken",
-            "cf_cookies",
-            "cfCookies",
-            "cf_clearance",
-            "cfClearance",
-            "cookieHeader",
-        ] {
-            let mut config = serde_json::Map::new();
-            config.insert(field.to_string(), json!("credential-1"));
-            assert!(
-                imported_oauth_auth_config_has_credentials(&serde_json::Value::Object(config)),
-                "{field} is transport credential material"
-            );
-        }
-    }
-
-    #[test]
-    fn oauth_import_expiry_tracks_the_supplied_credential_source() {
-        let old_expiry = Some(1_700_000_000);
-        assert_eq!(
-            imported_oauth_expiry_after_import(old_expiry, false, None, true),
-            None,
-            "a new top-level api_key replaces the old session and clears its expiry"
-        );
-        assert_eq!(
-            imported_oauth_expiry_after_import(old_expiry, false, None, false),
-            old_expiry,
-            "metadata-only imports preserve the current OAuth expiry"
-        );
-        assert_eq!(
-            imported_oauth_expiry_after_import(
-                old_expiry,
-                true,
-                Some(&json!({"expires_at": 4_102_444_800u64})),
-                false,
-            ),
-            Some(4_102_444_800),
-            "an explicit auth_config owns the replacement expiry"
-        );
-    }
-
-    #[tokio::test]
-    async fn oauth_pool_score_persistence_failure_is_propagated() {
-        let mut provider = StoredProviderCatalogProvider::new(
-            "provider-1".to_string(),
-            "Provider One".to_string(),
-            None,
-            "codex".to_string(),
-        )
-        .expect("provider should build");
-        provider.config = Some(json!({"pool_advanced": {}}));
-        let key = StoredProviderCatalogKey::new(
-            "key-1".to_string(),
-            provider.id.clone(),
-            "OAuth Key".to_string(),
-            "oauth".to_string(),
-            None,
-            true,
-        )
-        .expect("key should build");
-        let provider_repository = Arc::new(InMemoryProviderCatalogReadRepository::seed(
-            vec![provider],
-            Vec::new(),
-            vec![key.clone()],
-        ));
-        let no_writer_app = AppState::new()
-            .expect("app state should build")
-            .with_data_state_for_tests(
-                GatewayDataState::with_provider_catalog_repository_for_tests(Arc::clone(
-                    &provider_repository,
-                )),
-            );
-        seed_imported_oauth_pool_score(&AdminAppState::new(&no_writer_app), "provider-1", &key, 99)
-            .await
-            .expect("a disabled score writer remains an allowed no-op");
-
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .expect("sqlite pool should connect");
-        let score_repository = Arc::new(SqlitePoolMemberScoreRepository::new(pool.clone()));
-        pool.close().await;
-        let app = AppState::new()
-            .expect("app state should build")
-            .with_data_state_for_tests(
-                GatewayDataState::with_provider_catalog_repository_for_tests(provider_repository)
-                    .with_pool_score_repository_for_tests(score_repository),
-            );
-
-        let error =
-            seed_imported_oauth_pool_score(&AdminAppState::new(&app), "provider-1", &key, 100)
-                .await
-                .expect_err("closed pool must fail OAuth score recovery");
-        assert!(error
-            .into_message()
-            .contains("failed to recover OAuth pool score for key 'key-1'"));
-    }
-
-    #[test]
-    fn import_handles_legacy_string_scalars() {
-        assert_eq!(
-            imported_optional_bool(Some(&json!("true"))).unwrap_err(),
-            "字段必须是布尔值"
-        );
-        assert_eq!(
-            imported_optional_i32(Some(&json!("5")), "rate_limit").unwrap_err(),
-            "rate_limit 必须是整数"
-        );
-        assert_eq!(
-            imported_optional_u64(Some(&json!("5")), "total_requests").unwrap_err(),
-            "total_requests 必须是非负整数"
-        );
-        assert_eq!(
-            imported_optional_f64(Some(&json!("1.25000000")), "total_cost_usd").unwrap(),
-            Some(1.25)
-        );
-        assert_eq!(
-            imported_optional_f64(Some(&json!("not-a-number")), "total_cost_usd").unwrap_err(),
-            "total_cost_usd 必须是有限数值"
-        );
-    }
-
-    #[test]
-    fn import_handles_python_isoformat_timestamps() {
-        assert_eq!(
-            imported_rfc3339_to_unix_secs(Some(&json!("2099-01-01T00:00:00+00:00")), "expires_at")
-                .unwrap(),
-            Some(4_070_908_800)
-        );
-        assert_eq!(
-            imported_rfc3339_to_unix_secs(Some(&json!("2099-01-01T00:00:00")), "expires_at")
-                .unwrap(),
-            Some(4_070_908_800)
-        );
-        assert_eq!(
-            imported_rfc3339_to_unix_secs(Some(&json!("invalid")), "expires_at").unwrap_err(),
-            "expires_at 必须是 RFC3339 时间"
-        );
-    }
-
-    #[test]
-    fn import_preserves_python_wallet_negative_recharge_balance() {
-        let wallet = json!({
-            "balance": -4.5,
-            "recharge_balance": -5.25,
-            "gift_balance": 0.75,
-            "limit_mode": "finite"
-        });
-        let wallet = wallet.as_object().expect("wallet should be object");
-
-        let target = normalize_imported_wallet_target(Some(wallet), false).unwrap();
-        assert_eq!(target.recharge_balance, -5.25);
-        assert_eq!(target.gift_balance, 0.75);
-        assert_eq!(target.total_recharged, -5.25);
-    }
-
-    #[test]
-    fn import_preserves_python_wallet_negative_balance_fallback() {
-        let wallet = json!({
-            "balance": -4.5,
-            "gift_balance": 0.75,
-            "limit_mode": "finite"
-        });
-        let wallet = wallet.as_object().expect("wallet should be object");
-
-        let target = normalize_imported_wallet_target(Some(wallet), false).unwrap();
-        assert_eq!(target.recharge_balance, -5.25);
-        assert_eq!(target.gift_balance, 0.75);
-    }
-
-    #[test]
-    fn import_rejects_legacy_string_lists() {
-        assert_eq!(
-            imported_string_list_from_value(Some(&json!("openai")), "allowed_providers")
-                .unwrap_err(),
-            "allowed_providers 必须是字符串列表"
-        );
-        assert_eq!(
-            imported_string_list_from_value(
-                Some(&json!("[\"openai:chat\"]")),
-                "allowed_api_formats"
-            )
-            .unwrap_err(),
-            "allowed_api_formats 必须是字符串列表"
-        );
-    }
 }

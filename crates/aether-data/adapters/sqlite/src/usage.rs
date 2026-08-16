@@ -76,11 +76,6 @@ SELECT
   endpoint_api_format,
   provider_api_family,
   provider_endpoint_kind,
-  CASE
-    WHEN usage_routing_snapshots.request_id IS NOT NULL
-    THEN COALESCE(usage_routing_snapshots.has_format_conversion, 0)
-    ELSE COALESCE("usage".has_format_conversion, 0)
-  END AS has_format_conversion,
   is_stream,
   upstream_is_stream,
   input_tokens,
@@ -218,7 +213,6 @@ SELECT
     AS settlement_billing_snapshot_schema_version,
   usage_settlement_snapshots.billing_snapshot_status AS settlement_billing_snapshot_status,
   CAST(usage_settlement_snapshots.rate_multiplier AS REAL) AS settlement_rate_multiplier,
-  usage_settlement_snapshots.is_free_tier AS settlement_is_free_tier,
   CAST(usage_settlement_snapshots.input_price_per_1m AS REAL)
     AS settlement_input_price_per_1m,
   CAST(usage_settlement_snapshots.output_price_per_1m AS REAL)
@@ -290,7 +284,6 @@ INSERT INTO "usage" (
   endpoint_api_format,
   provider_api_family,
   provider_endpoint_kind,
-  has_format_conversion,
   is_stream,
   upstream_is_stream,
   input_tokens,
@@ -325,7 +318,7 @@ INSERT INTO "usage" (
   created_at_unix_ms,
   updated_at_unix_secs
 ) VALUES (
-  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
   ?
 )
@@ -345,7 +338,6 @@ ON CONFLICT (request_id) DO UPDATE SET
   endpoint_api_format = CASE WHEN ("usage".status IN ('completed', 'failed', 'cancelled') AND excluded.status IN ('pending', 'streaming')) OR ("usage".status = 'streaming' AND excluded.status = 'pending') THEN "usage".endpoint_api_format ELSE excluded.endpoint_api_format END,
   provider_api_family = CASE WHEN ("usage".status IN ('completed', 'failed', 'cancelled') AND excluded.status IN ('pending', 'streaming')) OR ("usage".status = 'streaming' AND excluded.status = 'pending') THEN "usage".provider_api_family ELSE excluded.provider_api_family END,
   provider_endpoint_kind = CASE WHEN ("usage".status IN ('completed', 'failed', 'cancelled') AND excluded.status IN ('pending', 'streaming')) OR ("usage".status = 'streaming' AND excluded.status = 'pending') THEN "usage".provider_endpoint_kind ELSE excluded.provider_endpoint_kind END,
-  has_format_conversion = CASE WHEN ("usage".status IN ('completed', 'failed', 'cancelled') AND excluded.status IN ('pending', 'streaming')) OR ("usage".status = 'streaming' AND excluded.status = 'pending') THEN "usage".has_format_conversion ELSE excluded.has_format_conversion END,
   is_stream = CASE WHEN ("usage".status IN ('completed', 'failed', 'cancelled') AND excluded.status IN ('pending', 'streaming')) OR ("usage".status = 'streaming' AND excluded.status = 'pending') THEN "usage".is_stream ELSE excluded.is_stream END,
   upstream_is_stream = CASE WHEN ("usage".status IN ('completed', 'failed', 'cancelled') AND excluded.status IN ('pending', 'streaming')) OR ("usage".status = 'streaming' AND excluded.status = 'pending') THEN "usage".upstream_is_stream ELSE excluded.upstream_is_stream END,
   input_tokens = CASE
@@ -470,7 +462,6 @@ INSERT INTO "usage" (
   endpoint_api_format,
   provider_api_family,
   provider_endpoint_kind,
-  has_format_conversion,
   is_stream,
   upstream_is_stream,
   status_code,
@@ -505,8 +496,7 @@ DO UPDATE SET
   provider_endpoint_kind = COALESCE(
     excluded.provider_endpoint_kind,
     "usage".provider_endpoint_kind
-  ),
-  has_format_conversion =
+  )
 "#;
 
 const UPSERT_FIRST_BYTE_BATCH_UPDATE_SUFFIX_SQL: &str = r#",
@@ -1274,12 +1264,6 @@ fn push_sqlite_usage_provider_performance_filters(
         query.endpoint_kind.as_deref(),
     );
     push_sqlite_usage_bool_filter(builder, has_where, "is_stream", query.is_stream);
-    push_sqlite_usage_bool_filter(
-        builder,
-        has_where,
-        "has_format_conversion",
-        query.has_format_conversion,
-    );
 }
 
 fn sqlite_usage_metadata_input_price_expr() -> &'static str {
@@ -4288,7 +4272,6 @@ impl SqliteUsageWriteRepository {
     async fn execute_first_byte_batch(
         tx: &mut sqlx::Transaction<'_, Sqlite>,
         rows: &[&PreparedFirstByteUsage],
-        preserve_existing_format_conversion: bool,
     ) -> Result<(), DataLayerError> {
         if rows.is_empty() {
             return Ok(());
@@ -4314,7 +4297,6 @@ impl SqliteUsageWriteRepository {
                 .push_bind(row.usage.endpoint_api_format.clone())
                 .push_bind(row.usage.provider_api_family.clone())
                 .push_bind(row.usage.provider_endpoint_kind.clone())
-                .push_bind(row.usage.has_format_conversion.unwrap_or(false))
                 .push("1")
                 .push_bind(
                     row.usage
@@ -4336,13 +4318,6 @@ impl SqliteUsageWriteRepository {
                 .push_bind(row.updated_at_unix_secs);
         });
         builder.push(UPSERT_FIRST_BYTE_BATCH_UPDATE_PREFIX_SQL);
-        if preserve_existing_format_conversion {
-            builder.push("COALESCE(\"usage\".has_format_conversion, 0)");
-        } else {
-            builder.push(
-                "COALESCE(excluded.has_format_conversion, \"usage\".has_format_conversion, 0)",
-            );
-        }
         builder.push(UPSERT_FIRST_BYTE_BATCH_UPDATE_SUFFIX_SQL);
         builder.build().execute(&mut **tx).await.map_sql_err()?;
         Ok(())
@@ -4397,18 +4372,8 @@ impl SqliteUsageWriteRepository {
                     .is_none_or(first_byte_transition_allowed)
             })
             .collect::<Vec<_>>();
-        for preserve_existing_format_conversion in [true, false] {
-            let matching = eligible_rows
-                .iter()
-                .copied()
-                .filter(|row| {
-                    row.usage.has_format_conversion.is_none() == preserve_existing_format_conversion
-                })
-                .collect::<Vec<_>>();
-            for chunk in matching.chunks(SQLITE_FIRST_BYTE_BATCH_SIZE) {
-                Self::execute_first_byte_batch(&mut tx, chunk, preserve_existing_format_conversion)
-                    .await?;
-            }
+        for chunk in eligible_rows.chunks(SQLITE_FIRST_BYTE_BATCH_SIZE) {
+            Self::execute_first_byte_batch(&mut tx, chunk).await?;
         }
         for row in eligible_rows {
             counters::enqueue_usage_transition_for_request(
@@ -4428,12 +4393,7 @@ impl SqliteUsageWriteRepository {
             {
                 continue;
             }
-            Self::execute_first_byte_batch(
-                &mut tx,
-                &[&row],
-                row.usage.has_format_conversion.is_none(),
-            )
-            .await?;
+            Self::execute_first_byte_batch(&mut tx, &[&row]).await?;
             counters::enqueue_usage_transition_for_request(
                 &mut tx,
                 &row.usage.request_id,
@@ -4832,13 +4792,6 @@ WHERE request_id = ?
         counters::flush(&self.pool, batch_size).await
     }
 
-    async fn enqueue_proxy_node_counter_delta(
-        &self,
-        delta: aether_data_contracts::repository::usage::ProxyNodeCounterDelta,
-    ) -> Result<bool, DataLayerError> {
-        counters::enqueue_proxy_node(&self.pool, delta).await
-    }
-
     async fn enqueue_management_token_counter_delta(
         &self,
         delta: aether_data_contracts::repository::usage::ManagementTokenCounterDelta,
@@ -4983,7 +4936,6 @@ DO UPDATE SET
   billing_rule_id = NULL,
   billing_rule_version = NULL,
   rate_multiplier = NULL,
-  is_free_tier = NULL,
   input_price_per_1m = NULL,
   output_price_per_1m = NULL,
   cache_creation_price_per_1m = NULL,
@@ -5120,7 +5072,6 @@ fn bind_upsert<'q>(
         .bind(usage.endpoint_api_format.as_deref())
         .bind(usage.provider_api_family.as_deref())
         .bind(usage.provider_endpoint_kind.as_deref())
-        .bind(i64::from(usage.has_format_conversion.unwrap_or(false)))
         .bind(i64::from(usage.is_stream.unwrap_or(false)))
         .bind(i64::from(usage_upstream_is_stream(usage)))
         .bind(to_i64(input_tokens, "input_tokens")?)
@@ -5194,9 +5145,6 @@ fn map_usage_row(
         row.try_get("endpoint_api_format").map_sql_err()?,
         row.try_get("provider_api_family").map_sql_err()?,
         row.try_get("provider_endpoint_kind").map_sql_err()?,
-        row.try_get::<i64, _>("has_format_conversion")
-            .map_sql_err()?
-            != 0,
         row.try_get::<i64, _>("is_stream").map_sql_err()? != 0,
         row_i32(row, "input_tokens")?,
         row_i32(row, "output_tokens")?,
@@ -5288,6 +5236,3 @@ fn row_u64(row: &SqliteRow, field: &str) -> Result<u64, DataLayerError> {
     let value: i64 = row.try_get(field).map_sql_err()?;
     u64::try_from(value).map_err(|_| DataLayerError::UnexpectedValue(format!("{field} negative")))
 }
-
-#[cfg(test)]
-mod tests;

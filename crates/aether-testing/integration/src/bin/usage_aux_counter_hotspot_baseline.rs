@@ -5,9 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use aether_data::repository::usage::SqlxUsageReadRepository;
-use aether_data_contracts::repository::usage::{
-    ApiKeyLastUsedDelta, ManagementTokenCounterDelta, ProxyNodeCounterDelta,
-};
+use aether_data_contracts::repository::usage::{ApiKeyLastUsedDelta, ManagementTokenCounterDelta};
 use aether_testkit::{
     init_test_runtime_for, prepare_aether_postgres_schema, ManagedPostgresServer,
 };
@@ -16,7 +14,6 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::{PgPool, Row};
 use tokio::sync::Mutex;
 
-const PROXY_NODE_ID: &str = "proxy-node-hotspot";
 const MANAGEMENT_TOKEN_ID: &str = "management-token-hotspot";
 const API_KEY_ID: &str = "api-key-last-used-hotspot";
 const USER_ID: &str = "usage-aux-hotspot-user";
@@ -80,7 +77,6 @@ struct ReportConfig {
 struct FlushReport {
     calls: usize,
     rows_claimed: usize,
-    proxy_node_targets: usize,
     management_token_targets: usize,
     api_key_last_used_targets: usize,
 }
@@ -89,14 +85,6 @@ struct FlushReport {
 struct CounterReport {
     outbox_pending_rows: i64,
     outbox_processed_rows: i64,
-    proxy_total_requests: i64,
-    proxy_failed_requests: i64,
-    proxy_dns_failures: i64,
-    proxy_stream_errors: i64,
-    expected_proxy_total_requests: i64,
-    expected_proxy_failed_requests: i64,
-    expected_proxy_dns_failures: i64,
-    expected_proxy_stream_errors: i64,
     management_token_usage_count: i64,
     expected_management_token_usage_count: i64,
     api_key_last_used_at: Option<i64>,
@@ -107,7 +95,6 @@ struct CounterReport {
 struct LockMonitorReport {
     samples: usize,
     max_lock_waiters: i64,
-    max_proxy_node_update_waiters: i64,
     max_management_token_update_waiters: i64,
     max_api_key_update_waiters: i64,
     max_oldest_lock_wait_ms: i64,
@@ -116,7 +103,6 @@ struct LockMonitorReport {
 #[derive(Debug, Clone, Copy, Default)]
 struct LockSample {
     lock_waiters: i64,
-    proxy_node_update_waiters: i64,
     management_token_update_waiters: i64,
     api_key_update_waiters: i64,
     oldest_lock_wait_ms: i64,
@@ -185,7 +171,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     flush.calls += 1;
     flush.rows_claimed += final_flush.rows_claimed;
-    flush.proxy_node_targets += final_flush.proxy_node_targets;
     flush.management_token_targets += final_flush.management_token_targets;
     flush.api_key_last_used_targets += final_flush.api_key_last_used_targets;
     drop(flush);
@@ -302,9 +287,6 @@ async fn enqueue_aux_counter_deltas(
     index: usize,
 ) -> Result<(), aether_data::DataLayerError> {
     repository
-        .enqueue_proxy_node_counter_delta(proxy_delta_for_index(index))
-        .await?;
-    repository
         .enqueue_management_token_counter_delta(ManagementTokenCounterDelta {
             token_id: MANAGEMENT_TOKEN_ID.to_string(),
             usage_count_delta: 1,
@@ -321,16 +303,6 @@ async fn enqueue_aux_counter_deltas(
     Ok(())
 }
 
-fn proxy_delta_for_index(index: usize) -> ProxyNodeCounterDelta {
-    ProxyNodeCounterDelta {
-        node_id: PROXY_NODE_ID.to_string(),
-        total_requests_delta: 1,
-        failed_requests_delta: if index.is_multiple_of(10) { 1 } else { 0 },
-        dns_failures_delta: if index.is_multiple_of(25) { 1 } else { 0 },
-        stream_errors_delta: if index.is_multiple_of(40) { 1 } else { 0 },
-    }
-}
-
 fn spawn_flush_loop(
     repository: SqlxUsageReadRepository,
     stop: Arc<AtomicBool>,
@@ -344,7 +316,6 @@ fn spawn_flush_loop(
             let mut report = report.lock().await;
             report.calls += 1;
             report.rows_claimed += summary.rows_claimed;
-            report.proxy_node_targets += summary.proxy_node_targets;
             report.management_token_targets += summary.management_token_targets;
             report.api_key_last_used_targets += summary.api_key_last_used_targets;
             drop(report);
@@ -366,9 +337,6 @@ fn spawn_lock_monitor(
             let mut report = report.lock().await;
             report.samples += 1;
             report.max_lock_waiters = report.max_lock_waiters.max(sample.lock_waiters);
-            report.max_proxy_node_update_waiters = report
-                .max_proxy_node_update_waiters
-                .max(sample.proxy_node_update_waiters);
             report.max_management_token_update_waiters = report
                 .max_management_token_update_waiters
                 .max(sample.management_token_update_waiters);
@@ -456,29 +424,10 @@ ON CONFLICT (id) DO UPDATE SET
 
     sqlx::query(
         r#"
-INSERT INTO proxy_nodes (
-  id, name, ip, port, status, total_requests, failed_requests,
-  dns_failures, stream_errors
-)
-VALUES ($1, 'usage aux hotspot proxy', '127.0.0.1', 8080, 'online', 0, 0, 0, 0)
-ON CONFLICT (id) DO UPDATE SET
-  total_requests = 0,
-  failed_requests = 0,
-  dns_failures = 0,
-  stream_errors = 0
-"#,
-    )
-    .bind(PROXY_NODE_ID)
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r#"
 DELETE FROM usage_counter_deltas
-WHERE target_id IN ($1, $2, $3)
+WHERE target_id IN ($1, $2)
 "#,
     )
-    .bind(PROXY_NODE_ID)
     .bind(MANAGEMENT_TOKEN_ID)
     .bind(API_KEY_ID)
     .execute(pool)
@@ -491,9 +440,6 @@ async fn read_lock_sample(pool: &PgPool) -> Result<LockSample, sqlx::Error> {
         r#"
 SELECT
   COUNT(*) FILTER (WHERE wait_event_type = 'Lock')::BIGINT AS lock_waiters,
-  COUNT(*) FILTER (
-    WHERE wait_event_type = 'Lock' AND query LIKE 'UPDATE proxy_nodes%'
-  )::BIGINT AS proxy_node_update_waiters,
   COUNT(*) FILTER (
     WHERE wait_event_type = 'Lock' AND query LIKE 'UPDATE management_tokens%'
   )::BIGINT AS management_token_update_waiters,
@@ -513,7 +459,6 @@ WHERE datname = current_database()
     .await?;
     Ok(LockSample {
         lock_waiters: row.try_get("lock_waiters")?,
-        proxy_node_update_waiters: row.try_get("proxy_node_update_waiters")?,
         management_token_update_waiters: row.try_get("management_token_update_waiters")?,
         api_key_update_waiters: row.try_get("api_key_update_waiters")?,
         oldest_lock_wait_ms: row.try_get("oldest_lock_wait_ms")?,
@@ -526,19 +471,14 @@ async fn read_counters(pool: &PgPool, requests: usize) -> Result<CounterReport, 
 SELECT
   (SELECT COUNT(*)::BIGINT FROM usage_counter_deltas WHERE processed_at IS NULL) AS outbox_pending_rows,
   (SELECT COUNT(*)::BIGINT FROM usage_counter_deltas WHERE processed_at IS NOT NULL) AS outbox_processed_rows,
-  (SELECT total_requests::BIGINT FROM proxy_nodes WHERE id = $1) AS proxy_total_requests,
-  (SELECT failed_requests::BIGINT FROM proxy_nodes WHERE id = $1) AS proxy_failed_requests,
-  (SELECT dns_failures::BIGINT FROM proxy_nodes WHERE id = $1) AS proxy_dns_failures,
-  (SELECT stream_errors::BIGINT FROM proxy_nodes WHERE id = $1) AS proxy_stream_errors,
-  (SELECT usage_count::BIGINT FROM management_tokens WHERE id = $2) AS management_token_usage_count,
+  (SELECT usage_count::BIGINT FROM management_tokens WHERE id = $1) AS management_token_usage_count,
   (
     SELECT EXTRACT(EPOCH FROM last_used_at)::BIGINT
     FROM api_keys
-    WHERE id = $3
+    WHERE id = $2
   ) AS api_key_last_used_at
 "#,
     )
-    .bind(PROXY_NODE_ID)
     .bind(MANAGEMENT_TOKEN_ID)
     .bind(API_KEY_ID)
     .fetch_one(pool)
@@ -547,26 +487,11 @@ SELECT
     Ok(CounterReport {
         outbox_pending_rows: row.try_get("outbox_pending_rows")?,
         outbox_processed_rows: row.try_get("outbox_processed_rows")?,
-        proxy_total_requests: row.try_get("proxy_total_requests")?,
-        proxy_failed_requests: row.try_get("proxy_failed_requests")?,
-        proxy_dns_failures: row.try_get("proxy_dns_failures")?,
-        proxy_stream_errors: row.try_get("proxy_stream_errors")?,
-        expected_proxy_total_requests: requests as i64,
-        expected_proxy_failed_requests: count_every(requests, 10),
-        expected_proxy_dns_failures: count_every(requests, 25),
-        expected_proxy_stream_errors: count_every(requests, 40),
         management_token_usage_count: row.try_get("management_token_usage_count")?,
         expected_management_token_usage_count: requests as i64,
         api_key_last_used_at: row.try_get("api_key_last_used_at")?,
         expected_min_api_key_last_used_at: now_unix_secs().saturating_sub(5) as i64,
     })
-}
-
-fn count_every(requests: usize, interval: usize) -> i64 {
-    if requests == 0 {
-        return 0;
-    }
-    ((requests - 1) / interval + 1) as i64
 }
 
 fn summarize_latencies(mut latencies: Vec<u64>) -> (u64, u64, u64, u64) {

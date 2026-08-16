@@ -11,6 +11,7 @@ async-stream.workspace = true
 aether-contracts.workspace = true
 aether-data.workspace = true
 aether-data-contracts.workspace = true
+aether-data-postgres.workspace = true
 aether-gateway = { workspace = true, features = ["testkit"] }
 aether-runtime-state.workspace = true
 aether-testkit = { workspace = true, features = ["gateway", "postgres"] }

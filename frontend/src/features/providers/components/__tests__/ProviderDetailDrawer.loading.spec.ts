@@ -20,19 +20,8 @@ describe('ProviderDetailDrawer loading priorities', () => {
     expect(source).not.toContain('.drawer-enter-from .relative')
   })
 
-  it('loads mapping preview after first-screen provider data', () => {
-    const openWatcher = source
-      .split('// 合并监听 providerId 和 open')[1]
-      ?.split('} else if (!newOpen && oldOpen)')[0]
-
-    expect(openWatcher).toBeTruthy()
-    expect(openWatcher).toContain('const endpointsPromise = loadEndpoints()')
-    expect(openWatcher).toContain('endpointsPromise.then(() => {')
-    expect(openWatcher).toContain('if (!props.open || props.providerId !== newId) return')
-    expect(openWatcher).toContain('void loadMappingPreview()')
-
-    const beforeEndpoints = openWatcher?.split('const endpointsPromise = loadEndpoints()')[0]
-    expect(beforeEndpoints).not.toContain('loadMappingPreview()')
+  it('loads provider detail resources together', () => {
+    expect(source).toContain('await Promise.all([loadProvider(), loadEndpoints(), loadProviderKeysPage(), loadModels(), loadMappingPreview()])')
   })
 
   it('keeps model and mapping loading states independent', () => {
@@ -47,8 +36,8 @@ describe('ProviderDetailDrawer loading priorities', () => {
     expect(source).not.toContain('backdrop-blur-sm')
     expect(source).toContain('v-if="provider && open && endpointDialogOpen"')
     expect(source).toContain('v-if="open && keyFormDialogOpen"')
-    expect(source).toContain('v-if="open && oauthAccountDialogOpen && provider"')
-    expect(source).toContain('v-if="open && oauthKeyEditDialogOpen"')
+    expect(source).not.toContain('oauthAccountDialogOpen')
+    expect(source).not.toContain('oauthKeyEditDialogOpen')
     expect(source).toContain('v-if="open && keyPermissionsDialogOpen"')
     expect(source).toContain('v-if="open && modelFormDialogOpen && provider"')
     expect(source).toContain('v-if="open && batchAssignDialogOpen && provider"')
@@ -56,6 +45,6 @@ describe('ProviderDetailDrawer loading priorities', () => {
   })
 
   it('marks a transport-error stop policy as a configured failover rule', () => {
-    expect(source).toContain('rules.stop_on_transport_errors === true')
+    expect(source).toContain('Object.values(rules).some')
   })
 })

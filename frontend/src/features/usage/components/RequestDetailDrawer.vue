@@ -52,18 +52,7 @@
                   {{ detail.status_code }}
                 </Badge>
                 <Badge
-                  v-if="detail && resolveUsageStreamLabelSegments(detail).hasConversion"
-                  :variant="streamBadgeVariant(resolveUsageStreamLabelSegments(detail).client === '流式')"
-                  :class="streamBadgeVariant(resolveUsageStreamLabelSegments(detail).client === '流式') === 'secondary'
-                    ? 'text-xs inline-flex items-center gap-1'
-                    : 'text-xs inline-flex items-center gap-1 border-border/60 text-muted-foreground'"
-                >
-                  <span>{{ resolveUsageStreamLabelSegments(detail).client }}</span>
-                  <span class="opacity-60">→</span>
-                  <span>{{ resolveUsageStreamLabelSegments(detail).upstream }}</span>
-                </Badge>
-                <Badge
-                  v-else-if="detail"
+                  v-if="detail"
                   :variant="streamBadgeVariant(isUsageUpstreamStream(detail))"
                   :class="streamBadgeVariant(isUsageUpstreamStream(detail)) === 'secondary'
                     ? 'text-xs'
@@ -867,7 +856,6 @@ import {
   formatUsageStreamLabel,
   isUsageUpstreamStream,
   resolveDisplayRequestStatus,
-  resolveUsageStreamLabelSegments,
 } from '../utils/status'
 import { isCyberPolicyError } from '../utils/cyberError'
 import {
@@ -938,7 +926,6 @@ const emit = defineEmits<{
     clientIsStream?: boolean | null
     apiFormat?: string | null
     endpointApiFormat?: string | null
-    hasFormatConversion?: boolean | null
     targetModel?: string | null
     requestedReasoningEffort?: string | null
     reasoningEffort?: string | null
@@ -1242,7 +1229,6 @@ function emitDetailRequestState(nextDetail: RequestDetail) {
     clientIsStream: nextDetail.client_is_stream ?? null,
     apiFormat: nextDetail.api_format ?? null,
     endpointApiFormat: nextDetail.endpoint_api_format ?? null,
-    hasFormatConversion: nextDetail.has_format_conversion ?? null,
     ...(targetModel ? { targetModel } : {}),
     ...(requestedReasoningEffort ? { requestedReasoningEffort } : {}),
     ...(reasoningEffort ? { reasoningEffort } : {}),

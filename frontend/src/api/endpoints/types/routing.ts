@@ -30,11 +30,6 @@ export interface RoutingEndpointInfo {
   api_format: string
   base_url: string
   custom_path?: string | null
-  format_acceptance_config?: {
-    enabled?: boolean
-    accept_formats?: string[] | null
-    reject_formats?: string[] | null
-  } | null
   is_active: boolean
   keys: RoutingKeyInfo[]
   total_keys: number
@@ -58,11 +53,6 @@ export interface RoutingProviderInfo {
   name: string
   model_id: string
   provider_priority: number
-  enable_format_conversion?: boolean
-  keep_priority_on_conversion?: boolean
-  billing_type?: string | null
-  monthly_quota_usd?: number | null
-  monthly_used_usd?: number | null
   is_active: boolean
   provider_model_name: string
   model_mappings: RoutingModelMapping[]
@@ -98,6 +88,5 @@ export interface ModelRoutingPreviewResponse {
   active_providers: number
   scheduling_mode: string
   priority_mode: string
-  keep_priority_on_conversion?: boolean
   all_keys_whitelist: GlobalKeyWhitelistItem[]
 }

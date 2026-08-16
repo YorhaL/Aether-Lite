@@ -132,17 +132,6 @@ pub(super) fn classify_admin_endpoints_family_route(
             "admin:endpoints_manage",
             false,
         ))
-    } else if method == http::Method::GET
-        && normalized_path.starts_with("/api/admin/endpoints/keys/")
-        && normalized_path.ends_with("/export")
-    {
-        Some(classified(
-            "admin_proxy",
-            "endpoints_manage",
-            "export_key",
-            "admin:endpoints_manage",
-            false,
-        ))
     } else if method == http::Method::PUT
         && normalized_path.starts_with("/api/admin/endpoints/keys/")
     {
@@ -170,50 +159,6 @@ pub(super) fn classify_admin_endpoints_family_route(
             "admin_proxy",
             "endpoints_manage",
             "batch_delete_keys",
-            "admin:endpoints_manage",
-            false,
-        ))
-    } else if method == http::Method::POST
-        && normalized_path.starts_with("/api/admin/endpoints/keys/")
-        && normalized_path.ends_with("/clear-oauth-invalid")
-    {
-        Some(classified(
-            "admin_proxy",
-            "endpoints_manage",
-            "clear_oauth_invalid",
-            "admin:endpoints_manage",
-            false,
-        ))
-    } else if method == http::Method::POST
-        && normalized_path.starts_with("/api/admin/endpoints/keys/")
-        && normalized_path.ends_with("/reset-cycle-stats")
-    {
-        Some(classified(
-            "admin_proxy",
-            "endpoints_manage",
-            "reset_cycle_stats",
-            "admin:endpoints_manage",
-            false,
-        ))
-    } else if method == http::Method::POST
-        && normalized_path.starts_with("/api/admin/endpoints/keys/")
-        && normalized_path.ends_with("/codex-reset-credit/consume")
-    {
-        Some(classified(
-            "admin_proxy",
-            "endpoints_manage",
-            "codex_reset_credit_consume",
-            "admin:endpoints_manage",
-            false,
-        ))
-    } else if method == http::Method::POST
-        && normalized_path.starts_with("/api/admin/endpoints/providers/")
-        && normalized_path.ends_with("/refresh-quota")
-    {
-        Some(classified(
-            "admin_proxy",
-            "endpoints_manage",
-            "refresh_quota",
             "admin:endpoints_manage",
             false,
         ))

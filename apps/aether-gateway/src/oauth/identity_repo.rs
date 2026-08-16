@@ -210,8 +210,8 @@ pub(crate) async fn resolve_identity_oauth_login_user(
         return Err(IdentityOAuthAccountError::RegistrationDisabled);
     }
 
-    let initial_gift = state
-        .read_system_config_json_value("default_user_initial_gift_usd")
+    let initial_balance = state
+        .read_system_config_json_value("default_user_initial_balance_usd")
         .await
         .map_err(|err| IdentityOAuthAccountError::Storage(format!("{err:?}")))?
         .as_ref()
@@ -226,7 +226,7 @@ pub(crate) async fn resolve_identity_oauth_login_user(
         .map_err(repo_data_error)?
         .ok_or_else(|| IdentityOAuthAccountError::Storage("oauth user not created".to_string()))?;
     match state
-        .initialize_auth_user_wallet(&user.id, initial_gift, false)
+        .initialize_auth_user_wallet(&user.id, initial_balance, false)
         .await
     {
         Ok(Some(_wallet)) => {}

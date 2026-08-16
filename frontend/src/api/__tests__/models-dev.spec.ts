@@ -2,60 +2,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const apiMocks = vi.hoisted(() => ({
   get: vi.fn(),
-  put: vi.fn(),
   delete: vi.fn(),
 }))
 
 vi.mock('@/api/client', () => ({
-  default: { get: apiMocks.get, put: apiMocks.put, delete: apiMocks.delete },
+  default: { get: apiMocks.get, delete: apiMocks.delete },
 }))
 
 import {
   clearModelsDevCache,
-  getExternalModelsAccessConfig,
   getModelsDevList,
   refreshModelsDevList,
-  updateExternalModelsAccessConfig,
 } from '@/api/models-dev'
 
 beforeEach(() => {
   clearModelsDevCache()
   localStorage.clear()
   apiMocks.get.mockReset()
-  apiMocks.put.mockReset()
   apiMocks.delete.mockReset()
   apiMocks.delete.mockResolvedValue({ data: { cleared: true } })
-})
-
-describe('external models access config', () => {
-  it('reads the configured proxy node', async () => {
-    apiMocks.get.mockResolvedValue({ data: { proxy_node_id: 'proxy-1' } })
-
-    await expect(getExternalModelsAccessConfig()).resolves.toEqual({
-      proxy_node_id: 'proxy-1',
-    })
-    expect(apiMocks.get).toHaveBeenCalledWith('/api/admin/models/external/config')
-  })
-
-  it.each([
-    ['a proxy node', 'proxy-1'],
-    ['direct access', null],
-  ] as const)('updates %s and clears the browser cache', async (_label, proxyNodeId) => {
-    localStorage.setItem('models_dev_cache', JSON.stringify({ timestamp: Date.now(), data: {} }))
-    apiMocks.put.mockResolvedValue({
-      data: { proxy_node_id: proxyNodeId, cache_cleared: true },
-    })
-
-    await expect(updateExternalModelsAccessConfig(proxyNodeId)).resolves.toEqual({
-      proxy_node_id: proxyNodeId,
-      cache_cleared: true,
-    })
-    expect(apiMocks.put).toHaveBeenCalledWith(
-      '/api/admin/models/external/config',
-      { proxy_node_id: proxyNodeId },
-    )
-    expect(localStorage.getItem('models_dev_cache')).toBeNull()
-  })
 })
 
 describe('getModelsDevList', () => {

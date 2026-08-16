@@ -103,7 +103,6 @@ export interface UsageRecord {
   actual_service_tier?: string | null  // 响应侧审计事实，不用于 Fast 展示或计费
   api_format?: string
   endpoint_api_format?: string  // 端点原生格式
-  has_format_conversion?: boolean  // 是否发生了格式转换
   input_tokens: number
   effective_input_tokens?: number
   output_tokens: number

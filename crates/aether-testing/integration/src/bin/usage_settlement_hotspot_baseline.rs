@@ -84,7 +84,6 @@ struct FlushReport {
     provider_api_key_targets: usize,
     model_targets: usize,
     provider_monthly_targets: usize,
-    proxy_node_targets: usize,
     management_token_targets: usize,
     api_key_last_used_targets: usize,
 }
@@ -188,7 +187,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     flush.provider_api_key_targets += final_flush.provider_api_key_targets;
     flush.model_targets += final_flush.model_targets;
     flush.provider_monthly_targets += final_flush.provider_monthly_targets;
-    flush.proxy_node_targets += final_flush.proxy_node_targets;
     flush.management_token_targets += final_flush.management_token_targets;
     flush.api_key_last_used_targets += final_flush.api_key_last_used_targets;
     drop(flush);
@@ -319,7 +317,6 @@ fn spawn_flush_loop(
             report.provider_api_key_targets += summary.provider_api_key_targets;
             report.model_targets += summary.model_targets;
             report.provider_monthly_targets += summary.provider_monthly_targets;
-            report.proxy_node_targets += summary.proxy_node_targets;
             report.management_token_targets += summary.management_token_targets;
             report.api_key_last_used_targets += summary.api_key_last_used_targets;
             drop(report);
@@ -475,7 +472,6 @@ fn settlement_input(index: usize) -> UsageSettlementInput {
         user_id: None,
         api_key_id: None,
         api_key_is_standalone: false,
-        provider_id: Some(PROVIDER_ID.to_string()),
         status: "completed".to_string(),
         billing_status: "pending".to_string(),
         total_cost_usd: 0.0,

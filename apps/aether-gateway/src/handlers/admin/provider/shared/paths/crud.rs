@@ -6,20 +6,6 @@ pub(crate) fn admin_provider_id_for_mapping_preview(request_path: &str) -> Optio
     admin_provider_id_for_suffix(request_path, "/mapping-preview")
 }
 
-pub(crate) fn admin_provider_id_for_pool_status(request_path: &str) -> Option<String> {
-    admin_provider_id_for_suffix(request_path, "/pool-status")
-}
-
-pub(crate) fn admin_provider_clear_pool_cooldown_parts(
-    request_path: &str,
-) -> Option<(String, String)> {
-    admin_provider_pool_key_route_parts(request_path, "/pool/clear-cooldown/")
-}
-
-pub(crate) fn admin_provider_reset_pool_cost_parts(request_path: &str) -> Option<(String, String)> {
-    admin_provider_pool_key_route_parts(request_path, "/pool/reset-cost/")
-}
-
 pub(crate) fn admin_provider_delete_task_parts(request_path: &str) -> Option<(String, String)> {
     let raw = request_path.strip_prefix("/api/admin/providers/")?;
     let (provider_id, task_id) = raw.split_once("/delete-task/")?;
@@ -101,24 +87,5 @@ fn admin_provider_id_for_suffix(request_path: &str, suffix: &str) -> Option<Stri
         None
     } else {
         Some(normalized.to_string())
-    }
-}
-
-fn admin_provider_pool_key_route_parts(
-    request_path: &str,
-    marker: &str,
-) -> Option<(String, String)> {
-    let raw = request_path.strip_prefix("/api/admin/providers/")?;
-    let (provider_id, key_id) = raw.split_once(marker)?;
-    let provider_id = provider_id.trim().trim_matches('/');
-    let key_id = key_id.trim().trim_matches('/');
-    if provider_id.is_empty()
-        || key_id.is_empty()
-        || provider_id.contains('/')
-        || key_id.contains('/')
-    {
-        None
-    } else {
-        Some((provider_id.to_string(), key_id.to_string()))
     }
 }

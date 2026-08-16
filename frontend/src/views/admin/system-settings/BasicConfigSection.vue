@@ -18,19 +18,19 @@
           for="default-quota"
           class="block text-sm font-medium"
         >
-          默认用户初始赠款(美元)
+          默认用户初始额度（美元）
         </Label>
         <Input
           id="default-quota"
-          :model-value="defaultUserInitialGiftUsd"
+          :model-value="defaultUserInitialBalanceUsd"
           type="number"
           step="0.01"
           placeholder="10.00"
           class="mt-1"
-          @update:model-value="$emit('update:defaultUserInitialGiftUsd', Number($event))"
+          @update:model-value="$emit('update:defaultUserInitialBalanceUsd', Number($event))"
         />
         <p class="mt-1 text-xs text-muted-foreground">
-          新用户注册时的默认初始赠款
+          新用户注册时的默认初始额度
         </p>
       </div>
 
@@ -147,27 +147,6 @@
             </Label>
             <p class="text-xs text-muted-foreground">
               关闭时仅禁用过期的独立余额 Key
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div class="flex items-center h-full">
-        <div class="flex items-center space-x-2">
-          <Checkbox
-            id="enable-format-conversion"
-            :checked="enableFormatConversion"
-            @update:checked="$emit('update:enableFormatConversion', $event)"
-          />
-          <div>
-            <Label
-              for="enable-format-conversion"
-              class="cursor-pointer"
-            >
-              全局格式转换
-            </Label>
-            <p class="text-xs text-muted-foreground">
-              开启后强制允许所有提供商接受跨格式请求
             </p>
           </div>
         </div>
@@ -331,121 +310,6 @@
         <div class="flex items-center h-full">
           <div class="flex items-center space-x-2">
             <Checkbox
-              id="referral-enabled"
-              :checked="referralEnabled"
-              @update:checked="$emit('update:referralEnabled', $event)"
-            />
-            <div>
-              <Label
-                for="referral-enabled"
-                class="cursor-pointer"
-              >
-                邀请返利
-              </Label>
-              <p class="text-xs text-muted-foreground">
-                开启后可按充值比例、人头或两者同时发放赠款返利
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <Label
-            for="referral-reward-mode"
-            class="block text-sm font-medium mb-2"
-          >
-            返利方式
-          </Label>
-          <Select
-            :model-value="referralRewardMode"
-            @update:model-value="$emit('update:referralRewardMode', $event)"
-          >
-            <SelectTrigger id="referral-reward-mode">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="percent">
-                按充值比例
-              </SelectItem>
-              <SelectItem value="headcount">
-                按邀请人头
-              </SelectItem>
-              <SelectItem value="both">
-                两者同时启用
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div>
-          <Label
-            for="referral-recharge-percent"
-            class="block text-sm font-medium"
-          >
-            充值返利比例 (%)
-          </Label>
-          <Input
-            id="referral-recharge-percent"
-            :model-value="referralRechargePercent"
-            type="number"
-            min="0"
-            step="0.01"
-            class="mt-1"
-            @update:model-value="$emit('update:referralRechargePercent', Number($event))"
-          />
-        </div>
-
-        <div>
-          <Label
-            for="referral-headcount-amount"
-            class="block text-sm font-medium"
-          >
-            人头返利金额 (美元)
-          </Label>
-          <Input
-            id="referral-headcount-amount"
-            :model-value="referralHeadcountAmountUsd"
-            type="number"
-            min="0"
-            step="0.01"
-            class="mt-1"
-            @update:model-value="$emit('update:referralHeadcountAmountUsd', Number($event))"
-          />
-        </div>
-
-        <div>
-          <Label
-            for="referral-headcount-trigger"
-            class="block text-sm font-medium mb-2"
-          >
-            人头返利触发时机
-          </Label>
-          <Select
-            :model-value="referralHeadcountTrigger"
-            @update:model-value="$emit('update:referralHeadcountTrigger', $event)"
-          >
-            <SelectTrigger id="referral-headcount-trigger">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="registration">
-                注册成功
-              </SelectItem>
-              <SelectItem value="email_verified">
-                邮箱验证完成
-              </SelectItem>
-              <SelectItem value="first_paid_order">
-                首笔真实支付完成
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-5">
-        <div class="flex items-center h-full">
-          <div class="flex items-center space-x-2">
-            <Checkbox
               id="privacy-policy-enabled"
               :checked="registrationPrivacyPolicyEnabled"
               @update:checked="$emit('update:registrationPrivacyPolicyEnabled', $event)"
@@ -541,7 +405,7 @@ import SelectItem from '@/components/ui/select-item.vue'
 import { CardSection } from '@/components/layout'
 
 defineProps<{
-  defaultUserInitialGiftUsd: number
+  defaultUserInitialBalanceUsd: number
   rateLimitPerMinute: number
   dailyUsageLimitUsd: number
   enableRegistration: boolean
@@ -551,17 +415,11 @@ defineProps<{
   turnstileSecretKey: string
   turnstileSecretConfigured: boolean
   turnstileAllowedHostnamesStr: string
-  referralEnabled: boolean
-  referralRewardMode: string
-  referralRechargePercent: number
-  referralHeadcountAmountUsd: number
-  referralHeadcountTrigger: string
   registrationPrivacyPolicyEnabled: boolean
   registrationPrivacyPolicyFormat: string
   registrationPrivacyPolicyContent: string
   registrationPrivacyPolicyVersion: string
   autoDeleteExpiredKeys: boolean
-  enableFormatConversion: boolean
   enableOpenaiImageSyncHeartbeat: boolean
   enableStandardTextSyncHeartbeat: boolean
   cyberContinueFailover: boolean
@@ -571,7 +429,7 @@ defineProps<{
 
 defineEmits<{
   save: []
-  'update:defaultUserInitialGiftUsd': [value: number]
+  'update:defaultUserInitialBalanceUsd': [value: number]
   'update:rateLimitPerMinute': [value: number]
   'update:dailyUsageLimitUsd': [value: number]
   'update:enableRegistration': [value: boolean]
@@ -581,17 +439,11 @@ defineEmits<{
   'update:turnstileSecretKey': [value: string]
   'update:turnstileAllowedHostnamesStr': [value: string]
   clearTurnstileSecret: []
-  'update:referralEnabled': [value: boolean]
-  'update:referralRewardMode': [value: string]
-  'update:referralRechargePercent': [value: number]
-  'update:referralHeadcountAmountUsd': [value: number]
-  'update:referralHeadcountTrigger': [value: string]
   'update:registrationPrivacyPolicyEnabled': [value: boolean]
   'update:registrationPrivacyPolicyFormat': [value: string]
   'update:registrationPrivacyPolicyContent': [value: string]
   'update:registrationPrivacyPolicyVersion': [value: string]
   'update:autoDeleteExpiredKeys': [value: boolean]
-  'update:enableFormatConversion': [value: boolean]
   'update:enableOpenaiImageSyncHeartbeat': [value: boolean]
   'update:enableStandardTextSyncHeartbeat': [value: boolean]
   'update:cyberContinueFailover': [value: boolean]

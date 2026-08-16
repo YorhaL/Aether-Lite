@@ -1,9 +1,8 @@
 # aether-data
 
-`aether-data` is the runtime data-access crate. It owns concrete SQL/database
-drivers, concrete repository implementations, migration/backfill/export
-workflows, and the composition layer that wires those pieces into the rest of
-the application.
+`aether-data` is the runtime data-access crate. It owns repository composition,
+migration/backfill/export workflows, and the application-facing backend
+handles. Concrete SQL drivers live in the adapter crates.
 
 It does not own the cross-crate DTO contracts. Shared repository records and
 errors that are consumed by scheduler, billing, admin, usage runtime, and video
@@ -13,24 +12,22 @@ task crates live in the sibling `../contracts` crate (`aether-data-contracts`).
 
 | Path | Responsibility |
 |---|---|
-| `src/database.rs` | Logical SQL driver selection and shared pool configuration. |
 | `src/config.rs` | Data-layer config for SQL drivers and repository wiring. |
 | `src/maintenance.rs` | Maintenance DTOs and aggregation summaries used by backend dispatch and runtime maintenance entrypoints. |
-| `src/driver/{postgres,mysql,sqlite}.rs` | Thin compatibility facades for the selected adapter crates. Low-level pools, transactions, and leases live in `aether-data-postgres`, `aether-data-mysql`, and `aether-data-sqlite`. |
-| `src/repository` | Compatibility modules that re-export contracts and selected SQL adapters, plus concrete in-memory implementations. Driver-specific request-path SQL lives in the adapter crates. |
+| `src/repository` | Domain composition and concrete in-memory implementations. Shared contracts live in `aether-data-contracts`; driver-specific request-path SQL lives in the adapter crates. |
 | `src/backend` | Composition root. Builds concrete driver backends and exposes app-facing read/write/worker/lock/lease handles. |
 | `src/backend/{maintenance,stats,wallet,system}.rs` | Backend-owned maintenance, aggregation, wallet ledger, and system config workflows that are not normal request-path repositories. |
-| `src/lifecycle/migrate.rs` and `src/lifecycle/migrate/*` | Compatibility entry points and Postgres snapshot bootstrap adapter. |
+| `src/lifecycle/migrate.rs` and `src/lifecycle/migrate/*` | Migration entry points and the Postgres snapshot bootstrap adapter. |
 | `src/lifecycle/backfill.rs` | Backfill entry points and backfill discovery. |
 | `src/lifecycle/export.rs` | Cross-database export/import workflows. |
-| `../adapters/{postgres,mysql,sqlite}/migrations` | Executable `sqlx` migrations owned and embedded by each adapter crate. |
+| `../adapters/{postgres,sqlite}/migrations` | Executable `sqlx` migrations owned and embedded by each adapter crate. |
 | `schema` | Schema maintenance workspace for logical definitions, driver fragments, and generated output. |
 | `schema/logical` | Human-maintained logical table definitions used by `aether-data-schema`. |
-| `schema/drivers/{postgres,mysql,sqlite}` | Human-maintained driver fragments that compose back into executable SQL while generation is being promoted. |
+| `schema/drivers/{postgres,sqlite}` | Human-maintained driver fragments that compose back into executable SQL while generation is being promoted. |
 | `schema/bootstrap/postgres` | Human-maintained source fragments for the Postgres bootstrap snapshot. `build.rs` composes them into the runtime embedded artifact during crate builds. |
 | `schema/generated` | Machine-written SQL generated from logical schema for audit and drift detection only. |
 | `schema/overrides` | Rare driver-specific SQL escape hatch. Keep README-only until a real override is needed. |
-| `backfills/{postgres,mysql,sqlite}` | Executable backfill SQL grouped by driver. |
+| `backfills/{postgres,sqlite}` | Executable backfill SQL grouped by driver. |
 
 ## Layering Rules
 
@@ -39,14 +36,11 @@ The crate is easiest to read as five layers:
 1. Contracts: DTOs, input structs, repository traits, and `DataLayerError`.
    Prefer `aether-data-contracts` for anything that another crate needs to
    compile against.
-2. Driver primitives: `aether-data-postgres`, `aether-data-mysql`, and
-   `aether-data-sqlite` connect to infrastructure and expose pools, runners,
-   and executable migrations;
-   the matching `src/driver/*.rs` files only preserve the existing import paths.
-3. Repository implementations: `aether-data-{postgres,mysql,sqlite}` translate
-   contract types to driver-specific SQL. `src/repository/<domain>` keeps the
-   compatibility import path and owns the in-memory implementation where one
-   exists.
+2. Driver primitives: `aether-data-postgres` and `aether-data-sqlite` connect
+   to infrastructure and expose pools, runners, and executable migrations.
+3. Repository implementations: `aether-data-{postgres,sqlite}` translate
+   contract types to driver-specific SQL. `src/repository/<domain>` composes
+   those implementations and owns the in-memory implementation where one exists.
 4. Backend composition: `backend` chooses one SQL driver from config and wires
    repository implementations into app-facing handles. Backend-owned runtime
    maintenance workflows live in focused backend modules rather than in the
@@ -68,7 +62,6 @@ src/repository/<domain>/
   mod.rs      # exports trait/type names and concrete implementations
   types.rs    # implementation-local DTOs when they are not already in contracts
   postgres.rs # Postgres implementation
-  mysql.rs    # MySQL implementation
   sqlite.rs   # SQLite implementation
   memory.rs   # tests/dev in-memory implementation
 ```
@@ -78,23 +71,23 @@ new generic `sql.rs` modules for driver-specific code.
 
 ## SQL Driver Policy
 
-The project supports three SQL drivers at the repository/backend boundary:
-Postgres, MySQL, and SQLite. That does not mean every raw SQL file is shared.
+The project supports PostgreSQL and SQLite at the repository/backend boundary.
+That does not mean every raw SQL file is shared.
 The portable contract is the Rust shape and behavior; the physical SQL stays
 driver-specific where syntax, indexes, JSON support, timestamps, locking, or
 upsert semantics differ.
 
 Use logical types in design docs and reviews:
 
-| Logical type | Postgres | MySQL | SQLite |
-|---|---|---|---|
-| `json` | `json` or `jsonb` | `json` or text JSON | text JSON |
-| `bool` | `boolean` | `boolean` / `tinyint(1)` | integer |
-| `time_unix` | `bigint` or legacy timestamp | `bigint` | integer |
-| `money_decimal` | `numeric` / legacy double | `double` | real |
+| Logical type | Postgres | SQLite |
+|---|---|---|
+| `json` | `json` or `jsonb` | text JSON |
+| `bool` | `boolean` | integer |
+| `time_unix` | `bigint` or legacy timestamp | integer |
+| `money_decimal` | `numeric` / legacy double | real |
 
-`jsonb` is acceptable only in Postgres SQL. MySQL and SQLite migrations must not
-contain `jsonb`; this is guarded by migration tests. Prefer `serde_json::Value`
+`jsonb` is acceptable only in Postgres SQL. SQLite migrations must not contain
+`jsonb`; this is guarded by migration tests. Prefer `serde_json::Value`
 or typed Rust structs at the repository boundary so callers do not depend on the
 physical storage type.
 
@@ -105,20 +98,19 @@ all SQLx drivers:
 
 ```bash
 cargo check -p aether-data
-cargo check -p aether-data --no-default-features --features mysql
 cargo check -p aether-data --no-default-features --features sqlite
-cargo check -p aether-data --no-default-features --features all-drivers
+cargo check -p aether-data --no-default-features --features postgres,sqlite
 ```
 
-Services selecting MySQL or SQLite in `Cargo.toml` must also disable the default
-Postgres feature:
+Services selecting SQLite in `Cargo.toml` must also disable the default Postgres
+feature:
 
 ```toml
-aether-data = { workspace = true, default-features = false, features = ["mysql"] }
+aether-data = { workspace = true, default-features = false, features = ["sqlite"] }
 ```
 
-The gateway explicitly enables `all-drivers` for deployment compatibility. New
-services should select only the driver they deploy with. A configured driver
+The gateway explicitly enables both supported drivers. New services should
+select only the driver they deploy with. A configured driver
 that is not enabled in the build returns an explicit configuration error rather
 than silently constructing an empty backend.
 
@@ -151,7 +143,7 @@ that keeps table structure from drifting back into three manually maintained
 definitions.
 
 For executable fragments that have not been promoted to generated output yet,
-edit fragments under `schema/drivers/{postgres,mysql,sqlite}` directly, run
+edit fragments under `schema/drivers/{postgres,sqlite}` directly, run
 `compose`, then run `check`. Do not edit baseline executable SQL and fragments
 independently.
 
@@ -179,7 +171,7 @@ These are intentionally staged to keep the multi-database refactor reviewable:
    composition facade.
 2. Group repository domains once file-level names are stable. Likely groups:
    identity, auth config, provider catalog, runtime tasks, wallet/billing,
-   usage, stats, and proxy nodes.
+   usage and stats.
 3. Continue shrinking Postgres stats SQL modules where useful by moving shared
    SQL fragments and row-mapping helpers behind focused `backend/stats/*`
    modules.

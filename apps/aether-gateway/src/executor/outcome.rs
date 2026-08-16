@@ -150,7 +150,7 @@ impl LocalExecutionRuntimeMissContext {
             .candidate_contexts
             .iter()
             .find_map(runtime_miss_candidate_failure_diagnostic)?;
-        let mut detail = format!("上游请求体转换失败：{}", diagnostic.message);
+        let mut detail = format!("上游请求体构建失败：{}", diagnostic.message);
         if diagnostic.path != "$" {
             detail.push_str(&format!("；字段路径：{}", diagnostic.path));
         }
@@ -465,13 +465,6 @@ pub(crate) async fn record_failed_usage_for_runtime_miss_request(
             .as_deref()
             .and_then(infer_endpoint_kind)
             .map(ToOwned::to_owned),
-        has_format_conversion: routing_candidate.and_then(|value| {
-            value
-                .client_api_format
-                .as_deref()
-                .zip(value.provider_api_format.as_deref())
-                .map(|(left, right)| !left.eq_ignore_ascii_case(right))
-        }),
         status_code: Some(status_code),
         error_message: Some(local_execution_runtime_miss_detail.to_string()),
         error_category: error_category_for_failed_status(status_code),
@@ -1003,11 +996,6 @@ fn insert_runtime_miss_candidate_usage_metadata(
                 })
                 .or_else(|| {
                     extra_data
-                        .get("request_conversion_error")
-                        .filter(|v| v.is_object())
-                })
-                .or_else(|| {
-                    extra_data
                         .get("request_body_build_error")
                         .filter(|v| v.is_object())
                 })
@@ -1028,11 +1016,6 @@ fn runtime_miss_candidate_failure_diagnostic(
         .get("failure_diagnostic")
         .and_then(Value::as_object)
         .filter(|diagnostic| diagnostic.get("safe_to_show") != Some(&Value::Bool(false)))
-        .or_else(|| {
-            extra_data
-                .get("request_conversion_error")
-                .and_then(Value::as_object)
-        })
         .or_else(|| {
             extra_data
                 .get("request_body_build_error")
@@ -1418,69 +1401,5 @@ mod tests {
                 .map(|candidate| candidate.candidate.id.as_str()),
             Some("cand-skipped")
         );
-    }
-
-    #[test]
-    fn runtime_miss_context_surfaces_request_conversion_field_diagnostic() {
-        let skipped_candidate = StoredRequestCandidate::new(
-            "cand-skipped".to_string(),
-            "req-1".to_string(),
-            Some("user-1".to_string()),
-            Some("api-key-1".to_string()),
-            Some("alice".to_string()),
-            Some("default".to_string()),
-            0,
-            0,
-            Some("provider-1".to_string()),
-            Some("endpoint-1".to_string()),
-            Some("provider-key-1".to_string()),
-            RequestCandidateStatus::Skipped,
-            Some("provider_request_body_build_failed".to_string()),
-            false,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(json!({
-                "failure_diagnostic": {
-                    "kind": "request_conversion",
-                    "path": "$.n",
-                    "message": "openai:chat 字段 n 不能无损转换到 openai:responses：OpenAI Responses request has no canonical equivalent for this Chat field",
-                    "safe_to_show": true
-                },
-                "request_conversion_error": {
-                    "path": "$.n",
-                    "message": "compat"
-                }
-            })),
-            None,
-            100,
-            None,
-            None,
-        )
-        .expect("candidate should build");
-
-        let context = LocalExecutionRuntimeMissContext {
-            candidate_contexts: vec![RuntimeMissCandidateContext {
-                candidate: skipped_candidate,
-                provider_name: Some("openai".to_string()),
-                key_name: Some("prod".to_string()),
-                client_api_format: Some("openai:chat".to_string()),
-                provider_api_format: Some("openai:responses".to_string()),
-                global_model_name: Some("gpt-5".to_string()),
-                selected_provider_model_name: Some("gpt-5-upstream".to_string()),
-                endpoint_url: Some("https://api.openai.example/v1/responses".to_string()),
-            }],
-            ..LocalExecutionRuntimeMissContext::default()
-        };
-
-        let detail = context
-            .all_provider_request_body_build_failures_detail()
-            .expect("detail should include conversion diagnostic");
-
-        assert!(detail.contains("字段 n"));
-        assert!(detail.contains("字段路径：$.n"));
-        assert!(detail.contains("provider_request_body_build_failed"));
     }
 }

@@ -1,5 +1,5 @@
 import { computed, type Ref } from 'vue'
-import { Layers, Puzzle, Users } from 'lucide-vue-next'
+import { Gauge, Layers, Users } from 'lucide-vue-next'
 
 // Section index constants
 export const SECTIONS = {
@@ -30,9 +30,9 @@ export const featureCards = [
     status: 'completed' as const
   },
   {
-    icon: Puzzle,
-    titleKey: 'site.home.feature.cards.format',
-    descKey: 'site.home.feature.cards.formatDesc',
+    icon: Gauge,
+    titleKey: 'site.home.feature.cards.quota',
+    descKey: 'site.home.feature.cards.quotaDesc',
     status: 'completed' as const
   },
   {

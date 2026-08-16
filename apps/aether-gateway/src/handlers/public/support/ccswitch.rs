@@ -65,13 +65,8 @@ fn build_ccswitch_usage_extra(
     if let Some(today_cost) = today_payload.and_then(|payload| json_f64(payload, "total_cost")) {
         parts.push(format!("今日消耗 {}", format_usd(today_cost)));
     }
-    if let Some(wallet_balance) = json_f64(wallet_payload, "wallet_balance") {
-        parts.push(format!("钱包 {}", format_usd(wallet_balance)));
-    }
-    if let Some(package_balance) = json_f64(wallet_payload, "package_balance") {
-        if package_balance > 0.0 {
-            parts.push(format!("套餐 {}", format_usd(package_balance)));
-        }
+    if let Some(balance) = json_f64(wallet_payload, "balance") {
+        parts.push(format!("可用额度 {}", format_usd(balance)));
     }
 
     parts.join(" · ")
@@ -145,8 +140,7 @@ pub(super) async fn maybe_build_local_ccswitch_response(
     };
 
     let unlimited = json_bool(&wallet_payload, "unlimited");
-    let remaining = json_f64(&wallet_payload, "total_available_balance")
-        .or_else(|| json_f64(&wallet_payload, "wallet_balance"));
+    let remaining = json_f64(&wallet_payload, "balance");
     let used_today = today_payload
         .as_ref()
         .and_then(|payload| json_f64(payload, "total_cost"))

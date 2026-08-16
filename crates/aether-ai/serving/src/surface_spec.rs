@@ -261,13 +261,10 @@ mod tests {
     fn gemini_requested_model_parser_uses_body_agent_when_path_has_no_model() {
         let requested_model = extract_ai_requested_model_from_request_path(
             "/v1/interactions",
-            &serde_json::json!({ "agent": " antigravity-preview-05-2026 " }),
+            &serde_json::json!({ "agent": " gemini-preview-05-2026 " }),
             AiRequestedModelFamily::Gemini,
         );
 
-        assert_eq!(
-            requested_model.as_deref(),
-            Some("antigravity-preview-05-2026")
-        );
+        assert_eq!(requested_model.as_deref(), Some("gemini-preview-05-2026"));
     }
 }

@@ -278,17 +278,6 @@
                 取消
               </Badge>
               <Badge
-                v-else-if="getStreamModeSegments(record).hasConversion"
-                :variant="streamBadgeVariant(getStreamModeSegments(record).client === '流式')"
-                :class="(streamBadgeVariant(getStreamModeSegments(record).client === '流式') === 'secondary')
-                  ? 'whitespace-nowrap text-[10px] px-1.5 h-4 leading-4 inline-flex items-center gap-0.5 flex-shrink-0'
-                  : 'whitespace-nowrap border-border/60 text-muted-foreground text-[10px] px-1.5 h-4 leading-4 inline-flex items-center gap-0.5 flex-shrink-0'"
-              >
-                <span>{{ getStreamModeSegments(record).client }}</span>
-                <span class="opacity-60">→</span>
-                <span>{{ getStreamModeSegments(record).upstream }}</span>
-              </Badge>
-              <Badge
                 v-else
                 :variant="streamBadgeVariant(getUpstreamStream(record))"
                 :class="(streamBadgeVariant(getUpstreamStream(record)) === 'secondary')
@@ -766,31 +755,8 @@
             :class="[isAdmin ? 'w-[15%]' : 'w-[14%]']"
             :title="getApiFormatTooltip(record)"
           >
-            <!-- 有格式转换或同族格式差异：两行显示 -->
-            <div
-              v-if="shouldShowFormatConversion(record)"
-              class="flex flex-col text-xs gap-0.5"
-            >
-              <div class="flex items-center gap-1 whitespace-nowrap">
-                <span>{{ formatApiFormat(record.api_format!) }}</span>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                  class="w-3 h-3 text-muted-foreground flex-shrink-0"
-                >
-                  <path
-                    fill-rule="evenodd"
-                    d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z"
-                    clip-rule="evenodd"
-                  />
-                </svg>
-              </div>
-              <span class="text-muted-foreground whitespace-nowrap">{{ formatApiFormat(record.endpoint_api_format!) }}</span>
-            </div>
-            <!-- 无格式转换：单行显示 -->
             <span
-              v-else-if="record.api_format"
+              v-if="record.api_format"
               class="text-xs whitespace-nowrap"
             >{{ formatApiFormat(record.api_format) }}</span>
             <span
@@ -830,17 +796,6 @@
               class="whitespace-nowrap border-amber-500/50 text-amber-600 dark:text-amber-400"
             >
               已取消
-            </Badge>
-            <Badge
-              v-else-if="getStreamModeSegments(record).hasConversion"
-              :variant="streamBadgeVariant(getStreamModeSegments(record).client === '流式')"
-              :class="(streamBadgeVariant(getStreamModeSegments(record).client === '流式') === 'secondary')
-                ? 'whitespace-nowrap inline-flex items-center gap-1'
-                : 'whitespace-nowrap border-border/60 text-muted-foreground inline-flex items-center gap-1'"
-            >
-              <span>{{ getStreamModeSegments(record).client }}</span>
-              <span class="opacity-60">→</span>
-              <span>{{ getStreamModeSegments(record).upstream }}</span>
             </Badge>
             <Badge
               v-else
@@ -1022,8 +977,7 @@ import {
   formatUsageStreamLabel,
   isUsageRecordFailed,
   isUsageUpstreamStream,
-  resolveDisplayRequestStatus,
-  resolveUsageStreamLabelSegments
+  resolveDisplayRequestStatus
 } from '../utils/status'
 import { useRowClick } from '@/composables/useRowClick'
 import { useDarkMode } from '@/composables/useDarkMode'
@@ -1320,10 +1274,6 @@ function getStreamModeLabel(record: UsageRecord): string {
   return formatUsageStreamLabel(record)
 }
 
-function getStreamModeSegments(record: UsageRecord) {
-  return resolveUsageStreamLabelSegments(record)
-}
-
 function getUpstreamStream(record: UsageRecord): boolean {
   return isUsageUpstreamStream(record)
 }
@@ -1501,36 +1451,8 @@ function formatUserAgent(value: string | null | undefined): string {
 
 // useDebounceFn 自动处理清理，无需 onUnmounted
 
-// 判断是否应该显示格式转换信息
-// 包括：1. 跨格式转换（has_format_conversion=true）2. 同族格式差异
-function shouldShowFormatConversion(record: UsageRecord): boolean {
-  if (!record.api_format || !record.endpoint_api_format) {
-    return false
-  }
-  // 跨格式转换
-  if (record.has_format_conversion) {
-    return true
-  }
-  // 同族格式差异（精确字符串比较，不区分大小写）
-  return record.api_format.trim().toLowerCase() !== record.endpoint_api_format.trim().toLowerCase()
-}
-
-// 获取 API 格式的 tooltip（包含转换信息）
 function getApiFormatTooltip(record: UsageRecord): string {
-  if (!record.api_format) {
-    return ''
-  }
-  const displayFormat = formatApiFormat(record.api_format)
-
-  // 如果发生了格式转换或同族格式差异，显示详细信息
-  if (shouldShowFormatConversion(record)) {
-    const endpointApiFormat = record.endpoint_api_format ?? record.api_format
-    const endpointDisplayFormat = formatApiFormat(endpointApiFormat)
-    const conversionType = record.has_format_conversion ? '格式转换' : '格式兼容（无需转换）'
-    return `用户请求格式: ${displayFormat}\n端点原生格式: ${endpointDisplayFormat}\n${conversionType}`
-  }
-
-  return record.api_format
+  return record.api_format ? formatApiFormat(record.api_format) : ''
 }
 
 // 获取实际使用的模型（优先 target_model，其次列表接口下发的 model_version）

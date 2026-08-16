@@ -56,14 +56,6 @@ impl OAuthTokenSet {
             .map(|expires_at| current_unix_secs() >= expires_at.saturating_sub(skew_secs))
             .unwrap_or(false)
     }
-
-    pub fn rotated_refresh_token<'a>(&'a self, existing: Option<&'a str>) -> Option<&'a str> {
-        self.refresh_token
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .or_else(|| existing.map(str::trim).filter(|value| !value.is_empty()))
-    }
 }
 
 pub fn current_unix_secs() -> u64 {

@@ -1,9 +1,5 @@
 use std::sync::Arc;
 
-use crate::driver::postgres::{
-    PostgresLeaseRunner, PostgresLeaseRunnerConfig, PostgresPool, PostgresPoolConfig,
-    PostgresPoolFactory, PostgresTransactionRunner,
-};
 use crate::repository::announcements::{
     AnnouncementReadRepository, AnnouncementWriteRepository, SqlxAnnouncementReadRepository,
 };
@@ -39,18 +35,9 @@ use crate::repository::management_tokens::{
 use crate::repository::oauth_providers::{
     OAuthProviderReadRepository, OAuthProviderWriteRepository, SqlxOAuthProviderRepository,
 };
-use crate::repository::pool_scores::{
-    PoolMemberScoreWriteRepository, PoolScoreReadRepository, PostgresPoolMemberScoreRepository,
-};
 use crate::repository::provider_catalog::{
     ProviderCatalogReadRepository, ProviderCatalogWriteRepository,
     SqlxProviderCatalogReadRepository,
-};
-use crate::repository::proxy_nodes::{
-    ProxyNodeReadRepository, ProxyNodeWriteRepository, SqlxProxyNodeRepository,
-};
-use crate::repository::quota::{
-    ProviderQuotaReadRepository, ProviderQuotaWriteRepository, SqlxProviderQuotaRepository,
 };
 use crate::repository::routing_profiles::{
     PostgresRoutingGroupRepository, RoutingGroupReadRepository, RoutingGroupWriteRepository,
@@ -68,6 +55,10 @@ use crate::repository::wallet::{
     SqlxWalletRepository, WalletReadRepository, WalletWriteRepository,
 };
 use crate::DataLayerError;
+use aether_data_postgres::{
+    PostgresLeaseRunner, PostgresLeaseRunnerConfig, PostgresPool, PostgresPoolConfig,
+    PostgresPoolFactory, PostgresTransactionRunner,
+};
 
 #[derive(Debug, Clone)]
 pub struct PostgresBackend {
@@ -185,14 +176,6 @@ impl PostgresBackend {
         Arc::new(SqlxOAuthProviderRepository::new(self.pool_clone()))
     }
 
-    pub fn proxy_node_read_repository(&self) -> Arc<dyn ProxyNodeReadRepository> {
-        Arc::new(SqlxProxyNodeRepository::new(self.pool_clone()))
-    }
-
-    pub fn proxy_node_write_repository(&self) -> Arc<dyn ProxyNodeWriteRepository> {
-        Arc::new(SqlxProxyNodeRepository::new(self.pool_clone()))
-    }
-
     pub fn provider_catalog_read_repository(&self) -> Arc<dyn ProviderCatalogReadRepository> {
         Arc::new(SqlxProviderCatalogReadRepository::new(self.pool_clone()))
     }
@@ -201,24 +184,12 @@ impl PostgresBackend {
         Arc::new(SqlxProviderCatalogReadRepository::new(self.pool_clone()))
     }
 
-    pub fn pool_score_read_repository(&self) -> Arc<dyn PoolScoreReadRepository> {
-        Arc::new(PostgresPoolMemberScoreRepository::new(self.pool_clone()))
-    }
-
-    pub fn pool_score_write_repository(&self) -> Arc<dyn PoolMemberScoreWriteRepository> {
-        Arc::new(PostgresPoolMemberScoreRepository::new(self.pool_clone()))
-    }
-
     pub fn routing_group_read_repository(&self) -> Arc<dyn RoutingGroupReadRepository> {
         Arc::new(PostgresRoutingGroupRepository::new(self.pool_clone()))
     }
 
     pub fn routing_group_write_repository(&self) -> Arc<dyn RoutingGroupWriteRepository> {
         Arc::new(PostgresRoutingGroupRepository::new(self.pool_clone()))
-    }
-
-    pub fn provider_quota_read_repository(&self) -> Arc<dyn ProviderQuotaReadRepository> {
-        Arc::new(SqlxProviderQuotaRepository::new(self.pool_clone()))
     }
 
     pub fn usage_read_repository(&self) -> Arc<dyn UsageReadRepository> {
@@ -262,69 +233,5 @@ impl PostgresBackend {
         config: PostgresLeaseRunnerConfig,
     ) -> Result<PostgresLeaseRunner, DataLayerError> {
         PostgresLeaseRunner::new(self.transaction_runner(), config)
-    }
-
-    pub fn provider_quota_write_repository(&self) -> Arc<dyn ProviderQuotaWriteRepository> {
-        Arc::new(SqlxProviderQuotaRepository::new(self.pool_clone()))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::PostgresBackend;
-    use crate::driver::postgres::{PostgresLeaseRunnerConfig, PostgresPoolConfig};
-
-    #[tokio::test]
-    async fn backend_retains_config_and_pool() {
-        let config = PostgresPoolConfig {
-            database_url: "postgres://localhost/aether".to_string(),
-            min_connections: 1,
-            max_connections: 4,
-            acquire_timeout_ms: 1_000,
-            idle_timeout_ms: 5_000,
-            max_lifetime_ms: 30_000,
-            statement_cache_capacity: 64,
-            require_ssl: false,
-        };
-
-        let backend =
-            PostgresBackend::from_config(config.clone()).expect("backend should build lazily");
-
-        assert_eq!(backend.config(), &config);
-        let _pool = backend.pool();
-        let _pool_clone = backend.pool_clone();
-        let _auth_api_key_reader = backend.auth_api_key_read_repository();
-        let _auth_api_key_writer = backend.auth_api_key_write_repository();
-        let _auth_module_reader = backend.auth_module_read_repository();
-        let _billing_reader = backend.billing_read_repository();
-        let _gemini_file_mapping_reader = backend.gemini_file_mapping_read_repository();
-        let _global_model_reader = backend.global_model_read_repository();
-        let _global_model_writer = backend.global_model_write_repository();
-        let _management_token_reader = backend.management_token_read_repository();
-        let _management_token_writer = backend.management_token_write_repository();
-        let _oauth_provider_reader = backend.oauth_provider_read_repository();
-        let _oauth_provider_writer = backend.oauth_provider_write_repository();
-        let _proxy_node_reader = backend.proxy_node_read_repository();
-        let _proxy_node_writer = backend.proxy_node_write_repository();
-        let _minimal_candidate_selection_reader =
-            backend.minimal_candidate_selection_read_repository();
-        let _request_candidate_reader = backend.request_candidate_read_repository();
-        let _request_candidate_writer = backend.request_candidate_write_repository();
-        let _gemini_file_mapping_writer = backend.gemini_file_mapping_write_repository();
-        let _provider_catalog_reader = backend.provider_catalog_read_repository();
-        let _provider_catalog_writer = backend.provider_catalog_write_repository();
-        let _provider_quota_reader = backend.provider_quota_read_repository();
-        let _usage_reader = backend.usage_read_repository();
-        let _usage_writer = backend.usage_write_repository();
-        let _wallet_reader = backend.wallet_read_repository();
-        let _wallet_writer = backend.wallet_write_repository();
-        let _settlement_writer = backend.settlement_write_repository();
-        let _video_task_reader = backend.video_task_read_repository();
-        let _video_task_writer = backend.video_task_write_repository();
-        let _transaction_runner = backend.transaction_runner();
-        let _lease_runner = backend
-            .lease_runner(PostgresLeaseRunnerConfig::default())
-            .expect("lease runner should build");
-        let _provider_quota_writer = backend.provider_quota_write_repository();
     }
 }

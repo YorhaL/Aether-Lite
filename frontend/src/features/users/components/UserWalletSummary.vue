@@ -22,13 +22,6 @@
             {{ row.totalBalanceLabel }}
           </span>
         </p>
-        <p
-          v-if="!row.isUnlimited && row.hasWallet"
-          class="text-[11px] text-muted-foreground"
-        >
-          {{ legacyT('套餐') }} {{ row.packageBalanceLabel }}
-          · {{ legacyT('钱包') }} {{ row.walletBalanceLabel }}
-        </p>
       </div>
       <div :class="mobile ? 'text-right' : 'flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap'">
         <p :class="mobile ? 'text-[11px] text-muted-foreground' : ''">

@@ -8,14 +8,14 @@ struct SqliteImportColumns {
 }
 
 pub async fn export_sqlite_core_jsonl(
-    pool: &crate::driver::sqlite::SqlitePool,
+    pool: &aether_data_sqlite::SqlitePool,
     created_at_unix_secs: u64,
 ) -> Result<String, DataLayerError> {
     export_sqlite_jsonl(pool, sqlite_core_export_domains(), created_at_unix_secs).await
 }
 
 pub async fn export_sqlite_jsonl(
-    pool: &crate::driver::sqlite::SqlitePool,
+    pool: &aether_data_sqlite::SqlitePool,
     domains: Vec<ExportDomain>,
     created_at_unix_secs: u64,
 ) -> Result<String, DataLayerError> {
@@ -55,7 +55,7 @@ pub async fn export_sqlite_jsonl(
 }
 
 pub async fn import_sqlite_jsonl(
-    pool: &crate::driver::sqlite::SqlitePool,
+    pool: &aether_data_sqlite::SqlitePool,
     input: &str,
 ) -> Result<usize, DataLayerError> {
     let plan = build_import_plan(input)?;
@@ -63,7 +63,7 @@ pub async fn import_sqlite_jsonl(
 }
 
 pub async fn import_sqlite_plan(
-    pool: &crate::driver::sqlite::SqlitePool,
+    pool: &aether_data_sqlite::SqlitePool,
     plan: &DataImportPlan,
 ) -> Result<usize, DataLayerError> {
     let mut tx = pool.begin().await.map_sql_err()?;
@@ -119,7 +119,6 @@ fn sqlite_domain_table(
         ExportDomain::UserOAuthLinks => Ok(("user_oauth_links", "id")),
         ExportDomain::UserGroups => Ok(("user_groups", "id")),
         ExportDomain::UserGroupMembers => Ok(("user_group_members", "group_id")),
-        ExportDomain::ProxyNodes => Ok(("proxy_nodes", "id")),
         ExportDomain::SystemConfigs => Ok(("system_configs", "id")),
         ExportDomain::Wallets => Err(DataLayerError::InvalidInput(
             "sqlite wallet export uses multiple tables and must be handled as a domain".to_string(),
@@ -385,16 +384,7 @@ async fn import_sqlite_wallet_row(
 }
 
 fn sqlite_wallet_tables() -> &'static [(&'static str, &'static str)] {
-    &[
-        ("wallets", "id"),
-        ("wallet_transactions", "id"),
-        ("wallet_daily_usage_ledgers", "id"),
-        ("payment_orders", "id"),
-        ("payment_callbacks", "id"),
-        ("refund_requests", "id"),
-        ("redeem_code_batches", "id"),
-        ("redeem_codes", "id"),
-    ]
+    &[("wallets", "id")]
 }
 
 fn sqlite_wallet_table_name(table_name: &str) -> Result<&'static str, DataLayerError> {
@@ -555,11 +545,7 @@ fn sqlite_integer_column_is_boolean(column_name: &str) -> bool {
                 | "auto_fetch_models"
                 | "email_notifications"
                 | "email_verified"
-                | "format_converted"
-                | "keep_priority_on_conversion"
                 | "signature_valid"
-                | "tunnel_connected"
-                | "tunnel_mode"
                 | "usage_alerts"
                 | "webhook_sent"
         )

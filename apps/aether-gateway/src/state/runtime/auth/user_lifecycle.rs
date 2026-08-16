@@ -9,6 +9,17 @@ use std::time::Duration;
 const USER_GROUPS_FOR_USER_CACHE_TTL: Duration = Duration::from_secs(30);
 
 impl AppState {
+    pub(crate) async fn record_user_privacy_policy_acceptance(
+        &self,
+        user_id: &str,
+        version: &str,
+    ) -> Result<bool, GatewayError> {
+        self.data
+            .record_user_privacy_policy_acceptance(user_id, version)
+            .await
+            .map_err(|err| GatewayError::Internal(err.to_string()))
+    }
+
     pub(crate) async fn assign_default_group_to_self_registered_user(
         &self,
         user_id: &str,
@@ -818,7 +829,7 @@ impl AppState {
         email_verified: bool,
         username: String,
         password_hash: String,
-        initial_gift_usd: f64,
+        initial_balance_usd: f64,
         unlimited: bool,
     ) -> Result<
         Option<(
@@ -856,17 +867,16 @@ impl AppState {
                 "inherit".to_string(),
             )
             .map_err(|err| GatewayError::Internal(err.to_string()))?;
-            let gift_balance = if unlimited {
+            let balance = if unlimited {
                 0.0
             } else {
-                initial_gift_usd.max(0.0)
+                initial_balance_usd.max(0.0)
             };
             let wallet = aether_data::repository::wallet::StoredWalletSnapshot::new(
                 uuid::Uuid::new_v4().to_string(),
                 Some(user.id.clone()),
                 None,
-                0.0,
-                gift_balance,
+                balance,
                 if unlimited {
                     "unlimited".to_string()
                 } else {
@@ -875,9 +885,6 @@ impl AppState {
                 "USD".to_string(),
                 "active".to_string(),
                 0.0,
-                0.0,
-                0.0,
-                gift_balance,
                 now.timestamp(),
             )
             .map_err(|err| GatewayError::Internal(err.to_string()))?;
@@ -898,7 +905,7 @@ impl AppState {
                 email_verified,
                 username,
                 password_hash,
-                initial_gift_usd,
+                initial_balance_usd,
                 unlimited,
             )
             .await

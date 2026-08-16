@@ -16,7 +16,7 @@ use hyper_util::{
 use tower::{Service as _, ServiceExt as _};
 use tracing::{debug, info, warn};
 
-use aether_crypto::warm_python_fernet_secret;
+use aether_crypto::warm_fernet_secret;
 use aether_data::lifecycle::export::{
     copy_database_records, export_database_jsonl, import_database_jsonl, DataCopyOptions,
     ExportDomain,
@@ -26,7 +26,6 @@ use aether_gateway::{
     attach_static_frontend, build_router_with_state,
     prewarm_direct_h2c_sender_cache_from_env_for_startup, set_gateway_frontdoor_app_port, AppState,
     FrontdoorCorsConfig, FrontdoorUserRpmConfig, GatewayDataConfig, UsageRuntimeConfig,
-    VideoTaskTruthSourceMode,
 };
 use aether_runtime::{
     init_service_runtime, FileLoggingConfig, LogDestination, LogFormat, LogRotation,
@@ -36,23 +35,6 @@ use aether_runtime_state::{
     RedisClientConfig, RuntimeSemaphoreConfig, RuntimeState, RuntimeStateBackendMode,
     RuntimeStateConfig,
 };
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
-enum VideoTaskTruthSourceArg {
-    PythonSyncReport,
-    RustAuthoritative,
-}
-
-impl From<VideoTaskTruthSourceArg> for VideoTaskTruthSourceMode {
-    fn from(value: VideoTaskTruthSourceArg) -> Self {
-        match value {
-            VideoTaskTruthSourceArg::PythonSyncReport => VideoTaskTruthSourceMode::PythonSyncReport,
-            VideoTaskTruthSourceArg::RustAuthoritative => {
-                VideoTaskTruthSourceMode::RustAuthoritative
-            }
-        }
-    }
-}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
 enum DeploymentTopologyArg {
@@ -72,7 +54,6 @@ impl DeploymentTopologyArg {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
 enum DatabaseDriverArg {
     Sqlite,
-    Mysql,
     Postgres,
 }
 
@@ -90,7 +71,6 @@ enum ExportDomainArg {
     UserOAuthLinks,
     UserGroups,
     UserGroupMembers,
-    ProxyNodes,
     SystemConfigs,
     Wallets,
     Usage,
@@ -113,7 +93,6 @@ impl From<ExportDomainArg> for ExportDomain {
             ExportDomainArg::UserOAuthLinks => ExportDomain::UserOAuthLinks,
             ExportDomainArg::UserGroups => ExportDomain::UserGroups,
             ExportDomainArg::UserGroupMembers => ExportDomain::UserGroupMembers,
-            ExportDomainArg::ProxyNodes => ExportDomain::ProxyNodes,
             ExportDomainArg::SystemConfigs => ExportDomain::SystemConfigs,
             ExportDomainArg::Wallets => ExportDomain::Wallets,
             ExportDomainArg::Usage => ExportDomain::Usage,
@@ -127,7 +106,6 @@ impl From<DatabaseDriverArg> for DatabaseDriver {
     fn from(value: DatabaseDriverArg) -> Self {
         match value {
             DatabaseDriverArg::Sqlite => DatabaseDriver::Sqlite,
-            DatabaseDriverArg::Mysql => DatabaseDriver::Mysql,
             DatabaseDriverArg::Postgres => DatabaseDriver::Postgres,
         }
     }
@@ -507,7 +485,7 @@ fn automatic_sql_pool_config_for_parallelism(
 ) -> SqlPoolConfig {
     let (min_connections, max_connections) = match driver {
         DatabaseDriver::Sqlite => (1, DEFAULT_SQLITE_POOL_MAX_CONNECTIONS),
-        DatabaseDriver::Mysql | DatabaseDriver::Postgres => {
+        DatabaseDriver::Postgres => {
             let cpu_count = parallelism.max(1);
             let max_connections = cpu_count
                 .saturating_mul(AUTO_SERVER_SQL_POOL_CONNECTIONS_PER_CPU)
@@ -726,7 +704,7 @@ impl GatewayDataArgs {
 
         match self.effective_encryption_key() {
             Some(value) => {
-                warm_python_fernet_secret(&value);
+                warm_fernet_secret(&value);
                 config.with_encryption_key(value)
             }
             None => config,
@@ -748,7 +726,6 @@ fn resolve_database_url(
         Some(DatabaseDriver::Sqlite) => {
             generic_database_url.or_else(|| Some(DEFAULT_SQLITE_DATABASE_URL.to_string()))
         }
-        Some(DatabaseDriver::Mysql) => generic_database_url,
         Some(DatabaseDriver::Postgres) | None => legacy_postgres_url.or(generic_database_url),
     }
 }
@@ -1304,14 +1281,6 @@ struct Args {
 
     #[arg(
         long,
-        env = "AETHER_GATEWAY_VIDEO_TASK_TRUTH_SOURCE_MODE",
-        value_enum,
-        default_value = "python-sync-report"
-    )]
-    video_task_truth_source_mode: VideoTaskTruthSourceArg,
-
-    #[arg(
-        long,
         env = "AETHER_GATEWAY_VIDEO_TASK_POLLER_INTERVAL_MS",
         default_value_t = 5000
     )]
@@ -1740,25 +1709,6 @@ fn validate_deployment_topology(
         ));
     }
 
-    if env_var_trimmed("AETHER_GATEWAY_INSTANCE_ID").is_none() {
-        warn!(
-            "multi-node deployment started without AETHER_GATEWAY_INSTANCE_ID; this is acceptable for stateless frontdoor replicas, but tunnel owner routing should set an explicit per-node instance id"
-        );
-    }
-    if env_var_trimmed("AETHER_TUNNEL_RELAY_BASE_URL").is_none() {
-        warn!(
-            "multi-node deployment started without AETHER_TUNNEL_RELAY_BASE_URL; frontdoor replicas are fine, but proxy tunnel owner relay cannot forward across nodes until a per-node reachable base URL is configured"
-        );
-    }
-    if !matches!(
-        args.video_task_truth_source_mode,
-        VideoTaskTruthSourceArg::RustAuthoritative
-    ) {
-        warn!(
-            "multi-node deployment is still using python-sync-report video task truth source; keep rust-authoritative as the long-term cluster baseline"
-        );
-    }
-
     Ok(())
 }
 
@@ -1897,10 +1847,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         usage_queue_request_concurrency_hint =
             usage_queue_request_concurrency_hint.unwrap_or_default(),
         usage_queue_request_concurrency_hint_source,
-        frontdoor_mode = "compatibility_frontdoor",
         log_format = ?args.logging.log_format,
         log_destination = args.logging.log_destination.as_str(),
-        video_task_truth_source_mode = ?args.video_task_truth_source_mode,
         "aether-gateway starting"
     );
     debug!(
@@ -1972,21 +1920,15 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut state = AppState::new()?
         .with_runtime_state(runtime_state)
         .with_data_config_and_background_isolation(data_config, isolate_background_database)?
-        .with_usage_runtime_config(usage_config)?
-        .with_video_task_truth_source_mode(args.video_task_truth_source_mode.into());
+        .with_usage_runtime_config(usage_config)?;
     if let Some(cors_config) = args.frontdoor.cors_config() {
         state = state.with_frontdoor_cors_config(cors_config);
     }
     state = state.with_frontdoor_user_rpm_config(rate_limit_config);
-    if matches!(
-        args.video_task_truth_source_mode,
-        VideoTaskTruthSourceArg::RustAuthoritative
-    ) {
-        state = state.with_video_task_poller_config(
-            std::time::Duration::from_millis(args.video_task_poller_interval_ms.max(1)),
-            args.video_task_poller_batch_size.max(1),
-        );
-    }
+    state = state.with_video_task_poller_config(
+        std::time::Duration::from_millis(args.video_task_poller_interval_ms.max(1)),
+        args.video_task_poller_batch_size.max(1),
+    );
     if let Some(path) = args
         .video_task_store_path
         .as_deref()
@@ -2040,13 +1982,6 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     );
     prepare_database_startup_requirements(&state, args.auto_prepare_database).await?;
     state.warm_database_pools().await?;
-    let reset_stale_proxy_nodes = state.reset_stale_proxy_node_tunnel_statuses().await?;
-    if reset_stale_proxy_nodes > 0 {
-        info!(
-            reset_stale_proxy_nodes,
-            "reset stale tunnel-connected proxy nodes on startup"
-        );
-    }
     state.bootstrap_admin_from_env().await?;
     match state.prewarm_chat_pii_redaction_runtime_config().await {
         Ok(enabled) => {
@@ -2133,7 +2068,6 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         http2_max_concurrent_streams = gateway_http2_max_concurrent_streams(args.http2_max_concurrent_streams),
         public_url = %public_base_url,
         healthcheck_url = %frontdoor_health_url,
-        legacy_route_policy = "fail_closed",
         "aether-gateway ready"
     );
 
@@ -2502,11 +2436,11 @@ mod tests {
         usage_database_config_for_role, Args, DatabaseDriverArg, DeploymentTopologyArg,
         GatewayDataArgs, GatewayFrontdoorArgs, GatewayLogDestinationArg, GatewayLogFormatArg,
         GatewayLogRotationArg, GatewayLoggingArgs, GatewayRateLimitArgs, GatewayUsageArgs,
-        NodeRoleArg, RuntimeBackendArg, VideoTaskTruthSourceArg,
-        DEFAULT_GATEWAY_HTTP2_MAX_CONCURRENT_STREAMS, DEFAULT_GATEWAY_LISTENER_SHARDS,
-        DEFAULT_GATEWAY_LISTEN_BACKLOG, MAX_GATEWAY_HTTP2_MAX_CONCURRENT_STREAMS,
-        MAX_GATEWAY_LISTENER_SHARDS, MAX_GATEWAY_LISTEN_BACKLOG,
-        MIN_GATEWAY_HTTP2_MAX_CONCURRENT_STREAMS, MIN_GATEWAY_LISTEN_BACKLOG,
+        NodeRoleArg, RuntimeBackendArg, DEFAULT_GATEWAY_HTTP2_MAX_CONCURRENT_STREAMS,
+        DEFAULT_GATEWAY_LISTENER_SHARDS, DEFAULT_GATEWAY_LISTEN_BACKLOG,
+        MAX_GATEWAY_HTTP2_MAX_CONCURRENT_STREAMS, MAX_GATEWAY_LISTENER_SHARDS,
+        MAX_GATEWAY_LISTEN_BACKLOG, MIN_GATEWAY_HTTP2_MAX_CONCURRENT_STREAMS,
+        MIN_GATEWAY_LISTEN_BACKLOG,
     };
     use aether_data::{DatabaseDriver, SqlDatabaseConfig, SqlPoolConfig};
     use aether_gateway::AppState;
@@ -2526,7 +2460,6 @@ mod tests {
             apply_backfills: false,
             auto_prepare_database: false,
             static_dir: None,
-            video_task_truth_source_mode: VideoTaskTruthSourceArg::PythonSyncReport,
             video_task_poller_interval_ms: 5_000,
             video_task_poller_batch_size: 32,
             video_task_store_path: None,
@@ -2608,7 +2541,6 @@ mod tests {
     fn test_database(driver: DatabaseDriver, max_connections: u32) -> SqlDatabaseConfig {
         let url = match driver {
             DatabaseDriver::Sqlite => "sqlite://./data/aether.db",
-            DatabaseDriver::Mysql => "mysql://root:root@localhost/aether",
             DatabaseDriver::Postgres => "postgres://postgres:postgres@localhost/aether",
         };
         let max_connections = max_connections.max(1);
@@ -2778,18 +2710,6 @@ mod tests {
         assert_eq!(database.driver, DatabaseDriver::Sqlite);
         assert_eq!(database.pool.min_connections, 1);
         assert_eq!(database.pool.max_connections, 1);
-    }
-
-    #[test]
-    fn explicit_mysql_driver_accepts_generic_database_url() {
-        let url = super::resolve_database_url(
-            Some(DatabaseDriver::Mysql),
-            None,
-            Some("postgres://legacy/aether".to_string()),
-            Some("mysql://root:root@localhost/aether".to_string()),
-        );
-
-        assert_eq!(url.as_deref(), Some("mysql://root:root@localhost/aether"));
     }
 
     #[test]
@@ -3289,22 +3209,6 @@ mod tests {
     }
 
     #[test]
-    fn mysql_database_with_redis_defaults_to_redis_runtime_backend() {
-        let args = test_args();
-        let database = SqlDatabaseConfig::new(
-            DatabaseDriver::Mysql,
-            "mysql://aether:aether@localhost:3306/aether".to_string(),
-            SqlPoolConfig::default(),
-        )
-        .expect("mysql config should build");
-
-        assert_eq!(
-            args.effective_runtime_backend(Some(&database), Some("redis://127.0.0.1/0")),
-            RuntimeBackendArg::Redis
-        );
-    }
-
-    #[test]
     fn sqlite_database_allows_explicit_redis_runtime_backend_when_redis_is_configured() {
         let mut args = test_args();
         args.runtime_backend = Some(RuntimeBackendArg::Redis);
@@ -3345,23 +3249,6 @@ mod tests {
             RuntimeBackendArg::Memory,
         )
         .expect("single-node sqlite memory runtime should be accepted");
-    }
-
-    #[test]
-    fn multi_node_accepts_mysql_database_backend() {
-        let mut args = test_args();
-        args.deployment_topology = DeploymentTopologyArg::MultiNode;
-        args.node_role = NodeRoleArg::Frontdoor;
-        args.video_task_store_path = None;
-        let database = test_database(DatabaseDriver::Mysql, 8);
-
-        super::validate_deployment_topology(
-            &args,
-            Some(&database),
-            Some("redis://127.0.0.1/0"),
-            RuntimeBackendArg::Redis,
-        )
-        .expect("multi-node mysql with shared redis should be accepted");
     }
 
     #[test]

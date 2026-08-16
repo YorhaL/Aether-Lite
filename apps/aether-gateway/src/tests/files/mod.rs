@@ -4,7 +4,7 @@ use super::{
     Mutex, Request, Response, Router, StatusCode, CONTROL_EXECUTED_HEADER,
     CONTROL_EXECUTE_FALLBACK_HEADER, EXECUTION_PATH_HEADER, TRACE_ID_HEADER,
 };
-use aether_crypto::{encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
+use aether_crypto::{encrypt_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
 use aether_data::repository::auth::{
     InMemoryAuthApiKeySnapshotRepository, StoredAuthApiKeySnapshot,
 };
@@ -179,7 +179,7 @@ fn sample_files_provider_catalog_key() -> StoredProviderCatalogKey {
     .expect("key should build")
     .with_transport_fields(
         Some(serde_json::json!(["gemini:files"])),
-        encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-upstream-gemini-files")
+        encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-upstream-gemini-files")
             .expect("api key should encrypt"),
         None,
         Some(serde_json::json!({"gemini_files": true})),

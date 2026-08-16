@@ -1,8 +1,5 @@
 use http::Uri;
 
-use crate::control::GatewayPublicRequestContext;
-use crate::handlers::shared::local_proxy_route_requires_buffered_body;
-
 use super::{classify_control_route, headers};
 
 #[test]
@@ -148,63 +145,6 @@ fn classifies_admin_provider_delete_task_as_admin_proxy_route() {
     assert_eq!(decision.route_class.as_deref(), Some("admin_proxy"));
     assert_eq!(decision.route_family.as_deref(), Some("providers_manage"));
     assert_eq!(decision.route_kind.as_deref(), Some("delete_provider_task"));
-    assert_eq!(
-        decision.auth_endpoint_signature.as_deref(),
-        Some("admin:providers")
-    );
-    assert!(!decision.is_execution_runtime_candidate());
-}
-
-#[test]
-fn classifies_admin_provider_pool_status_as_admin_proxy_route() {
-    let headers = headers(&[]);
-    let uri: Uri = "/api/admin/providers/provider-openai/pool-status"
-        .parse()
-        .expect("uri should parse");
-    let decision =
-        classify_control_route(&http::Method::GET, &uri, &headers).expect("route should classify");
-
-    assert_eq!(decision.route_class.as_deref(), Some("admin_proxy"));
-    assert_eq!(decision.route_family.as_deref(), Some("providers_manage"));
-    assert_eq!(decision.route_kind.as_deref(), Some("pool_status"));
-    assert_eq!(
-        decision.auth_endpoint_signature.as_deref(),
-        Some("admin:providers")
-    );
-    assert!(!decision.is_execution_runtime_candidate());
-}
-
-#[test]
-fn classifies_admin_provider_clear_pool_cooldown_as_admin_proxy_route() {
-    let headers = headers(&[]);
-    let uri: Uri = "/api/admin/providers/provider-openai/pool/clear-cooldown/key-openai"
-        .parse()
-        .expect("uri should parse");
-    let decision =
-        classify_control_route(&http::Method::POST, &uri, &headers).expect("route should classify");
-
-    assert_eq!(decision.route_class.as_deref(), Some("admin_proxy"));
-    assert_eq!(decision.route_family.as_deref(), Some("providers_manage"));
-    assert_eq!(decision.route_kind.as_deref(), Some("clear_pool_cooldown"));
-    assert_eq!(
-        decision.auth_endpoint_signature.as_deref(),
-        Some("admin:providers")
-    );
-    assert!(!decision.is_execution_runtime_candidate());
-}
-
-#[test]
-fn classifies_admin_provider_reset_pool_cost_as_admin_proxy_route() {
-    let headers = headers(&[]);
-    let uri: Uri = "/api/admin/providers/provider-openai/pool/reset-cost/key-openai"
-        .parse()
-        .expect("uri should parse");
-    let decision =
-        classify_control_route(&http::Method::POST, &uri, &headers).expect("route should classify");
-
-    assert_eq!(decision.route_class.as_deref(), Some("admin_proxy"));
-    assert_eq!(decision.route_family.as_deref(), Some("providers_manage"));
-    assert_eq!(decision.route_kind.as_deref(), Some("reset_pool_cost"));
     assert_eq!(
         decision.auth_endpoint_signature.as_deref(),
         Some("admin:providers")
@@ -489,53 +429,6 @@ fn classifies_admin_external_models_as_admin_proxy_route() {
         Some("admin:models")
     );
     assert!(!decision.is_execution_runtime_candidate());
-}
-
-#[test]
-fn classifies_admin_external_models_config_routes_as_admin_proxy_routes() {
-    let headers = headers(&[]);
-    let uri: Uri = "/api/admin/models/external/config"
-        .parse()
-        .expect("uri should parse");
-
-    for (method, route_kind) in [
-        (http::Method::GET, "external_config_get"),
-        (http::Method::PUT, "external_config_set"),
-    ] {
-        let decision = classify_control_route(&method, &uri, &headers)
-            .unwrap_or_else(|| panic!("{method} route should classify"));
-
-        assert_eq!(decision.route_class.as_deref(), Some("admin_proxy"));
-        assert_eq!(
-            decision.route_family.as_deref(),
-            Some("model_external_manage")
-        );
-        assert_eq!(decision.route_kind.as_deref(), Some(route_kind));
-        assert_eq!(
-            decision.auth_endpoint_signature.as_deref(),
-            Some("admin:models")
-        );
-        assert!(!decision.is_execution_runtime_candidate());
-    }
-}
-
-#[test]
-fn admin_external_models_config_update_buffers_request_body() {
-    let headers = headers(&[]);
-    let uri: Uri = "/api/admin/models/external/config"
-        .parse()
-        .expect("uri should parse");
-    let decision =
-        classify_control_route(&http::Method::PUT, &uri, &headers).expect("route should classify");
-    let context = GatewayPublicRequestContext::from_request_parts(
-        "trace-admin-external-models-config",
-        &http::Method::PUT,
-        &uri,
-        &headers,
-        Some(decision),
-    );
-
-    assert!(local_proxy_route_requires_buffered_body(&context));
 }
 
 #[test]

@@ -6,8 +6,16 @@ use crate::contracts::{
     GEMINI_EMBEDDING_SYNC_PLAN_KIND, GEMINI_EMBEDDING_SYNC_SUCCESS_REPORT_KIND,
     GEMINI_INTERACTIONS_STREAM_PLAN_KIND, GEMINI_INTERACTIONS_STREAM_SUCCESS_REPORT_KIND,
     GEMINI_INTERACTIONS_SYNC_PLAN_KIND, GEMINI_INTERACTIONS_SYNC_SUCCESS_REPORT_KIND,
-    OPENAI_EMBEDDING_SYNC_PLAN_KIND, OPENAI_RERANK_SYNC_PLAN_KIND, OPENAI_SEARCH_SYNC_PLAN_KIND,
-    OPENAI_SEARCH_SYNC_SUCCESS_REPORT_KIND,
+    OPENAI_CHAT_STREAM_PLAN_KIND, OPENAI_CHAT_STREAM_SUCCESS_REPORT_KIND,
+    OPENAI_CHAT_SYNC_PLAN_KIND, OPENAI_CHAT_SYNC_SUCCESS_REPORT_KIND,
+    OPENAI_EMBEDDING_SYNC_PLAN_KIND, OPENAI_IMAGE_STREAM_PLAN_KIND,
+    OPENAI_IMAGE_STREAM_SUCCESS_REPORT_KIND, OPENAI_IMAGE_SYNC_PLAN_KIND,
+    OPENAI_IMAGE_SYNC_SUCCESS_REPORT_KIND, OPENAI_RERANK_SYNC_PLAN_KIND,
+    OPENAI_RESPONSES_COMPACT_STREAM_PLAN_KIND, OPENAI_RESPONSES_COMPACT_STREAM_SUCCESS_REPORT_KIND,
+    OPENAI_RESPONSES_COMPACT_SYNC_PLAN_KIND, OPENAI_RESPONSES_COMPACT_SYNC_SUCCESS_REPORT_KIND,
+    OPENAI_RESPONSES_STREAM_PLAN_KIND, OPENAI_RESPONSES_STREAM_SUCCESS_REPORT_KIND,
+    OPENAI_RESPONSES_SYNC_PLAN_KIND, OPENAI_RESPONSES_SYNC_SUCCESS_REPORT_KIND,
+    OPENAI_SEARCH_SYNC_PLAN_KIND, OPENAI_SEARCH_SYNC_SUCCESS_REPORT_KIND,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,6 +36,38 @@ pub struct LocalSameFormatProviderSpec {
 
 pub fn resolve_sync_spec(plan_kind: &str) -> Option<LocalSameFormatProviderSpec> {
     match plan_kind {
+        OPENAI_CHAT_SYNC_PLAN_KIND => Some(LocalSameFormatProviderSpec {
+            api_format: "openai:chat",
+            decision_kind: OPENAI_CHAT_SYNC_PLAN_KIND,
+            report_kind: OPENAI_CHAT_SYNC_SUCCESS_REPORT_KIND,
+            family: LocalSameFormatProviderFamily::Standard,
+            require_streaming: false,
+            operation: None,
+        }),
+        OPENAI_RESPONSES_SYNC_PLAN_KIND => Some(LocalSameFormatProviderSpec {
+            api_format: "openai:responses",
+            decision_kind: OPENAI_RESPONSES_SYNC_PLAN_KIND,
+            report_kind: OPENAI_RESPONSES_SYNC_SUCCESS_REPORT_KIND,
+            family: LocalSameFormatProviderFamily::Standard,
+            require_streaming: false,
+            operation: None,
+        }),
+        OPENAI_RESPONSES_COMPACT_SYNC_PLAN_KIND => Some(LocalSameFormatProviderSpec {
+            api_format: "openai:responses:compact",
+            decision_kind: OPENAI_RESPONSES_COMPACT_SYNC_PLAN_KIND,
+            report_kind: OPENAI_RESPONSES_COMPACT_SYNC_SUCCESS_REPORT_KIND,
+            family: LocalSameFormatProviderFamily::Standard,
+            require_streaming: false,
+            operation: Some(ApiOperation::OpenAiResponsesCompact),
+        }),
+        OPENAI_IMAGE_SYNC_PLAN_KIND => Some(LocalSameFormatProviderSpec {
+            api_format: "openai:image",
+            decision_kind: OPENAI_IMAGE_SYNC_PLAN_KIND,
+            report_kind: OPENAI_IMAGE_SYNC_SUCCESS_REPORT_KIND,
+            family: LocalSameFormatProviderFamily::Standard,
+            require_streaming: false,
+            operation: None,
+        }),
         CLAUDE_CHAT_SYNC_PLAN_KIND => Some(LocalSameFormatProviderSpec {
             api_format: "claude:messages",
             decision_kind: CLAUDE_CHAT_SYNC_PLAN_KIND,
@@ -114,6 +154,38 @@ pub fn resolve_sync_spec(plan_kind: &str) -> Option<LocalSameFormatProviderSpec>
 
 pub fn resolve_stream_spec(plan_kind: &str) -> Option<LocalSameFormatProviderSpec> {
     match plan_kind {
+        OPENAI_CHAT_STREAM_PLAN_KIND => Some(LocalSameFormatProviderSpec {
+            api_format: "openai:chat",
+            decision_kind: OPENAI_CHAT_STREAM_PLAN_KIND,
+            report_kind: OPENAI_CHAT_STREAM_SUCCESS_REPORT_KIND,
+            family: LocalSameFormatProviderFamily::Standard,
+            require_streaming: true,
+            operation: None,
+        }),
+        OPENAI_RESPONSES_STREAM_PLAN_KIND => Some(LocalSameFormatProviderSpec {
+            api_format: "openai:responses",
+            decision_kind: OPENAI_RESPONSES_STREAM_PLAN_KIND,
+            report_kind: OPENAI_RESPONSES_STREAM_SUCCESS_REPORT_KIND,
+            family: LocalSameFormatProviderFamily::Standard,
+            require_streaming: true,
+            operation: None,
+        }),
+        OPENAI_RESPONSES_COMPACT_STREAM_PLAN_KIND => Some(LocalSameFormatProviderSpec {
+            api_format: "openai:responses:compact",
+            decision_kind: OPENAI_RESPONSES_COMPACT_STREAM_PLAN_KIND,
+            report_kind: OPENAI_RESPONSES_COMPACT_STREAM_SUCCESS_REPORT_KIND,
+            family: LocalSameFormatProviderFamily::Standard,
+            require_streaming: true,
+            operation: Some(ApiOperation::OpenAiResponsesCompact),
+        }),
+        OPENAI_IMAGE_STREAM_PLAN_KIND => Some(LocalSameFormatProviderSpec {
+            api_format: "openai:image",
+            decision_kind: OPENAI_IMAGE_STREAM_PLAN_KIND,
+            report_kind: OPENAI_IMAGE_STREAM_SUCCESS_REPORT_KIND,
+            family: LocalSameFormatProviderFamily::Standard,
+            require_streaming: true,
+            operation: None,
+        }),
         CLAUDE_CHAT_STREAM_PLAN_KIND => Some(LocalSameFormatProviderSpec {
             api_format: "claude:messages",
             decision_kind: CLAUDE_CHAT_STREAM_PLAN_KIND,

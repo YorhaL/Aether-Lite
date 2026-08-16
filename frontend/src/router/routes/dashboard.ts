@@ -49,16 +49,6 @@ export const dashboardRoutes: RouteRecordRaw[] = [
         component: view(() => import('@/views/user/WalletCenter.vue'))
       },
       {
-        path: 'billing',
-        name: 'BillingPlans',
-        component: view(() => import('@/views/user/BillingPlans.vue'))
-      },
-      {
-        path: 'referral',
-        name: 'ReferralCenter',
-        component: view(() => import('@/views/user/ReferralCenter.vue'))
-      },
-      {
         path: 'models',
         name: 'ModelCatalog',
         component: view(() => import('@/views/user/ModelCatalog.vue'))

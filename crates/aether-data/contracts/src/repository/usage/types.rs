@@ -253,7 +253,6 @@ pub struct StoredRequestUsageAudit {
     pub endpoint_api_format: Option<String>,
     pub provider_api_family: Option<String>,
     pub provider_endpoint_kind: Option<String>,
-    pub has_format_conversion: bool,
     pub is_stream: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_family: Option<String>,
@@ -358,7 +357,6 @@ impl StoredRequestUsageAudit {
         endpoint_api_format: Option<String>,
         provider_api_family: Option<String>,
         provider_endpoint_kind: Option<String>,
-        has_format_conversion: bool,
         is_stream: bool,
         input_tokens: i32,
         output_tokens: i32,
@@ -432,7 +430,6 @@ impl StoredRequestUsageAudit {
             endpoint_api_format,
             provider_api_family,
             provider_endpoint_kind,
-            has_format_conversion,
             is_stream,
             client_family: None,
             input_tokens: parse_u64(input_tokens, "usage.input_tokens")?,
@@ -521,12 +518,6 @@ impl StoredRequestUsageAudit {
             })
     }
 
-    fn request_metadata_bool(&self, key: &str) -> Option<bool> {
-        self.request_metadata_object()
-            .and_then(|metadata| metadata.get(key))
-            .and_then(Value::as_bool)
-    }
-
     fn request_metadata_string(&self, key: &str) -> Option<&str> {
         self.request_metadata_object()
             .and_then(|metadata| metadata.get(key))
@@ -560,10 +551,6 @@ impl StoredRequestUsageAudit {
 
     pub fn settlement_rate_multiplier(&self) -> Option<f64> {
         self.request_metadata_number("rate_multiplier")
-    }
-
-    pub fn settlement_is_free_tier(&self) -> Option<bool> {
-        self.request_metadata_bool("is_free_tier")
     }
 
     pub fn settlement_input_price_per_1m(&self) -> Option<f64> {
@@ -1308,7 +1295,6 @@ pub struct UsageProviderPerformanceQuery {
     pub api_format: Option<String>,
     pub endpoint_kind: Option<String>,
     pub is_stream: Option<bool>,
-    pub has_format_conversion: Option<bool>,
     pub slow_threshold_ms: u64,
     #[serde(default = "default_usage_provider_performance_include_timeline")]
     pub include_timeline: bool,
@@ -1929,7 +1915,6 @@ pub struct UpsertUsageRecord {
     pub endpoint_api_format: Option<String>,
     pub provider_api_family: Option<String>,
     pub provider_endpoint_kind: Option<String>,
-    pub has_format_conversion: Option<bool>,
     pub is_stream: Option<bool>,
     pub input_tokens: Option<u64>,
     pub output_tokens: Option<u64>,
@@ -2130,14 +2115,6 @@ pub trait UsageWriteRepository: Send + Sync {
         Ok(UsageCounterFlushSummary::default())
     }
 
-    async fn enqueue_proxy_node_counter_delta(
-        &self,
-        delta: ProxyNodeCounterDelta,
-    ) -> Result<bool, crate::DataLayerError> {
-        let _ = delta;
-        Ok(false)
-    }
-
     async fn enqueue_management_token_counter_delta(
         &self,
         delta: ManagementTokenCounterDelta,
@@ -2203,7 +2180,6 @@ pub struct UsageCounterFlushSummary {
     pub provider_api_key_targets: usize,
     pub model_targets: usize,
     pub provider_monthly_targets: usize,
-    pub proxy_node_targets: usize,
     pub management_token_targets: usize,
     pub api_key_last_used_targets: usize,
 }
@@ -2227,25 +2203,6 @@ pub struct UsageCounterPendingHealthSnapshot {
     pub pending_rows: u64,
     pub oldest_pending_created_at_unix_secs: Option<u64>,
     pub pending_by_kind: std::collections::BTreeMap<String, u64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProxyNodeCounterDelta {
-    pub node_id: String,
-    pub total_requests_delta: i64,
-    pub failed_requests_delta: i64,
-    pub dns_failures_delta: i64,
-    pub stream_errors_delta: i64,
-}
-
-impl ProxyNodeCounterDelta {
-    pub fn is_noop(&self) -> bool {
-        self.node_id.trim().is_empty()
-            || (self.total_requests_delta <= 0
-                && self.failed_requests_delta <= 0
-                && self.dns_failures_delta <= 0
-                && self.stream_errors_delta <= 0)
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2439,7 +2396,6 @@ mod tests {
             Some("openai".to_string()),
             Some("chat".to_string()),
             false,
-            false,
             10,
             20,
             30,
@@ -2472,7 +2428,6 @@ mod tests {
             "api_format": null,
             "endpoint_kind": null,
             "is_stream": null,
-            "has_format_conversion": null,
             "slow_threshold_ms": 10000
         });
 
@@ -2508,7 +2463,6 @@ mod tests {
             Some("openai:chat".to_string()),
             Some("openai".to_string()),
             Some("chat".to_string()),
-            false,
             false,
             10,
             20,
@@ -2552,7 +2506,6 @@ mod tests {
             Some("openai".to_string()),
             Some("chat".to_string()),
             false,
-            false,
             -1,
             20,
             30,
@@ -2593,7 +2546,6 @@ mod tests {
             endpoint_api_format: Some("openai:chat".to_string()),
             provider_api_family: Some("openai".to_string()),
             provider_endpoint_kind: Some("chat".to_string()),
-            has_format_conversion: Some(false),
             is_stream: Some(false),
             input_tokens: Some(10),
             output_tokens: Some(20),
@@ -2655,7 +2607,6 @@ mod tests {
             "billing_snapshot_schema_version": "v2",
             "billing_snapshot_status": "resolved",
             "rate_multiplier": 0.5,
-            "is_free_tier": false,
             "input_price_per_1m": 3.0,
             "output_price_per_1m": 9.0,
             "cache_creation_price_per_1m": 3.75,
@@ -2674,7 +2625,6 @@ mod tests {
         );
         assert_eq!(usage.settlement_billing_snapshot_status(), Some("resolved"));
         assert_eq!(usage.settlement_rate_multiplier(), Some(0.5));
-        assert_eq!(usage.settlement_is_free_tier(), Some(false));
         assert_eq!(usage.settlement_input_price_per_1m(), Some(3.0));
         assert_eq!(usage.settlement_output_price_per_1m(), Some(9.0));
         assert_eq!(usage.settlement_cache_creation_price_per_1m(), Some(3.75));

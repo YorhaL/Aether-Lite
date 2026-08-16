@@ -1,4 +1,3 @@
-mod format;
 mod modes;
 mod priority;
 mod reasons;
@@ -6,13 +5,11 @@ mod types;
 
 use modes::compare_rankable_candidates;
 use priority::candidate_priority_slot;
-use reasons::{demoted_by as ranking_demoted_by, promoted_by as ranking_promoted_by};
-pub use reasons::{
-    RANKING_REASON_CACHED_AFFINITY, RANKING_REASON_CROSS_FORMAT, RANKING_REASON_LOCAL_TUNNEL,
-};
+use reasons::promoted_by as ranking_promoted_by;
+pub use reasons::RANKING_REASON_CACHED_AFFINITY;
 pub use types::{
     SchedulerRankableCandidate, SchedulerRankingContext, SchedulerRankingMode,
-    SchedulerRankingOutcome, SchedulerTunnelAffinityBucket,
+    SchedulerRankingOutcome,
 };
 
 fn compare_candidate_identity_for_ranking(
@@ -56,7 +53,6 @@ fn scheduler_ranking_outcomes(
                 ranking_mode: context.ranking_mode,
                 priority_slot: candidate_priority_slot(candidate, context.priority_mode),
                 promoted_by: ranking_promoted_by(candidate, context.ranking_mode),
-                demoted_by: ranking_demoted_by(candidate),
             }
         })
         .collect()
@@ -100,7 +96,7 @@ fn apply_order<T>(items: &mut [T], sorted_old_indices: Vec<usize>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{SchedulerPriorityMode, SchedulerTunnelAffinityBucket};
+    use crate::SchedulerPriorityMode;
 
     fn candidate(
         id: &str,
@@ -119,9 +115,6 @@ mod tests {
             capability_priority: (0, 0),
             cached_affinity_match: false,
             affinity_hash: None,
-            tunnel_bucket: SchedulerTunnelAffinityBucket::Neutral,
-            demote_cross_format: false,
-            format_preference: (0, 0),
             health_bucket: None,
             health_score: 1.0,
             original_index: 0,
@@ -191,27 +184,6 @@ mod tests {
     }
 
     #[test]
-    fn fixed_order_demotes_cross_format_before_priority() {
-        let lower_priority_same_format = candidate("same", 10, 0, Some(10));
-
-        let mut higher_priority_cross_format = candidate("cross", 0, 0, Some(0));
-        higher_priority_cross_format.demote_cross_format = true;
-
-        assert_eq!(
-            ranked_ids(
-                &[higher_priority_cross_format, lower_priority_same_format],
-                SchedulerRankingContext {
-                    priority_mode: SchedulerPriorityMode::Provider,
-                    ranking_mode: SchedulerRankingMode::FixedOrder,
-                    include_health: false,
-                    load_balance_seed: 0,
-                },
-            ),
-            vec!["provider-same", "provider-cross"]
-        );
-    }
-
-    #[test]
     fn capability_priority_precedes_provider_priority() {
         let matching_capability = candidate("matching", 10, 0, None);
         let mut missing_compatible_capability = candidate("missing", 0, 0, None);
@@ -253,139 +225,6 @@ mod tests {
     }
 
     #[test]
-    fn cache_affinity_without_cache_hit_keeps_priority_before_tunnel() {
-        let mut higher_priority = candidate("higher", 0, 0, Some(0));
-        higher_priority.tunnel_bucket = SchedulerTunnelAffinityBucket::RemoteTunnel;
-
-        let mut lower_priority = candidate("lower", 10, 0, Some(10));
-        lower_priority.tunnel_bucket = SchedulerTunnelAffinityBucket::LocalTunnel;
-
-        assert_eq!(
-            ranked_ids(
-                &[lower_priority, higher_priority],
-                SchedulerRankingContext {
-                    priority_mode: SchedulerPriorityMode::Provider,
-                    ranking_mode: SchedulerRankingMode::CacheAffinity,
-                    include_health: false,
-                    load_balance_seed: 0,
-                },
-            ),
-            vec!["provider-higher", "provider-lower"]
-        );
-    }
-
-    #[test]
-    fn cache_affinity_keeps_cross_format_demotion_before_priority() {
-        let same_format_low_priority = candidate("same", 10, 0, Some(10));
-        let mut cross_format_high_priority = candidate("cross", 0, 0, Some(0));
-        cross_format_high_priority.demote_cross_format = true;
-
-        assert_eq!(
-            ranked_ids(
-                &[cross_format_high_priority, same_format_low_priority],
-                SchedulerRankingContext {
-                    priority_mode: SchedulerPriorityMode::Provider,
-                    ranking_mode: SchedulerRankingMode::CacheAffinity,
-                    include_health: false,
-                    load_balance_seed: 0,
-                },
-            ),
-            vec!["provider-same", "provider-cross"]
-        );
-    }
-
-    #[test]
-    fn cache_affinity_keeps_conversion_priority_when_cross_format_is_not_demoted() {
-        let same_format_low_priority = candidate("same", 10, 0, Some(10));
-        let mut cross_format_high_priority = candidate("cross", 0, 0, Some(0));
-        cross_format_high_priority.format_preference = (1, 1);
-
-        assert_eq!(
-            ranked_ids(
-                &[same_format_low_priority, cross_format_high_priority],
-                SchedulerRankingContext {
-                    priority_mode: SchedulerPriorityMode::Provider,
-                    ranking_mode: SchedulerRankingMode::CacheAffinity,
-                    include_health: false,
-                    load_balance_seed: 0,
-                },
-            ),
-            vec!["provider-cross", "provider-same"]
-        );
-    }
-
-    #[test]
-    fn cache_affinity_keeps_cached_match_above_conversion_priority() {
-        let mut cached_same_format_low_priority = candidate("same", 10, 0, Some(10));
-        cached_same_format_low_priority.cached_affinity_match = true;
-        let mut cross_format_high_priority = candidate("cross", 0, 0, Some(0));
-        cross_format_high_priority.format_preference = (1, 1);
-
-        assert_eq!(
-            ranked_ids(
-                &[cross_format_high_priority, cached_same_format_low_priority],
-                SchedulerRankingContext {
-                    priority_mode: SchedulerPriorityMode::Provider,
-                    ranking_mode: SchedulerRankingMode::CacheAffinity,
-                    include_health: false,
-                    load_balance_seed: 0,
-                },
-            ),
-            vec!["provider-same", "provider-cross"]
-        );
-    }
-
-    #[test]
-    fn cache_affinity_promotes_cached_candidate_before_cross_format_demotion() {
-        let same_format = candidate("same", 10, 0, Some(10));
-        let mut cached_cross_format = candidate("cross", 0, 0, Some(0));
-        cached_cross_format.cached_affinity_match = true;
-        cached_cross_format.demote_cross_format = true;
-
-        let outcomes = scheduler_ranking_outcomes(
-            &[cached_cross_format, same_format],
-            SchedulerRankingContext {
-                priority_mode: SchedulerPriorityMode::Provider,
-                ranking_mode: SchedulerRankingMode::CacheAffinity,
-                include_health: false,
-                load_balance_seed: 0,
-            },
-        );
-
-        assert_eq!(outcomes[0].original_index, 0);
-        assert_eq!(
-            outcomes[0].promoted_by,
-            Some(RANKING_REASON_CACHED_AFFINITY)
-        );
-        assert_eq!(outcomes[0].demoted_by, Some(RANKING_REASON_CROSS_FORMAT));
-        assert_eq!(outcomes[1].original_index, 1);
-    }
-
-    #[test]
-    fn demoted_cross_format_candidates_follow_format_preference_before_priority() {
-        let mut openai_responses_high_priority = candidate("responses", 0, 0, Some(0));
-        openai_responses_high_priority.demote_cross_format = true;
-        openai_responses_high_priority.format_preference = (3, 1);
-
-        let mut openai_chat_low_priority = candidate("chat", 10, 0, Some(10));
-        openai_chat_low_priority.demote_cross_format = true;
-        openai_chat_low_priority.format_preference = (3, 0);
-
-        assert_eq!(
-            ranked_ids(
-                &[openai_responses_high_priority, openai_chat_low_priority],
-                SchedulerRankingContext {
-                    priority_mode: SchedulerPriorityMode::Provider,
-                    ranking_mode: SchedulerRankingMode::CacheAffinity,
-                    include_health: false,
-                    load_balance_seed: 0,
-                },
-            ),
-            vec!["provider-chat", "provider-responses"]
-        );
-    }
-
-    #[test]
     fn fixed_order_randomizes_equal_priority_ties_without_crossing_priority_slots() {
         let first = candidate("first", 0, 0, Some(0));
         let second = candidate("second", 0, 0, Some(0));
@@ -417,147 +256,6 @@ mod tests {
 
         assert_eq!(first_seed_order[2], "provider-lower");
         assert_eq!(alternate_order[2], "provider-lower");
-    }
-
-    #[test]
-    fn load_balance_does_not_rotate_across_cross_format_demotion_group() {
-        let same_format = candidate("same", 0, 0, Some(0));
-        let mut cross_format = candidate("cross", 0, 0, Some(0));
-        cross_format.demote_cross_format = true;
-
-        assert_eq!(
-            ranked_ids(
-                &[same_format, cross_format],
-                SchedulerRankingContext {
-                    priority_mode: SchedulerPriorityMode::Provider,
-                    ranking_mode: SchedulerRankingMode::LoadBalance,
-                    include_health: false,
-                    load_balance_seed: 1,
-                },
-            ),
-            vec!["provider-same", "provider-cross"]
-        );
-    }
-
-    #[test]
-    fn load_balance_distribution_can_precede_conversion_priority() {
-        let mut same_format_low_priority = candidate("same", 10, 0, Some(10));
-        same_format_low_priority.format_preference = (0, 0);
-        let mut cross_format_high_priority = candidate("cross", 0, 0, Some(0));
-        cross_format_high_priority.format_preference = (1, 1);
-
-        let probe_same = candidate("same", 0, 0, Some(0));
-        let mut probe_cross = candidate("cross", 0, 0, Some(0));
-        probe_cross.format_preference = (0, 0);
-        let seed = (0..512)
-            .find(|seed| {
-                ranked_ids(
-                    &[probe_same.clone(), probe_cross.clone()],
-                    SchedulerRankingContext {
-                        priority_mode: SchedulerPriorityMode::Provider,
-                        ranking_mode: SchedulerRankingMode::LoadBalance,
-                        include_health: false,
-                        load_balance_seed: *seed,
-                    },
-                )
-                .first()
-                .is_some_and(|provider| provider == "provider-same")
-            })
-            .expect("test seed should put same-format provider first by load balance");
-
-        assert_eq!(
-            ranked_ids(
-                &[same_format_low_priority, cross_format_high_priority],
-                SchedulerRankingContext {
-                    priority_mode: SchedulerPriorityMode::Provider,
-                    ranking_mode: SchedulerRankingMode::LoadBalance,
-                    include_health: false,
-                    load_balance_seed: seed,
-                },
-            ),
-            vec!["provider-same", "provider-cross"]
-        );
-    }
-
-    #[test]
-    fn load_balance_conversion_priority_applies_within_provider_distribution() {
-        let mut same_format_low_priority = candidate("same", 10, 0, Some(10));
-        same_format_low_priority.provider_id = "provider-shared".to_string();
-        same_format_low_priority.format_preference = (0, 0);
-        let mut cross_format_high_priority = candidate("cross", 0, 0, Some(0));
-        cross_format_high_priority.provider_id = "provider-shared".to_string();
-        cross_format_high_priority.format_preference = (1, 1);
-
-        let mut probe_same = same_format_low_priority.clone();
-        probe_same.provider_priority = 0;
-        let mut probe_cross = cross_format_high_priority.clone();
-        probe_cross.format_preference = (0, 0);
-        let seed = (0..512)
-            .find(|seed| {
-                ranked_keys(
-                    &[probe_same.clone(), probe_cross.clone()],
-                    SchedulerRankingContext {
-                        priority_mode: SchedulerPriorityMode::Provider,
-                        ranking_mode: SchedulerRankingMode::LoadBalance,
-                        include_health: false,
-                        load_balance_seed: *seed,
-                    },
-                )
-                .first()
-                .is_some_and(|key| key == "key-same")
-            })
-            .expect("test seed should put same-format key first by load balance tiebreaker");
-
-        assert_eq!(
-            ranked_keys(
-                &[same_format_low_priority, cross_format_high_priority],
-                SchedulerRankingContext {
-                    priority_mode: SchedulerPriorityMode::Provider,
-                    ranking_mode: SchedulerRankingMode::LoadBalance,
-                    include_health: false,
-                    load_balance_seed: seed,
-                },
-            ),
-            vec!["key-cross", "key-same"]
-        );
-    }
-
-    #[test]
-    fn load_balance_distribution_can_precede_format_preference() {
-        let same_format = candidate("same", 0, 0, Some(0));
-        let mut cross_format = candidate("cross", 0, 0, Some(0));
-        cross_format.format_preference = (1, 1);
-
-        let mut probe_cross = cross_format.clone();
-        probe_cross.format_preference = (0, 0);
-        let seed = (0..512)
-            .find(|seed| {
-                ranked_ids(
-                    &[same_format.clone(), probe_cross.clone()],
-                    SchedulerRankingContext {
-                        priority_mode: SchedulerPriorityMode::Provider,
-                        ranking_mode: SchedulerRankingMode::LoadBalance,
-                        include_health: false,
-                        load_balance_seed: *seed,
-                    },
-                )
-                .first()
-                .is_some_and(|provider| provider == "provider-cross")
-            })
-            .expect("test seed should put cross-format provider first by load balance");
-
-        assert_eq!(
-            ranked_ids(
-                &[same_format, cross_format],
-                SchedulerRankingContext {
-                    priority_mode: SchedulerPriorityMode::Provider,
-                    ranking_mode: SchedulerRankingMode::LoadBalance,
-                    include_health: false,
-                    load_balance_seed: seed,
-                },
-            ),
-            vec!["provider-cross", "provider-same"]
-        );
     }
 
     #[test]

@@ -29,7 +29,6 @@ impl LocalVideoTaskTransport {
             headers: plan.headers.clone(),
             content_type: plan.content_type.clone(),
             model_name: plan.model_name.clone(),
-            proxy: plan.proxy.clone(),
             transport_profile: plan.transport_profile.clone(),
             timeouts: plan.timeouts.clone(),
         })
@@ -48,7 +47,6 @@ impl LocalVideoTaskTransport {
             headers,
             content_type: input.content_type,
             model_name: input.model_name,
-            proxy: input.proxy,
             transport_profile: input.transport_profile,
             timeouts: input.timeouts,
         }
@@ -79,10 +77,6 @@ impl LocalVideoTaskPersistence {
                 .get("original_request_body")
                 .cloned()
                 .unwrap_or_else(|| Value::Object(Map::new())),
-            format_converted: report_context
-                .get("format_converted")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
         }
     }
 
@@ -102,7 +96,6 @@ impl LocalVideoTaskPersistence {
                 .original_request_body
                 .clone()
                 .unwrap_or_else(|| Value::Object(Map::new())),
-            format_converted: task.format_converted,
         })
     }
 }

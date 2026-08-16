@@ -21,11 +21,12 @@ pub(crate) use crate::ai_serving::{
 use super::{
     build_local_same_format_provider_candidate_attempt_source,
     maybe_build_local_same_format_provider_decision_payload_for_candidate,
-    resolve_local_same_format_provider_decision_input, AiStreamAttempt, AiSyncAttempt, AppState,
-    GatewayControlDecision, GatewayError, LocalSameFormatProviderCandidateAttempt,
+    resolve_local_same_format_provider_decision_input, LocalSameFormatProviderCandidateAttempt,
     LocalSameFormatProviderCandidateAttemptSource, LocalSameFormatProviderDecisionInput,
     LocalSameFormatProviderSpec,
 };
+use crate::ai_serving::{AiStreamAttempt, AiSyncAttempt, GatewayControlDecision};
+use crate::{AppState, GatewayError};
 
 pub(crate) struct LocalSameFormatProviderSyncAttemptSource<'a> {
     state: &'a AppState,

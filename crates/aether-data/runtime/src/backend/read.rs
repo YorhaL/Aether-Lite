@@ -1,8 +1,6 @@
 use std::fmt;
 use std::sync::Arc;
 
-#[cfg(feature = "mysql")]
-use super::MysqlBackend;
 #[cfg(feature = "postgres")]
 use super::PostgresBackend;
 #[cfg(feature = "sqlite")]
@@ -19,10 +17,7 @@ use crate::repository::gemini_file_mappings::GeminiFileMappingReadRepository;
 use crate::repository::global_models::GlobalModelReadRepository;
 use crate::repository::management_tokens::ManagementTokenReadRepository;
 use crate::repository::oauth_providers::OAuthProviderReadRepository;
-use crate::repository::pool_scores::PoolScoreReadRepository;
 use crate::repository::provider_catalog::ProviderCatalogReadRepository;
-use crate::repository::proxy_nodes::ProxyNodeReadRepository;
-use crate::repository::quota::ProviderQuotaReadRepository;
 use crate::repository::routing_profiles::RoutingGroupReadRepository;
 use crate::repository::usage::UsageReadRepository;
 use crate::repository::users::UserReadRepository;
@@ -41,12 +36,9 @@ pub struct DataReadRepositories {
     global_models: Option<Arc<dyn GlobalModelReadRepository>>,
     management_tokens: Option<Arc<dyn ManagementTokenReadRepository>>,
     oauth_providers: Option<Arc<dyn OAuthProviderReadRepository>>,
-    pool_scores: Option<Arc<dyn PoolScoreReadRepository>>,
-    proxy_nodes: Option<Arc<dyn ProxyNodeReadRepository>>,
     minimal_candidate_selection: Option<Arc<dyn MinimalCandidateSelectionReadRepository>>,
     request_candidates: Option<Arc<dyn RequestCandidateReadRepository>>,
     provider_catalog: Option<Arc<dyn ProviderCatalogReadRepository>>,
-    provider_quotas: Option<Arc<dyn ProviderQuotaReadRepository>>,
     routing_groups: Option<Arc<dyn RoutingGroupReadRepository>>,
     usage: Option<Arc<dyn UsageReadRepository>>,
     users: Option<Arc<dyn UserReadRepository>>,
@@ -70,15 +62,12 @@ impl fmt::Debug for DataReadRepositories {
             .field("has_global_models", &self.global_models.is_some())
             .field("has_management_tokens", &self.management_tokens.is_some())
             .field("has_oauth_providers", &self.oauth_providers.is_some())
-            .field("has_pool_scores", &self.pool_scores.is_some())
-            .field("has_proxy_nodes", &self.proxy_nodes.is_some())
             .field(
                 "has_minimal_candidate_selection",
                 &self.minimal_candidate_selection.is_some(),
             )
             .field("has_request_candidates", &self.request_candidates.is_some())
             .field("has_provider_catalog", &self.provider_catalog.is_some())
-            .field("has_provider_quotas", &self.provider_quotas.is_some())
             .field("has_routing_groups", &self.routing_groups.is_some())
             .field("has_usage", &self.usage.is_some())
             .field("has_users", &self.users.is_some())
@@ -91,17 +80,12 @@ impl fmt::Debug for DataReadRepositories {
 impl DataReadRepositories {
     pub(crate) fn from_backends(
         #[cfg(feature = "postgres")] postgres: Option<&PostgresBackend>,
-        #[cfg(feature = "mysql")] mysql: Option<&MysqlBackend>,
         #[cfg(feature = "sqlite")] sqlite: Option<&SqliteBackend>,
     ) -> Self {
         let mut repositories = Self::default();
         #[cfg(feature = "postgres")]
         if let Some(postgres) = postgres {
             repositories.install_postgres(postgres);
-        }
-        #[cfg(feature = "mysql")]
-        if let Some(mysql) = mysql {
-            repositories.install_mysql(mysql);
         }
         #[cfg(feature = "sqlite")]
         if let Some(sqlite) = sqlite {
@@ -145,12 +129,6 @@ impl DataReadRepositories {
         if self.oauth_providers.is_none() {
             self.oauth_providers = Some(PostgresBackend::oauth_provider_read_repository(backend));
         }
-        if self.pool_scores.is_none() {
-            self.pool_scores = Some(PostgresBackend::pool_score_read_repository(backend));
-        }
-        if self.proxy_nodes.is_none() {
-            self.proxy_nodes = Some(PostgresBackend::proxy_node_read_repository(backend));
-        }
         if self.minimal_candidate_selection.is_none() {
             self.minimal_candidate_selection =
                 Some(PostgresBackend::minimal_candidate_selection_read_repository(backend));
@@ -162,9 +140,6 @@ impl DataReadRepositories {
         if self.provider_catalog.is_none() {
             self.provider_catalog =
                 Some(PostgresBackend::provider_catalog_read_repository(backend));
-        }
-        if self.provider_quotas.is_none() {
-            self.provider_quotas = Some(PostgresBackend::provider_quota_read_repository(backend));
         }
         if self.routing_groups.is_none() {
             self.routing_groups = Some(PostgresBackend::routing_group_read_repository(backend));
@@ -180,77 +155,6 @@ impl DataReadRepositories {
         }
         if self.wallets.is_none() {
             self.wallets = Some(PostgresBackend::wallet_read_repository(backend));
-        }
-    }
-
-    #[cfg(feature = "mysql")]
-    fn install_mysql(&mut self, backend: &MysqlBackend) {
-        if self.announcements.is_none() {
-            self.announcements = Some(MysqlBackend::announcement_read_repository(backend));
-        }
-        if self.audit_logs.is_none() {
-            self.audit_logs = Some(MysqlBackend::audit_log_read_repository(backend));
-        }
-        if self.auth_api_keys.is_none() {
-            self.auth_api_keys = Some(MysqlBackend::auth_api_key_read_repository(backend));
-        }
-        if self.auth_modules.is_none() {
-            self.auth_modules = Some(MysqlBackend::auth_module_read_repository(backend));
-        }
-        if self.background_tasks.is_none() {
-            self.background_tasks = Some(MysqlBackend::background_task_read_repository(backend));
-        }
-        if self.billing.is_none() {
-            self.billing = Some(MysqlBackend::billing_read_repository(backend));
-        }
-        if self.gemini_file_mappings.is_none() {
-            self.gemini_file_mappings =
-                Some(MysqlBackend::gemini_file_mapping_read_repository(backend));
-        }
-        if self.global_models.is_none() {
-            self.global_models = Some(MysqlBackend::global_model_read_repository(backend));
-        }
-        if self.management_tokens.is_none() {
-            self.management_tokens = Some(MysqlBackend::management_token_read_repository(backend));
-        }
-        if self.oauth_providers.is_none() {
-            self.oauth_providers = Some(MysqlBackend::oauth_provider_read_repository(backend));
-        }
-        if self.pool_scores.is_none() {
-            self.pool_scores = Some(MysqlBackend::pool_score_read_repository(backend));
-        }
-        if self.proxy_nodes.is_none() {
-            self.proxy_nodes = Some(MysqlBackend::proxy_node_read_repository(backend));
-        }
-        if self.minimal_candidate_selection.is_none() {
-            self.minimal_candidate_selection = Some(
-                MysqlBackend::minimal_candidate_selection_read_repository(backend),
-            );
-        }
-        if self.request_candidates.is_none() {
-            self.request_candidates =
-                Some(MysqlBackend::request_candidate_read_repository(backend));
-        }
-        if self.provider_catalog.is_none() {
-            self.provider_catalog = Some(MysqlBackend::provider_catalog_read_repository(backend));
-        }
-        if self.provider_quotas.is_none() {
-            self.provider_quotas = Some(MysqlBackend::provider_quota_read_repository(backend));
-        }
-        if self.routing_groups.is_none() {
-            self.routing_groups = Some(MysqlBackend::routing_group_read_repository(backend));
-        }
-        if self.usage.is_none() {
-            self.usage = Some(MysqlBackend::usage_read_repository(backend));
-        }
-        if self.users.is_none() {
-            self.users = Some(MysqlBackend::user_read_repository(backend));
-        }
-        if self.video_tasks.is_none() {
-            self.video_tasks = Some(MysqlBackend::video_task_read_repository(backend));
-        }
-        if self.wallets.is_none() {
-            self.wallets = Some(MysqlBackend::wallet_read_repository(backend));
         }
     }
 
@@ -287,12 +191,6 @@ impl DataReadRepositories {
         if self.oauth_providers.is_none() {
             self.oauth_providers = Some(SqliteBackend::oauth_provider_read_repository(backend));
         }
-        if self.pool_scores.is_none() {
-            self.pool_scores = Some(SqliteBackend::pool_score_read_repository(backend));
-        }
-        if self.proxy_nodes.is_none() {
-            self.proxy_nodes = Some(SqliteBackend::proxy_node_read_repository(backend));
-        }
         if self.minimal_candidate_selection.is_none() {
             self.minimal_candidate_selection = Some(
                 SqliteBackend::minimal_candidate_selection_read_repository(backend),
@@ -304,9 +202,6 @@ impl DataReadRepositories {
         }
         if self.provider_catalog.is_none() {
             self.provider_catalog = Some(SqliteBackend::provider_catalog_read_repository(backend));
-        }
-        if self.provider_quotas.is_none() {
-            self.provider_quotas = Some(SqliteBackend::provider_quota_read_repository(backend));
         }
         if self.routing_groups.is_none() {
             self.routing_groups = Some(SqliteBackend::routing_group_read_repository(backend));
@@ -329,8 +224,6 @@ impl DataReadRepositories {
     pub(crate) fn from_postgres(postgres: Option<&PostgresBackend>) -> Self {
         Self::from_backends(
             postgres,
-            #[cfg(feature = "mysql")]
-            None,
             #[cfg(feature = "sqlite")]
             None,
         )
@@ -376,14 +269,6 @@ impl DataReadRepositories {
         self.oauth_providers.clone()
     }
 
-    pub fn pool_scores(&self) -> Option<Arc<dyn PoolScoreReadRepository>> {
-        self.pool_scores.clone()
-    }
-
-    pub fn proxy_nodes(&self) -> Option<Arc<dyn ProxyNodeReadRepository>> {
-        self.proxy_nodes.clone()
-    }
-
     pub fn minimal_candidate_selection(
         &self,
     ) -> Option<Arc<dyn MinimalCandidateSelectionReadRepository>> {
@@ -396,10 +281,6 @@ impl DataReadRepositories {
 
     pub fn provider_catalog(&self) -> Option<Arc<dyn ProviderCatalogReadRepository>> {
         self.provider_catalog.clone()
-    }
-
-    pub fn provider_quotas(&self) -> Option<Arc<dyn ProviderQuotaReadRepository>> {
-        self.provider_quotas.clone()
     }
 
     pub fn routing_groups(&self) -> Option<Arc<dyn RoutingGroupReadRepository>> {
@@ -433,59 +314,13 @@ impl DataReadRepositories {
             || self.global_models.is_some()
             || self.management_tokens.is_some()
             || self.oauth_providers.is_some()
-            || self.pool_scores.is_some()
-            || self.proxy_nodes.is_some()
             || self.minimal_candidate_selection.is_some()
             || self.request_candidates.is_some()
             || self.provider_catalog.is_some()
-            || self.provider_quotas.is_some()
             || self.routing_groups.is_some()
             || self.usage.is_some()
             || self.users.is_some()
             || self.video_tasks.is_some()
             || self.wallets.is_some()
-    }
-}
-
-#[cfg(all(test, feature = "postgres"))]
-mod tests {
-    use super::DataReadRepositories;
-    use crate::backend::PostgresBackend;
-    use crate::driver::postgres::PostgresPoolConfig;
-
-    #[tokio::test]
-    async fn builds_read_repositories_from_postgres_backend() {
-        let backend = PostgresBackend::from_config(PostgresPoolConfig {
-            database_url: "postgres://localhost/aether".to_string(),
-            min_connections: 1,
-            max_connections: 4,
-            acquire_timeout_ms: 1_000,
-            idle_timeout_ms: 5_000,
-            max_lifetime_ms: 30_000,
-            statement_cache_capacity: 64,
-            require_ssl: false,
-        })
-        .expect("postgres backend should build");
-
-        let read = DataReadRepositories::from_postgres(Some(&backend));
-
-        assert!(read.has_any());
-        assert!(read.announcements().is_some());
-        assert!(read.audit_logs().is_some());
-        assert!(read.auth_api_keys().is_some());
-        assert!(read.auth_modules().is_some());
-        assert!(read.billing().is_some());
-        assert!(read.gemini_file_mappings().is_some());
-        assert!(read.global_models().is_some());
-        assert!(read.management_tokens().is_some());
-        assert!(read.oauth_providers().is_some());
-        assert!(read.proxy_nodes().is_some());
-        assert!(read.minimal_candidate_selection().is_some());
-        assert!(read.request_candidates().is_some());
-        assert!(read.provider_catalog().is_some());
-        assert!(read.provider_quotas().is_some());
-        assert!(read.usage().is_some());
-        assert!(read.video_tasks().is_some());
-        assert!(read.wallets().is_some());
     }
 }

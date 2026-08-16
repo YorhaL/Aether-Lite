@@ -93,15 +93,6 @@
           variant="ghost"
           size="icon"
           class="h-7 w-7"
-          :title="legacyT('扩展操作配置')"
-          @click="$emit('openOpsConfig', provider)"
-        >
-          <KeyRound class="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          class="h-7 w-7"
           @click="$emit('toggleStatus', provider)"
         >
           <Power class="h-3.5 w-3.5" />
@@ -117,69 +108,13 @@
       </div>
     </div>
 
-    <!-- 第二行：计费类型 + 余额/配额 + 资源统计 -->
+    <!-- 第二行：资源统计 -->
     <div class="flex flex-wrap items-center gap-3 text-xs">
-      <Badge
-        variant="outline"
-        class="text-xs font-normal border-border/50"
-      >
-        {{ formatBillingType(provider.billing_type || 'pay_as_you_go') }}
-      </Badge>
-      <!-- 余额加载中 -->
-      <span
-        v-if="provider.ops_configured && isBalanceLoading(provider.id)"
-        class="text-muted-foreground flex items-center gap-1"
-      >
-        <Loader2 class="h-3 w-3 animate-spin" />
-        {{ legacyT('加载中...') }}
-      </span>
-      <!-- 余额（从上游 API 查询） -->
-      <span
-        v-else-if="provider.ops_configured && getProviderBalance(provider.id)"
-        class="text-muted-foreground"
-      >
-        {{ legacyT('余额') }} <span class="font-semibold text-foreground/90">{{ formatBalanceDisplay(getProviderBalance(provider.id)) }}</span>
-        <!-- Cookie 失效警告 -->
-        <span
-          v-if="getProviderCookieExpired(provider.id)"
-          class="ml-1 text-amber-600 dark:text-amber-500"
-          :title="getProviderCookieExpired(provider.id)?.message"
-        >{{ legacyT('签到 Cookie 已失效') }}</span>
-        <!-- 签到状态显示 -->
-        <span
-          v-else-if="getProviderCheckin(provider.id) && getProviderCheckin(provider.id)?.success !== false"
-          class="ml-1 text-muted-foreground"
-          :title="getProviderCheckin(provider.id)?.message"
-        >{{ legacyT('已签到') }}</span>
-        <span
-          v-else-if="getProviderCheckin(provider.id)?.success === false"
-          class="ml-1 text-destructive/70"
-          :title="getProviderCheckin(provider.id)?.message"
-        >{{ legacyT('签到失败') }}</span>
-      </span>
-      <!-- 余额查询失败时显示错误 -->
-      <span
-        v-else-if="provider.ops_configured && getProviderBalanceError(provider.id)"
-        class="text-destructive/80"
-        :title="getProviderBalanceError(provider.id)?.message"
-      >
-        {{ getProviderBalanceError(provider.id)?.message }}
-      </span>
-      <!-- 本地配额 -->
-      <span
-        v-else-if="provider.billing_type === 'monthly_quota'"
-        class="text-muted-foreground"
-      >
-        {{ legacyT('配额') }} <span
-          class="font-semibold"
-          :class="getQuotaUsedColorClass(provider)"
-        >${{ (provider.monthly_used_usd ?? 0).toFixed(2) }}</span>/<span class="font-medium">${{ (provider.monthly_quota_usd ?? 0).toFixed(2) }}</span>
-      </span>
       <span class="text-muted-foreground">
         {{ legacyT('端点') }} {{ provider.active_endpoints }}/{{ provider.total_endpoints }}
       </span>
       <span class="text-muted-foreground">
-        {{ getCredentialLabel(provider) }} {{ provider.active_keys }}/{{ provider.total_keys }}
+        {{ getCredentialLabel() }} {{ provider.active_keys }}/{{ provider.total_keys }}
       </span>
       <span class="text-muted-foreground">
         {{ legacyT('模型') }} {{ provider.active_models }}/{{ provider.total_models }}
@@ -227,38 +162,25 @@ import {
   Eye,
   Trash2,
   Power,
-  KeyRound,
   ExternalLink,
   Pencil,
   Check,
   X,
-  Loader2,
 } from 'lucide-vue-next'
 import Button from '@/components/ui/button.vue'
 import Badge from '@/components/ui/badge.vue'
 import { type ProviderWithEndpointsSummary, formatApiFormatShort } from '@/api/endpoints'
-import { formatBillingType } from '@/utils/format'
 import { sortEndpoints, isEndpointAvailable, getEndpointDotColor, getEndpointTooltip } from '@/features/providers/composables/useEndpointStatus'
-import { isKeyManagedProviderType } from '../utils/providerTypeUtils'
 import { useI18n } from '@/i18n'
 
 const props = defineProps<{
   provider: ProviderWithEndpointsSummary
   editingDescriptionId: string | null
-  // Balance functions
-  isBalanceLoading: (providerId: string) => boolean
-  getProviderBalance: (providerId: string) => { available: number | null; currency: string } | null
-  getProviderBalanceError: (providerId: string) => { status: string; message: string } | null
-  getProviderCheckin: (providerId: string) => { success: boolean | null; message: string } | null
-  getProviderCookieExpired: (providerId: string) => { expired: boolean; message: string } | null
-  formatBalanceDisplay: (balance: { available: number | null; currency: string } | null) => string
-  getQuotaUsedColorClass: (provider: ProviderWithEndpointsSummary) => string
 }>()
 
 const emit = defineEmits<{
   'viewDetail': [providerId: string]
   'editProvider': [provider: ProviderWithEndpointsSummary]
-  'openOpsConfig': [provider: ProviderWithEndpointsSummary]
   'toggleStatus': [provider: ProviderWithEndpointsSummary]
   'deleteProvider': [provider: ProviderWithEndpointsSummary]
   'startEditDescription': [event: Event, provider: ProviderWithEndpointsSummary]
@@ -306,7 +228,7 @@ function handleDescriptionKeydown(event: KeyboardEvent) {
   }
 }
 
-function getCredentialLabel(provider: ProviderWithEndpointsSummary): string {
-  return legacyT(isKeyManagedProviderType(provider.provider_type) ? '密钥' : '账号')
+function getCredentialLabel(): string {
+  return legacyT('密钥')
 }
 </script>

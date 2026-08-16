@@ -125,7 +125,7 @@ where
     mutate_headers(response.headers_mut())?;
     apply_streaming_response_headers(response.headers_mut());
     insert_header_if_missing(response.headers_mut(), TRACE_ID_HEADER, trace_id)?;
-    insert_header_if_missing(response.headers_mut(), GATEWAY_HEADER, "rust-phase3b")?;
+    insert_header_if_missing(response.headers_mut(), GATEWAY_HEADER, GATEWAY_MARKER_VALUE)?;
     if let Some(decision) = control_decision {
         insert_header_if_missing(
             response.headers_mut(),

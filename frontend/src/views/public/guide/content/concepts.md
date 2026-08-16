@@ -14,7 +14,7 @@
 ![image.png](/Aether%E4%BD%BF%E7%94%A8%E6%95%99%E7%A8%8B/image%209.png)
 
 ## 2. 添加提供商
-1. **提供商类型**: 自定义或反代; 一般自定义即可, 反代请进入反代章节
+1. **提供商类型**: Lite 版本固定为自定义。
 2. **计费类型**:
    - 按量付费: 持续使用
    - 月卡额度: 按周期(天)限额
@@ -24,8 +24,6 @@
 4. **超时时间**
    - 流式首字超时时间: 流式请求收到首字前的超时时间
    - 非流请求超时时间: 非流请求的总超时时间
-5. **保持优先级**
-   - 通过格式转换的请求, 是否保持当前优先级。
 
 ![image.png](/Aether%E4%BD%BF%E7%94%A8%E6%95%99%E7%A8%8B/image%2010.png)
 
@@ -91,16 +89,7 @@
 ![image.png](/Aether%E4%BD%BF%E7%94%A8%E6%95%99%E7%A8%8B/image%2021.png)
 ![image.png](/Aether%E4%BD%BF%E7%94%A8%E6%95%99%E7%A8%8B/image%2022.png)
 
-## 8. 反向代理
-
-1. **Codex**
-   ![image.png](/Aether%E4%BD%BF%E7%94%A8%E6%95%99%E7%A8%8B/image%2023.png)
-2. **Krio**
-   ![image.png](/Aether%E4%BD%BF%E7%94%A8%E6%95%99%E7%A8%8B/image%2024.png)
-3. **Antigravity**
-   ![image.png](/Aether%E4%BD%BF%E7%94%A8%E6%95%99%E7%A8%8B/image%2025.png)
-
-## 9. 优先级管理
+## 8. 优先级管理
 
 允许拖动、或者直接点击数字输入调整优先级
 

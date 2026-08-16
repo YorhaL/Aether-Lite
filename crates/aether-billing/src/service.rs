@@ -59,9 +59,6 @@ impl BillingService {
         if normalize_task_type(&estimate.task_type) == "image" {
             return Ok(None);
         }
-        if pricing.is_free_tier() {
-            return Ok(Some(0.0));
-        }
         if estimate.max_output_tokens.is_none()
             && pricing_resolutions.iter().any(|resolution| {
                 resolution
@@ -261,12 +258,7 @@ impl BillingService {
             0.0
         };
         let rate_multiplier = pricing.rate_multiplier_for_api_format(input.api_format.as_deref());
-        let is_free_tier = pricing.is_free_tier();
-        let actual_total_cost = if is_free_tier {
-            0.0
-        } else {
-            quantize_cost(total_cost * rate_multiplier)
-        };
+        let actual_total_cost = quantize_cost(total_cost * rate_multiplier);
 
         Ok(BillingComputation {
             cost_result: CostResult {
@@ -292,7 +284,6 @@ impl BillingService {
             },
             actual_total_cost,
             rate_multiplier,
-            is_free_tier,
             pricing_resolution,
         })
     }
@@ -410,7 +401,6 @@ fn no_rule_computation(
         },
         actual_total_cost: 0.0,
         rate_multiplier: pricing.rate_multiplier_for_api_format(input.api_format.as_deref()),
-        is_free_tier: pricing.is_free_tier(),
         pricing_resolution,
     }
 }
@@ -916,7 +906,6 @@ mod tests {
     fn pricing() -> BillingModelPricingSnapshot {
         BillingModelPricingSnapshot {
             provider_id: "provider-1".to_string(),
-            provider_billing_type: Some("pay_as_you_go".to_string()),
             provider_api_key_id: Some("key-1".to_string()),
             provider_api_key_rate_multipliers: Some(json!({"openai:chat": 0.5})),
             provider_api_key_cache_ttl_minutes: Some(60),
@@ -1715,7 +1704,7 @@ mod tests {
     }
 
     #[test]
-    fn authorization_estimate_supports_standard_fixed_price_and_free_tier() {
+    fn authorization_estimate_supports_standard_fixed_price() {
         let service = BillingService::new();
         let estimate = BillingAuthorizationEstimateInput::new("chat", 1_000);
         let fixed_pricing = BillingModelPricingSnapshot {
@@ -1729,17 +1718,6 @@ mod tests {
                 .estimate_authorization_cost_upper_bound(&fixed_pricing, &estimate)
                 .expect("fixed estimate should calculate"),
             Some(0.02)
-        );
-
-        let free_pricing = BillingModelPricingSnapshot {
-            provider_billing_type: Some("free_tier".to_string()),
-            ..processing_pricing()
-        };
-        assert_eq!(
-            service
-                .estimate_authorization_cost_upper_bound(&free_pricing, &estimate)
-                .expect("free estimate should calculate"),
-            Some(0.0)
         );
     }
 
@@ -2213,7 +2191,6 @@ mod tests {
     fn five_minute_cache_ttl_uses_base_cache_prices() {
         let pricing = BillingModelPricingSnapshot {
             provider_id: "provider-1".to_string(),
-            provider_billing_type: Some("pay_as_you_go".to_string()),
             provider_api_key_id: Some("key-1".to_string()),
             provider_api_key_rate_multipliers: None,
             provider_api_key_cache_ttl_minutes: Some(5),
@@ -2288,7 +2265,6 @@ mod tests {
     fn one_hour_cache_ttl_keeps_base_cache_read_when_ttl_entry_omits_it() {
         let pricing = BillingModelPricingSnapshot {
             provider_id: "provider-1".to_string(),
-            provider_billing_type: Some("pay_as_you_go".to_string()),
             provider_api_key_id: Some("key-1".to_string()),
             provider_api_key_rate_multipliers: None,
             provider_api_key_cache_ttl_minutes: Some(60),

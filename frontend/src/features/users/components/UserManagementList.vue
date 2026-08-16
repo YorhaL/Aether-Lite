@@ -51,7 +51,6 @@
             @toggle-selected="(checked) => emit('toggle-selected', row.user.id, checked)"
             @edit="emit('edit', row.user)"
             @wallet="emit('wallet', row.user)"
-            @plans="emit('plans', row.user)"
             @api-keys="emit('api-keys', row.user)"
             @sessions="emit('sessions', row.user)"
             @toggle-status="emit('toggle-status', row.user)"
@@ -81,7 +80,6 @@
           @toggle-selected="(checked) => emit('toggle-selected', row.user.id, checked)"
           @edit="emit('edit', row.user)"
           @wallet="emit('wallet', row.user)"
-          @plans="emit('plans', row.user)"
           @api-keys="emit('api-keys', row.user)"
           @sessions="emit('sessions', row.user)"
           @toggle-status="emit('toggle-status', row.user)"
@@ -128,7 +126,6 @@ const emit = defineEmits<{
   'toggle-select-current-page': []
   edit: [user: UserManagementRow['user']]
   wallet: [user: UserManagementRow['user']]
-  plans: [user: UserManagementRow['user']]
   'api-keys': [user: UserManagementRow['user']]
   sessions: [user: UserManagementRow['user']]
   'toggle-status': [user: UserManagementRow['user']]

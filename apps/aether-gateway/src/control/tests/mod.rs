@@ -74,18 +74,12 @@ fn builds_public_request_context_from_request_parts() {
 
 mod admin_adaptive;
 mod admin_api_keys;
-mod admin_billing;
 mod admin_core;
 mod admin_endpoints;
 mod admin_monitoring;
-mod admin_oauth;
-mod admin_payments;
-mod admin_pool;
-mod admin_provider_ops;
 mod admin_provider_query;
 mod admin_provider_strategy;
 mod admin_providers_models;
-mod admin_proxy_nodes;
 mod admin_routing;
 mod admin_security;
 mod admin_stats;

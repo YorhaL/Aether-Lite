@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use aether_contracts::USAGE_SERVER_NOW_UNIX_MS_HEADER;
 
 const UPSTREAM_CREDENTIAL_HEADER_NAMES: &[&str] = &[
@@ -12,10 +10,6 @@ const UPSTREAM_CREDENTIAL_HEADER_NAMES: &[&str] = &[
     "cookie2",
     "set-cookie",
 ];
-
-pub(crate) fn upstream_credential_header_names() -> &'static [&'static str] {
-    UPSTREAM_CREDENTIAL_HEADER_NAMES
-}
 
 pub(crate) fn is_upstream_credential_header(name: &str) -> bool {
     let name = name.trim();
@@ -179,26 +173,14 @@ fn q_value_is_zero(value: &str) -> bool {
         .is_ok_and(|q| q <= 0.0)
 }
 
-pub fn force_identity_accept_encoding(headers: &mut BTreeMap<String, String>) {
-    if let Some(existing_key) = headers
-        .keys()
-        .find(|key| key.eq_ignore_ascii_case("accept-encoding"))
-        .cloned()
-    {
-        headers.remove(&existing_key);
-    }
-    headers.insert("accept-encoding".to_string(), "identity".to_string());
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        force_identity_accept_encoding, is_upstream_credential_header,
-        normalize_upstream_accept_encoding, should_skip_request_header,
-        should_skip_upstream_complete_passthrough_header, should_skip_upstream_passthrough_header,
+        is_upstream_credential_header, normalize_upstream_accept_encoding,
+        should_skip_request_header, should_skip_upstream_complete_passthrough_header,
+        should_skip_upstream_passthrough_header,
     };
     use aether_contracts::USAGE_SERVER_NOW_UNIX_MS_HEADER;
-    use std::collections::BTreeMap;
 
     #[test]
     fn strips_all_stainless_headers() {
@@ -265,19 +247,6 @@ mod tests {
     }
 
     #[test]
-    fn force_identity_accept_encoding_replaces_existing_casing() {
-        let mut headers = BTreeMap::from([("Accept-Encoding".to_string(), "gzip".to_string())]);
-
-        force_identity_accept_encoding(&mut headers);
-
-        assert_eq!(
-            headers.get("accept-encoding").map(String::as_str),
-            Some("identity")
-        );
-        assert!(!headers.contains_key("Accept-Encoding"));
-    }
-
-    #[test]
     fn strips_anthropic_and_claude_cli_identity_headers() {
         let anthropic = [
             "anthropic-version",
@@ -329,7 +298,6 @@ mod tests {
             "x-aether-auth-user-id",
             "x-aether-auth-api-key-id",
             "x-aether-auth-balance-remaining",
-            "X-Aether-Tunnel-Forwarded-By",
         ] {
             assert!(should_skip_request_header(header));
             assert!(should_skip_upstream_passthrough_header(header));

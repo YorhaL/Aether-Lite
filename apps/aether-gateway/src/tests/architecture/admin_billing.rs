@@ -29,13 +29,7 @@ fn admin_billing_wallets_boundaries_are_split() {
     let mutations_mod = read_workspace_file(
         "apps/aether-gateway/src/handlers/admin/billing/wallets/mutations/mod.rs",
     );
-    for pattern in [
-        "mod adjust;",
-        "mod complete_refund;",
-        "mod fail_refund;",
-        "mod process_refund;",
-        "mod recharge;",
-    ] {
+    for pattern in ["mod adjust;"] {
         assert!(
             mutations_mod.contains(pattern),
             "handlers/admin/billing/wallets/mutations/mod.rs should register {pattern}"
@@ -44,14 +38,7 @@ fn admin_billing_wallets_boundaries_are_split() {
 
     let reads_mod =
         read_workspace_file("apps/aether-gateway/src/handlers/admin/billing/wallets/reads/mod.rs");
-    for pattern in [
-        "mod detail;",
-        "mod ledger;",
-        "mod list;",
-        "mod refund_requests;",
-        "mod refunds;",
-        "mod transactions;",
-    ] {
+    for pattern in ["mod detail;", "mod list;"] {
         assert!(
             reads_mod.contains(pattern),
             "handlers/admin/billing/wallets/reads/mod.rs should register {pattern}"
@@ -68,68 +55,6 @@ fn admin_billing_wallets_boundaries_are_split() {
             "{path} should be removed after wallets boundaries are split"
         );
     }
-}
-
-#[test]
-fn admin_billing_collectors_owner_is_split() {
-    let collectors_mod =
-        read_workspace_file("apps/aether-gateway/src/handlers/admin/billing/collectors/mod.rs");
-    for pattern in ["mod reads;", "mod support;", "mod writes;"] {
-        assert!(
-            collectors_mod.contains(pattern),
-            "handlers/admin/billing/collectors/mod.rs should register {pattern}"
-        );
-    }
-
-    for path in [
-        "apps/aether-gateway/src/handlers/admin/billing/collectors/support.rs",
-        "apps/aether-gateway/src/handlers/admin/billing/collectors/reads.rs",
-        "apps/aether-gateway/src/handlers/admin/billing/collectors/writes.rs",
-    ] {
-        assert!(
-            workspace_file_exists(path),
-            "{path} should exist after collectors owner split"
-        );
-    }
-
-    assert!(
-        !workspace_file_exists("apps/aether-gateway/src/handlers/admin/billing/collectors.rs"),
-        "handlers/admin/billing/collectors.rs should be removed after collectors owner split"
-    );
-
-    let collectors_support =
-        read_workspace_file("apps/aether-gateway/src/handlers/admin/billing/collectors/support.rs");
-    assert!(
-        !collectors_support.contains("pub(super) use super::super::{"),
-        "handlers/admin/billing/collectors/support.rs should not keep wildcard bridge re-export from billing root"
-    );
-}
-
-#[test]
-fn admin_billing_presets_owner_is_split() {
-    let presets_mod =
-        read_workspace_file("apps/aether-gateway/src/handlers/admin/billing/presets/mod.rs");
-    for pattern in ["mod apply;", "mod support;"] {
-        assert!(
-            presets_mod.contains(pattern),
-            "handlers/admin/billing/presets/mod.rs should register {pattern}"
-        );
-    }
-
-    for path in [
-        "apps/aether-gateway/src/handlers/admin/billing/presets/support.rs",
-        "apps/aether-gateway/src/handlers/admin/billing/presets/apply.rs",
-    ] {
-        assert!(
-            workspace_file_exists(path),
-            "{path} should exist after presets owner split"
-        );
-    }
-
-    assert!(
-        !workspace_file_exists("apps/aether-gateway/src/handlers/admin/billing/presets.rs"),
-        "handlers/admin/billing/presets.rs should be removed after presets owner split"
-    );
 }
 
 #[test]

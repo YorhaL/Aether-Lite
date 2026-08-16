@@ -29,18 +29,6 @@ pub struct RoutingCandidateTrace {
     pub selected_order: Option<u32>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RoutingPoolExpansionTrace {
-    pub pool_group_id: String,
-    pub key_id: String,
-    #[serde(default)]
-    pub pool_ranking_vector: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pool_skip_reason: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub selected_order: Option<u32>,
-}
-
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RoutingRuntimeFacts {
     #[serde(default)]
@@ -73,8 +61,6 @@ pub struct RoutingDecisionTrace {
     pub provider_request_patch_summary: RoutingPatchSummary,
     #[serde(default)]
     pub global_candidates: Vec<RoutingCandidateTrace>,
-    #[serde(default)]
-    pub pool_expansion: Vec<RoutingPoolExpansionTrace>,
     #[serde(default)]
     pub runtime_facts: RoutingRuntimeFacts,
 }

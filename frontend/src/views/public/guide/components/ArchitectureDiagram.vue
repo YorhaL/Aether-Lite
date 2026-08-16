@@ -43,9 +43,6 @@ const colors = computed(() => {
     brand,
     brandSoft: isDark.value ? 'rgba(204,113,84,0.12)' : 'rgba(204,113,84,0.06)',
     coreBorder: isDark.value ? 'rgba(204,113,84,0.4)' : 'rgba(204,113,84,0.25)',
-    convert: isDark.value ? '#d4845c' : '#b8654a',
-    pass: isDark.value ? '#8a9bb5' : '#5a7094',
-    proxy: isDark.value ? '#a78bba' : '#7c5e99',
   }
 })
 
@@ -362,7 +359,7 @@ const shadows = computed(() => {
           <span
             class="font-sans text-[10px] font-bold"
             :style="{ color: colors.textMain }"
-          >格式转换</span>
+          >同格式透传</span>
         </div>
         <div
           class="absolute left-[295px] top-[250px] w-[170px] h-[28px] rounded-full flex items-center justify-center gap-1.5 z-20"
@@ -375,7 +372,7 @@ const shadows = computed(() => {
           <span
             class="font-sans text-[10px] font-bold"
             :style="{ color: colors.textMain }"
-          >反向代理</span>
+          >额度管控</span>
         </div>
         <div
           class="absolute left-[487px] top-[250px] w-[170px] h-[28px] rounded-full flex items-center justify-center gap-1.5 z-20"

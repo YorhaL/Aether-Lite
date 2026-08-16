@@ -240,7 +240,6 @@ impl OpenAiVideoTaskSeed {
                     .model
                     .clone()
                     .or_else(|| self.transport.model_name.clone()),
-                proxy: self.transport.proxy.clone(),
                 transport_profile: self.transport.transport_profile.clone(),
                 timeouts: self.transport.timeouts.clone(),
             },
@@ -344,7 +343,6 @@ impl OpenAiVideoTaskSeed {
                 client_api_format: "openai:video".to_string(),
                 provider_api_format: "openai:video".to_string(),
                 model_name: model_name.clone(),
-                proxy: self.transport.proxy.clone(),
                 transport_profile: self.transport.transport_profile.clone(),
                 timeouts: self.transport.timeouts.clone(),
             },
@@ -408,7 +406,6 @@ impl OpenAiVideoTaskSeed {
                 .model
                 .clone()
                 .or_else(|| self.transport.model_name.clone()),
-            proxy: self.transport.proxy.clone(),
             transport_profile: self.transport.transport_profile.clone(),
             timeouts: self.transport.timeouts.clone(),
         })
@@ -468,7 +465,6 @@ impl OpenAiVideoTaskSeed {
                 client_api_format: "openai:video".to_string(),
                 provider_api_format: "openai:video".to_string(),
                 model_name: model_name.clone(),
-                proxy: self.transport.proxy.clone(),
                 transport_profile: self.transport.transport_profile.clone(),
                 timeouts: self.transport.timeouts.clone(),
             },
@@ -562,7 +558,6 @@ impl OpenAiVideoTaskSeed {
                 client_api_format: "openai:video".to_string(),
                 provider_api_format: "openai:video".to_string(),
                 model_name,
-                proxy: self.transport.proxy.clone(),
                 transport_profile: self.transport.transport_profile.clone(),
                 timeouts: self.transport.timeouts.clone(),
             },
@@ -596,7 +591,6 @@ impl OpenAiVideoTaskSeed {
             key_id: Some(self.transport.key_id.clone()),
             client_api_format: Some(self.persistence.client_api_format.clone()),
             provider_api_format: Some(self.persistence.provider_api_format.clone()),
-            format_converted: self.persistence.format_converted,
             model: self.model.clone().or_else(|| Some(String::new())),
             prompt: self.prompt.clone().or_else(|| Some(String::new())),
             original_request_body: Some(self.persistence.original_request_body.clone()),
@@ -651,7 +645,6 @@ mod tests {
             key_id: None,
             client_api_format: Some("openai:video".to_string()),
             provider_api_format: Some("openai:video".to_string()),
-            format_converted: false,
             model: Some("sora-2".to_string()),
             prompt: Some("hello".to_string()),
             original_request_body: None,

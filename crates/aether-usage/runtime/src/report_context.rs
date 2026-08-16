@@ -161,7 +161,6 @@ mod tests {
             key_id: Some("key-1".to_string()),
             client_api_format: Some("openai:video".to_string()),
             provider_api_format: Some("openai:video".to_string()),
-            format_converted: false,
             model: Some("sora".to_string()),
             prompt: None,
             original_request_body: None,

@@ -1,6 +1,6 @@
 use super::{
     any, build_router_with_state, build_state_with_execution_runtime_override,
-    encrypt_python_fernet_plaintext, hash_api_key, json, start_server,
+    encrypt_fernet_plaintext, hash_api_key, json, start_server,
     strip_sse_keepalive_comments, Arc, Body, GatewayDataState, HeaderValue,
     InMemoryAuthApiKeySnapshotRepository, InMemoryMinimalCandidateSelectionReadRepository,
     InMemoryProviderCatalogReadRepository, InMemoryRequestCandidateRepository,
@@ -345,7 +345,7 @@ fn sample_provider_catalog_key(spec: ProviderSpec) -> StoredProviderCatalogKey {
     .expect("key should build")
     .with_transport_fields(
         Some(json!([spec.api_format])),
-        encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, spec.upstream_secret)
+        encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, spec.upstream_secret)
             .expect("api key should encrypt"),
         None,
         None,

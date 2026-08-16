@@ -21,11 +21,11 @@ function route(path: string, name?: string, meta: Record<string, unknown> = {}):
 }
 
 describe('main layout navigation builder', () => {
-  it('builds user navigation from translation keys and active modules', () => {
+  it('builds the lite user navigation', () => {
     const navigation = buildNavigation({
       canAccessAdmin: false,
       modules: {},
-      isModuleActive: (name) => name === 'referral',
+      isModuleActive: () => false,
       t: translate,
     })
 
@@ -34,7 +34,6 @@ describe('main layout navigation builder', () => {
       'tx:nav.group.resources',
       'tx:nav.group.account',
     ])
-    expect(navigation.flatMap(group => group.items.map(item => item.name))).toContain('tx:nav.myReferral')
   })
 
   it('builds admin navigation with dynamic module menu items sorted by menu order', () => {

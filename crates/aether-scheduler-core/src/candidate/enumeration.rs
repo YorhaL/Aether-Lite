@@ -56,7 +56,6 @@ fn enumerate_minimal_candidate_selection_inner(
             auth_constraints,
             &row.provider_id,
             &row.provider_name,
-            &row.provider_type,
         ) {
             continue;
         }
@@ -79,7 +78,6 @@ fn enumerate_minimal_candidate_selection_inner(
         candidates.push(SchedulerMinimalCandidateSelectionCandidate {
             provider_id: row.provider_id,
             provider_name: row.provider_name,
-            provider_type: row.provider_type,
             provider_priority: row.provider_priority,
             endpoint_id: row.endpoint_id,
             endpoint_api_format: row.endpoint_api_format,
@@ -124,7 +122,6 @@ pub fn collect_global_model_names_for_required_capability(
             auth_constraints,
             &row.provider_id,
             &row.provider_name,
-            &row.provider_type,
         ) {
             continue;
         }

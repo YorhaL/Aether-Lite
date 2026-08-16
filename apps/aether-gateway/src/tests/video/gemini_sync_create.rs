@@ -1,4 +1,4 @@
-use aether_crypto::{encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
+use aether_crypto::{encrypt_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
 use aether_data::repository::auth::{
     InMemoryAuthApiKeySnapshotRepository, StoredAuthApiKeySnapshot,
 };
@@ -41,7 +41,6 @@ async fn gateway_executes_gemini_video_create_via_local_decision_gate_with_local
         metadata_mode: String,
         metadata_source: String,
         store_present: bool,
-        proxy_node_id: String,
         transport_profile_id: String,
     }
 
@@ -132,7 +131,7 @@ async fn gateway_executes_gemini_video_create_via_local_decision_gate_with_local
             false,
             None,
             Some(2),
-            Some(serde_json::json!({"enabled": true, "node_id":"proxy-node-gemini-video-local"})),
+            None,
             Some(20.0),
             None,
             None,
@@ -183,7 +182,7 @@ async fn gateway_executes_gemini_video_create_via_local_decision_gate_with_local
         .expect("key should build")
         .with_transport_fields(
             Some(json!(["gemini:video"])),
-            encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-upstream-gemini-video")
+            encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-upstream-gemini-video")
                 .expect("api key should encrypt"),
             None,
             None,
@@ -346,12 +345,6 @@ async fn gateway_executes_gemini_video_create_via_local_decision_gate_with_local
                         .and_then(|value| value.get("json_body"))
                         .and_then(|value| value.get("store"))
                         .is_some(),
-                    proxy_node_id: payload
-                        .get("proxy")
-                        .and_then(|value| value.get("node_id"))
-                        .and_then(|value| value.as_str())
-                        .unwrap_or_default()
-                        .to_string(),
                     transport_profile_id: payload
                         .get("transport_profile")
                         .and_then(|value| value.get("profile_id"))
@@ -464,10 +457,6 @@ async fn gateway_executes_gemini_video_create_via_local_decision_gate_with_local
         "desktop-gemini-video"
     );
     assert!(!seen_execution_runtime_request.store_present);
-    assert_eq!(
-        seen_execution_runtime_request.proxy_node_id,
-        "proxy-node-gemini-video-local"
-    );
     assert_eq!(
         seen_execution_runtime_request.transport_profile_id,
         "chrome_136"

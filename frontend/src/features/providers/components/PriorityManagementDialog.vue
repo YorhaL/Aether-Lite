@@ -129,16 +129,6 @@
                     </span>
                   </template>
                 </div>
-                
-                <!-- 余额显示 (表格对齐) -->
-                <div class="min-w-[4rem] text-right">
-                  <span
-                    v-if="formatBalanceDisplay(provider.id)"
-                    class="text-xs font-semibold text-foreground/90 tabular-nums"
-                  >
-                    {{ formatBalanceDisplay(provider.id) }}
-                  </span>
-                </div>
               </div>
             </div>
           </div>
@@ -277,14 +267,7 @@
                           :class="!(key.is_active && key.provider_active) ? 'text-muted-foreground' : ''"
                         >{{ key.name }}</span>
                         <Badge
-                          v-if="key.is_pool_aggregate"
-                          variant="outline"
-                          class="text-[9px] h-4 px-1 shrink-0"
-                        >
-                          {{ legacyT('号池') }}
-                        </Badge>
-                        <Badge
-                          v-else-if="key.circuit_breaker_open"
+                          v-if="key.circuit_breaker_open"
                           variant="destructive"
                           class="text-[9px] h-4 px-1 shrink-0"
                         >
@@ -300,20 +283,9 @@
                       </div>
                       <!-- 第二行：密钥脱敏 · Provider 名称 + Provider 级别状态 -->
                       <div class="flex items-center gap-0 mt-0.5">
-                        <template v-if="key.is_pool_aggregate">
-                          <span class="text-[10px] text-muted-foreground/70 truncate">
-                            {{ poolKeySummary(key) }}
-                          </span>
-                          <template v-if="key.provider_type">
-                            <span class="text-[10px] text-muted-foreground/40 mx-1">·</span>
-                            <span class="text-[10px] text-muted-foreground shrink-0">{{ formatProviderType(key.provider_type) }}</span>
-                          </template>
-                        </template>
-                        <template v-else>
-                          <span class="font-mono text-[10px] text-muted-foreground/50 truncate">{{ key.api_key_masked }}</span>
-                          <span class="text-[10px] text-muted-foreground/40 mx-1">·</span>
-                          <span class="text-[10px] text-muted-foreground shrink-0">{{ key.provider_name }}</span>
-                        </template>
+                        <span class="font-mono text-[10px] text-muted-foreground/50 truncate">{{ key.api_key_masked }}</span>
+                        <span class="text-[10px] text-muted-foreground/40 mx-1">·</span>
+                        <span class="text-[10px] text-muted-foreground shrink-0">{{ key.provider_name }}</span>
                         <Badge
                           v-if="!key.provider_active"
                           variant="secondary"
@@ -341,26 +313,24 @@
                           --
                         </div>
                         <div class="text-[10px] text-muted-foreground tabular-nums">
-                          {{ key.is_pool_aggregate ? legacyT('Pool') : (key.rate_multipliers?.[format] ?? 1) + 'x' }}
+                          {{ (key.rate_multipliers?.[format] ?? 1) + 'x' }}
                         </div>
                       </div>
                       <!-- 快捷启用/禁用开关 -->
                       <button
                         class="p-0.5 rounded transition-colors shrink-0"
-                        :class="(key.is_pool_aggregate || !key.provider_active)
+                        :class="!key.provider_active
                           ? 'text-muted-foreground/20 cursor-not-allowed'
                           : key.is_active
                             ? 'text-foreground/70 hover:bg-muted hover:text-foreground'
                             : 'text-muted-foreground hover:bg-muted hover:text-foreground'"
-                        :title="key.is_pool_aggregate
-                          ? legacyT('号池聚合项不支持在此单独开关')
-                          : !key.provider_active
-                            ? legacyT('Provider 停用')
-                            : key.is_active
-                              ? legacyT('点击停用')
-                              : legacyT('点击启用')"
-                        :disabled="key.is_pool_aggregate || !key.provider_active"
-                        @click.stop="!key.is_pool_aggregate && toggleKeyActive(format, key)"
+                        :title="!key.provider_active
+                          ? legacyT('Provider 停用')
+                          : key.is_active
+                            ? legacyT('点击停用')
+                            : legacyT('点击启用')"
+                        :disabled="!key.provider_active"
+                        @click.stop="toggleKeyActive(format, key)"
                       >
                         <Power class="w-3.5 h-3.5" />
                       </button>
@@ -472,7 +442,6 @@ import { useI18n } from '@/i18n'
 import { updateProvider, updateProviderKey } from '@/api/endpoints'
 import { getProvidersSummary, type ProviderWithEndpointsSummary } from '@/api/endpoints'
 import { adminApi } from '@/api/admin'
-import { batchQueryBalance, type ActionResultResponse, type BalanceInfo } from '@/api/providerOps'
 import {
   sortApiFormats,
   groupApiFormats,
@@ -481,7 +450,6 @@ import {
   formatApiFormatShort,
   normalizeApiFormatAlias,
 } from '@/api/endpoints/types/api-format'
-import { log } from '@/utils/logger'
 
 interface KeyWithMeta {
   id: string
@@ -504,10 +472,6 @@ interface KeyWithMeta {
   success_rate: number | null
   avg_response_time_ms: number | null
   request_count: number
-  is_pool_aggregate?: boolean
-  pool_key_count?: number
-  pool_active_key_count?: number
-  provider_type?: string
 }
 
 const props = defineProps<{
@@ -549,7 +513,6 @@ const SAVE_CONCURRENCY = 6
 const PRIORITY_REQUEST_TIMEOUT_MS = 5 * 60 * 1000
 
 let originalProviderPriorityById = new Map<string, number>()
-let originalPoolPriorityByProviderId = new Map<string, number | null>()
 let originalKeyPriorityById = new Map<string, Record<string, number>>()
 
 // Key 优先级编辑状态
@@ -561,16 +524,9 @@ const editingProviderPriority = ref<string | null>(null)  // providerId
 // 调度模式状态
 const schedulingMode = ref<'fixed_order' | 'load_balance' | 'cache_affinity'>('cache_affinity')
 
-// 余额数据缓存 {providerId: ActionResultResponse}
-const balanceCache = ref<Record<string, ActionResultResponse>>({})
-
 const activeMainTabLabel = computed(() =>
   legacyT(activeMainTab.value === 'provider' ? '提供商优先' : 'Key 优先')
 )
-
-function poolKeySummary(key: KeyWithMeta): string {
-  return `${legacyT('号池')}: ${key.pool_active_key_count ?? 0}/${key.pool_key_count ?? 0}`
-}
 
 function emptyFormatKeyText(format: string): string {
   return legacyT(`暂无 ${format} 格式的 Key`)
@@ -578,57 +534,6 @@ function emptyFormatKeyText(format: string): string {
 
 function localizedApiError(error: unknown, fallback: string): string {
   return legacyT(parseApiError(error, fallback))
-}
-
-// 类型守卫函数
-function isBalanceInfo(data: unknown): data is BalanceInfo {
-  return data !== null && typeof data === 'object' && 'total_available' in data
-}
-
-// 获取 provider 的余额显示
-function getProviderBalance(providerId: string): { available: number | null; currency: string } | null {
-  const result = balanceCache.value[providerId]
-  if (!result || result.status !== 'success' || !result.data) {
-    return null
-  }
-  if (!isBalanceInfo(result.data)) {
-    return null
-  }
-  return {
-    available: result.data.total_available,
-    currency: result.data.currency || 'USD'
-  }
-}
-
-// 格式化余额显示
-function formatBalanceDisplay(providerId: string): string {
-  const balance = getProviderBalance(providerId)
-  if (!balance || balance.available == null) {
-    return ''
-  }
-  const symbol = balance.currency === 'USD' ? '$' : balance.currency
-  return `${symbol}${balance.available.toFixed(2)}`
-}
-
-// 异步加载余额数据（使用批量接口）
-async function loadBalances() {
-  try {
-    const opsProviderIds = sortedProviders.value
-      .filter(p => p.ops_configured)
-      .map(p => p.id)
-    if (opsProviderIds.length === 0) return
-
-    const results = await batchQueryBalance(opsProviderIds)
-
-    // 将成功的结果存入缓存
-    for (const [providerId, result] of Object.entries(results)) {
-      if (result.status === 'success') {
-        balanceCache.value[providerId] = result
-      }
-    }
-  } catch (e) {
-    log.warn('[loadBalances] 加载余额数据失败', e)
-  }
 }
 
 function normalizeApiFormatKey(value: string | null | undefined): string {
@@ -678,12 +583,6 @@ function normalizeProvidersForEditing(
   const normalized = providers.map((provider, index) => ({
     ...provider,
     provider_priority: normalizeRequiredPriority(provider.provider_priority, 100 + index),
-    pool_advanced: provider.pool_advanced
-      ? {
-          ...provider.pool_advanced,
-          global_priority: normalizeOptionalPriority(provider.pool_advanced.global_priority),
-        }
-      : provider.pool_advanced,
   }))
 
   const minProviderPriority = normalized.reduce(
@@ -694,27 +593,9 @@ function normalizeProvidersForEditing(
     ? 1 - minProviderPriority
     : 0
 
-  const explicitPoolPriorities = normalized
-    .map((provider) => normalizeOptionalPriority(provider.pool_advanced?.global_priority))
-    .filter((priority): priority is number => priority != null)
-  const minPoolPriority = explicitPoolPriorities.length > 0
-    ? Math.min(...explicitPoolPriorities)
-    : null
-  const poolOffset = minPoolPriority != null && minPoolPriority < 1
-    ? 1 - minPoolPriority
-    : 0
-
   return normalized.map((provider) => ({
     ...provider,
     provider_priority: provider.provider_priority + providerOffset,
-    pool_advanced: provider.pool_advanced
-      ? {
-          ...provider.pool_advanced,
-          global_priority: provider.pool_advanced.global_priority == null
-            ? null
-            : provider.pool_advanced.global_priority + poolOffset,
-        }
-      : provider.pool_advanced,
   }))
 }
 
@@ -723,12 +604,6 @@ function snapshotProviderBaseline(providers: ProviderWithEndpointsSummary[]) {
     providers.map((provider, index) => [
       provider.id,
       normalizeRequiredPriority(provider.provider_priority, 100 + index),
-    ])
-  )
-  originalPoolPriorityByProviderId = new Map(
-    providers.map((provider) => [
-      provider.id,
-      normalizeOptionalPriority(provider.pool_advanced?.global_priority),
     ])
   )
 }
@@ -755,7 +630,7 @@ function buildEditableKeyPriorityMap(): Map<string, Record<string, number>> {
     const normalizedFormat = normalizeApiFormatKey(format)
     if (!normalizedFormat) continue
 
-    const keys = keysByFormat.value[format].filter((key) => !isPoolManagedKey(key))
+    const keys = keysByFormat.value[format]
     keys.forEach((key) => {
       const existing = priorityMapByKeyId.get(key.id) || normalizePriorityMap(key.global_priority_by_format)
       existing[normalizedFormat] = Math.max(0, Math.trunc(key.priority))
@@ -816,14 +691,6 @@ async function runTasksWithConcurrency(
   await Promise.all(workers)
 }
 
-const providerById = computed(() => {
-  const map = new Map<string, ProviderWithEndpointsSummary>()
-  sortedProviders.value.forEach((provider) => {
-    map.set(provider.id, provider)
-  })
-  return map
-})
-
 const providerIdByName = computed(() => {
   const map = new Map<string, string>()
   sortedProviders.value.forEach((provider) => {
@@ -833,61 +700,6 @@ const providerIdByName = computed(() => {
   })
   return map
 })
-
-function resolveProviderId(key: Pick<KeyWithMeta, 'provider_id' | 'provider_name'>): string {
-  if (key.provider_id) return key.provider_id
-  return providerIdByName.value.get(key.provider_name) || ''
-}
-
-const poolProviderIds = computed(() => {
-  const set = new Set<string>()
-  sortedProviders.value.forEach((provider) => {
-    if (provider.pool_advanced) {
-      set.add(provider.id)
-    }
-  })
-  return set
-})
-
-const PROVIDER_TYPE_LABELS: Record<string, string> = {
-  custom: '自定义',
-  vertex_ai: 'Vertex AI',
-  claude_code: 'ClaudeCode',
-  codex: 'Codex',
-  chatgpt_web: 'ChatGPT Web',
-  gemini_cli: 'Gemini CLI',
-  antigravity: 'Antigravity',
-  kiro: 'Kiro',
-  grok: 'Grok',
-}
-
-function formatProviderType(type?: string): string {
-  if (!type) return ''
-  return legacyT(PROVIDER_TYPE_LABELS[type] || type)
-}
-
-function isPoolManagedProvider(providerId: string): boolean {
-  return providerId !== '' && poolProviderIds.value.has(providerId)
-}
-
-function isPoolManagedKey(key: KeyWithMeta): boolean {
-  return isPoolManagedProvider(resolveProviderId(key))
-}
-
-function isPoolAggregateItem(key: KeyWithMeta): boolean {
-  return key.is_pool_aggregate === true
-}
-
-// 将号池聚合项的优先级写回 provider 的 pool_advanced.global_priority（本地状态）
-function updatePoolGlobalPriority(providerId: string, priority: number) {
-  const provider = sortedProviders.value.find((p) => p.id === providerId)
-  if (!provider) return
-  if (provider.pool_advanced) {
-    provider.pool_advanced.global_priority = priority
-  } else {
-    provider.pool_advanced = { global_priority: priority }
-  }
-}
 
 function toNumberOrNull(value: unknown): number | null {
   const num = Number(value)
@@ -920,77 +732,13 @@ function sortKeysByActiveAndPriority(keys: KeyWithMeta[]): KeyWithMeta[] {
   })
 }
 
-function buildPoolAggregateItem(format: string, providerId: string, sourceKeys: KeyWithMeta[]): KeyWithMeta {
-  const provider = providerById.value.get(providerId)
-  const poolPriorityRaw = provider?.pool_advanced?.global_priority
-  const fallbackPriority = provider?.provider_priority ?? 999999
-  const poolPriority = Number.isFinite(poolPriorityRaw ?? NaN)
-    ? Number(poolPriorityRaw)
-    : fallbackPriority
-
-  const providerName = provider?.name || sourceKeys[0]?.provider_name || 'Unknown Provider'
-  const activeKeyCount = sourceKeys.filter((k) => k.is_active).length
-  const providerActive = provider?.is_active ?? sourceKeys.some((k) => k.provider_active)
-  const healthCandidates = sourceKeys.map((k) => k.health_score).filter((v): v is number => v != null)
-  const avgHealth = healthCandidates.length > 0
-    ? healthCandidates.reduce((sum, score) => sum + score, 0) / healthCandidates.length
-    : null
-
-  return {
-    id: `pool:${providerId}:${format}`,
-    provider_id: providerId,
-    name: providerName,
-    api_key_masked: '[Pool]',
-    internal_priority: 0,
-    global_priority_by_format: null,
-    format_priority: poolPriority,
-    priority: poolPriority,
-    rate_multipliers: { [format]: 1 },
-    is_active: activeKeyCount > 0,
-    provider_active: providerActive,
-    circuit_breaker_open: false,
-    provider_name: providerName,
-    endpoint_base_url: sourceKeys.find((k) => k.endpoint_base_url)?.endpoint_base_url || '',
-    api_format: format,
-    capabilities: [],
-    health_score: avgHealth,
-    success_rate: null,
-    avg_response_time_ms: null,
-    request_count: sourceKeys.reduce((sum, key) => sum + (key.request_count || 0), 0),
-    is_pool_aggregate: true,
-    pool_key_count: sourceKeys.length,
-    pool_active_key_count: activeKeyCount,
-    provider_type: provider?.provider_type || undefined,
-  }
-}
-
 const displayKeysByFormat = computed<Record<string, KeyWithMeta[]>>(() => {
-  const display: Record<string, KeyWithMeta[]> = {}
-
-  for (const [format, rawKeys] of Object.entries(keysByFormat.value)) {
-    const normalKeys: KeyWithMeta[] = []
-    const poolGroups = new Map<string, KeyWithMeta[]>()
-
-    for (const key of rawKeys) {
-      const providerId = resolveProviderId(key)
-      if (isPoolManagedProvider(providerId)) {
-        if (!poolGroups.has(providerId)) {
-          poolGroups.set(providerId, [])
-        }
-        poolGroups.get(providerId)?.push(key)
-      } else {
-        normalKeys.push(key)
-      }
-    }
-
-    const poolItems = Array.from(poolGroups.entries()).map(([providerId, keys]) =>
-      buildPoolAggregateItem(format, providerId, keys)
-    )
-
-    display[format] = sortKeysByActiveAndPriority([...normalKeys, ...poolItems])
-  }
-
-  return display
+  return Object.fromEntries(
+    Object.entries(keysByFormat.value).map(([format, keys]) => [
+      format,
+      sortKeysByActiveAndPriority(keys),
+    ]),
+  )
 })
 
 // 排序 providers：启用的在前，停用的在后，各自按优先级排序
@@ -1009,8 +757,6 @@ watch(internalOpen, async (open) => {
     await loadAllProviders()
     await loadCurrentPriorityMode()
     await loadKeysByFormat()
-    // 异步加载余额数据
-    loadBalances()
   }
 })
 
@@ -1024,7 +770,6 @@ async function loadAllProviders() {
     )
   } catch {
     originalProviderPriorityById = new Map()
-    originalPoolPriorityByProviderId = new Map()
     sortedProviders.value = []
   }
 }
@@ -1179,7 +924,6 @@ async function loadKeysByFormat() {
 
 // 快捷切换 Key 启用/禁用状态
 async function toggleKeyActive(format: string, key: KeyWithMeta) {
-  if (isPoolAggregateItem(key)) return
   const newStatus = !key.is_active
   try {
     await updateProviderKey(key.id, { is_active: newStatus })
@@ -1215,13 +959,7 @@ function finishEditKeyPriority(format: string, key: KeyWithMeta, event: FocusEve
   const newPriority = parseInt(input.value, 10)
 
   if (!isNaN(newPriority) && newPriority >= 1) {
-    if (isPoolAggregateItem(key) && key.provider_id) {
-      // 号池聚合项：写回 provider 的 pool_advanced.global_priority
-      updatePoolGlobalPriority(key.provider_id, newPriority)
-    } else {
-      // 普通 key：直接更新优先级
-      key.priority = newPriority
-    }
+    key.priority = newPriority
     // 重新排序当前格式
     keysByFormat.value[format] = sortKeysByActiveAndPriority(keysByFormat.value[format])
   }
@@ -1457,13 +1195,6 @@ function handleKeyDrop(format: string, dropKeyId: string) {
     })
   )
 
-  // 号池聚合项的优先级写回 provider 的 pool_advanced.global_priority
-  for (const item of items) {
-    if (item.is_pool_aggregate && item.provider_id) {
-      updatePoolGlobalPriority(item.provider_id, item.priority)
-    }
-  }
-
   draggedKey.value[format] = null
   dragOverKey.value[format] = null
 }
@@ -1484,17 +1215,6 @@ async function save() {
       const originalProviderPriority = originalProviderPriorityById.get(provider.id)
       if (originalProviderPriority == null || originalProviderPriority !== currentProviderPriority) {
         payload.provider_priority = currentProviderPriority
-      }
-
-      const currentPoolPriority = normalizeOptionalPriority(provider.pool_advanced?.global_priority)
-      const originalPoolPriority = originalPoolPriorityByProviderId.get(provider.id) ?? null
-      if (currentPoolPriority !== originalPoolPriority) {
-        payload.pool_advanced = provider.pool_advanced
-          ? {
-              ...provider.pool_advanced,
-              global_priority: currentPoolPriority,
-            }
-          : null
       }
 
       if (Object.keys(payload).length > 0) {

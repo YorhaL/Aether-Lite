@@ -11,7 +11,6 @@ pub enum SchedulerPriorityMode {
 pub struct SchedulerMinimalCandidateSelectionCandidate {
     pub provider_id: String,
     pub provider_name: String,
-    pub provider_type: String,
     pub provider_priority: i32,
     pub endpoint_id: String,
     pub endpoint_api_format: String,

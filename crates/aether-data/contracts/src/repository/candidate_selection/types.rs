@@ -17,7 +17,6 @@ pub struct StoredProviderModelMapping {
 pub struct StoredMinimalCandidateSelectionRow {
     pub provider_id: String,
     pub provider_name: String,
-    pub provider_type: String,
     pub provider_priority: i32,
     pub provider_is_active: bool,
     pub endpoint_id: String,
@@ -44,41 +43,6 @@ pub struct StoredMinimalCandidateSelectionRow {
     pub model_supports_streaming: Option<bool>,
     pub model_is_active: bool,
     pub model_is_available: bool,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum StoredPoolKeyCandidateOrder {
-    #[default]
-    InternalPriority,
-    Lru,
-    CacheAffinity,
-    SingleAccount,
-    LoadBalance {
-        seed: String,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct StoredPoolKeyCandidateRowsQuery {
-    pub api_format: String,
-    pub provider_id: String,
-    pub endpoint_id: String,
-    pub model_id: String,
-    pub selected_provider_model_name: String,
-    #[serde(default)]
-    pub order: StoredPoolKeyCandidateOrder,
-    pub offset: u32,
-    pub limit: u32,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct StoredPoolKeyCandidateRowsByKeyIdsQuery {
-    pub api_format: String,
-    pub provider_id: String,
-    pub endpoint_id: String,
-    pub model_id: String,
-    pub selected_provider_model_name: String,
-    pub key_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -154,16 +118,6 @@ pub trait MinimalCandidateSelectionReadRepository: Send + Sync {
     async fn list_for_exact_api_format_and_requested_model_page(
         &self,
         query: &StoredRequestedModelCandidateRowsQuery,
-    ) -> Result<Vec<StoredMinimalCandidateSelectionRow>, crate::DataLayerError>;
-
-    async fn list_pool_key_rows_for_group(
-        &self,
-        query: &StoredPoolKeyCandidateRowsQuery,
-    ) -> Result<Vec<StoredMinimalCandidateSelectionRow>, crate::DataLayerError>;
-
-    async fn list_pool_key_rows_for_group_key_ids(
-        &self,
-        query: &StoredPoolKeyCandidateRowsByKeyIdsQuery,
     ) -> Result<Vec<StoredMinimalCandidateSelectionRow>, crate::DataLayerError>;
 }
 

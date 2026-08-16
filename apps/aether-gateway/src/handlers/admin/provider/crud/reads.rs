@@ -1,7 +1,7 @@
 use super::responses::build_admin_providers_data_unavailable_response;
 use crate::handlers::admin::provider::shared::paths::{
     admin_provider_id_for_health_monitor, admin_provider_id_for_mapping_preview,
-    admin_provider_id_for_pool_status, admin_provider_id_for_summary, is_admin_providers_root,
+    admin_provider_id_for_summary, is_admin_providers_root,
 };
 use crate::handlers::admin::request::{AdminAppState, AdminRequestContext};
 use crate::handlers::admin::shared::{query_param_optional_bool, query_param_value};
@@ -159,28 +159,6 @@ pub(crate) async fn maybe_build_local_admin_provider_reads_response(
         return Ok(Some(
             match state
                 .build_admin_provider_mapping_preview_payload(&provider_id)
-                .await
-            {
-                Some(payload) => Json(payload).into_response(),
-                None => build_admin_provider_not_found_response(format!(
-                    "Provider {provider_id} 不存在"
-                )),
-            },
-        ));
-    }
-
-    if route_kind == Some("pool_status")
-        && request_context.method() == http::Method::GET
-        && request_context.path().ends_with("/pool-status")
-    {
-        let Some(provider_id) = admin_provider_id_for_pool_status(request_context.path()) else {
-            return Ok(Some(build_admin_provider_not_found_response(
-                "Provider 不存在",
-            )));
-        };
-        return Ok(Some(
-            match state
-                .build_admin_provider_pool_status_payload(&provider_id)
                 .await
             {
                 Some(payload) => Json(payload).into_response(),

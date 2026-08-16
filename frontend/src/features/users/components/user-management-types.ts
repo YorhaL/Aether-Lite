@@ -37,7 +37,6 @@ export interface UserManagementRow {
   isUnlimited: boolean
   hasWallet: boolean
   totalBalanceLabel: string
-  packageBalanceLabel: string
   walletBalanceLabel: string
   consumedLabel: string
   isNegativeBalance: boolean

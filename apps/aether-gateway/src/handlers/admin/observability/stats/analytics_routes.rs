@@ -253,10 +253,6 @@ pub(super) async fn maybe_build_local_admin_stats_analytics_response(
                 api_format: query_param_value(request_context.query_string(), "api_format"),
                 endpoint_kind: query_param_value(request_context.query_string(), "endpoint_kind"),
                 is_stream: query_param_optional_bool(request_context.query_string(), "is_stream"),
-                has_format_conversion: query_param_optional_bool(
-                    request_context.query_string(),
-                    "has_format_conversion",
-                ),
                 slow_threshold_ms,
                 include_timeline: query_param_optional_bool(
                     request_context.query_string(),

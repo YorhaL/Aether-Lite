@@ -56,7 +56,6 @@
         mobile
         @edit="$emit('edit')"
         @wallet="$emit('wallet')"
-        @plans="$emit('plans')"
         @api-keys="$emit('api-keys')"
         @sessions="$emit('sessions')"
         @toggle-status="$emit('toggle-status')"
@@ -86,7 +85,6 @@ defineEmits<{
   'toggle-selected': [checked: boolean]
   edit: []
   wallet: []
-  plans: []
   'api-keys': []
   sessions: []
   'toggle-status': []

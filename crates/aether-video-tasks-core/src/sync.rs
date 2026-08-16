@@ -6,8 +6,7 @@ use crate::{
     context_text, context_u64, current_unix_timestamp_secs, generate_local_short_id,
     request_body_text, GeminiVideoTaskSeed, LocalVideoTaskPersistence, LocalVideoTaskReadResponse,
     LocalVideoTaskSeed, LocalVideoTaskSnapshot, LocalVideoTaskStatus, LocalVideoTaskSuccessPlan,
-    LocalVideoTaskTransport, OpenAiVideoTaskSeed, VideoTaskSyncReportMode,
-    VideoTaskTruthSourceMode,
+    LocalVideoTaskTransport, OpenAiVideoTaskSeed,
 };
 
 impl LocalVideoTaskSeed {
@@ -150,42 +149,14 @@ impl LocalVideoTaskSeed {
     }
 }
 
-impl VideoTaskTruthSourceMode {
-    pub fn prepare_sync_success(
-        self,
-        report_kind: &str,
-        provider_body: &Map<String, Value>,
-        report_context: &Map<String, Value>,
-        plan: &ExecutionPlan,
-    ) -> Option<LocalVideoTaskSuccessPlan> {
-        let seed = LocalVideoTaskSeed::from_sync_finalize(
-            report_kind,
-            provider_body,
-            report_context,
-            plan,
-        )?;
-        let report_mode = match self {
-            Self::PythonSyncReport => VideoTaskSyncReportMode::InlineSync,
-            Self::RustAuthoritative => VideoTaskSyncReportMode::Background,
-        };
-        Some(LocalVideoTaskSuccessPlan { seed, report_mode })
-    }
-}
-
 impl LocalVideoTaskSuccessPlan {
     pub fn success_report_kind(&self) -> &'static str {
         self.seed.success_report_kind()
     }
 
-    pub fn report_mode(&self) -> VideoTaskSyncReportMode {
-        self.report_mode
-    }
-
     pub fn apply_to_report_context(&self, report_context: &mut Map<String, Value>) {
         self.seed.apply_to_report_context(report_context);
-        if matches!(self.report_mode, VideoTaskSyncReportMode::Background) {
-            report_context.insert("rust_video_task_persisted".to_string(), Value::Bool(true));
-        }
+        report_context.insert("rust_video_task_persisted".to_string(), Value::Bool(true));
     }
 
     pub fn client_body_json(&self) -> Value {
@@ -270,14 +241,6 @@ pub fn build_internal_finalize_video_plan(
         client_api_format: signature.to_string(),
         provider_api_format: signature.to_string(),
         model_name,
-        proxy: Some(aether_contracts::ProxySnapshot {
-            enabled: Some(false),
-            mode: Some("direct".to_string()),
-            node_id: None,
-            label: None,
-            url: None,
-            extra: None,
-        }),
         transport_profile: None,
         timeouts: None,
     })

@@ -7,8 +7,6 @@ pub use aether_data_contracts::repository::users::{
     StoredUserSummary, UpsertUserGroupRecord, UserExportListQuery, UserExportSortBy,
     UserExportSortOrder, UserExportSummary, UserReadRepository,
 };
-#[cfg(feature = "mysql")]
-pub use aether_data_mysql::MysqlUserReadRepository;
 #[cfg(feature = "postgres")]
 pub use aether_data_postgres::SqlxUserReadRepository;
 #[cfg(feature = "sqlite")]

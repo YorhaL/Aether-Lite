@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use crate::database::SqlDatabaseConfig;
-use crate::driver::sqlite::{SqlitePool, SqlitePoolFactory};
 use crate::repository::announcements::{
     AnnouncementReadRepository, AnnouncementWriteRepository, SqliteAnnouncementRepository,
 };
@@ -37,18 +35,9 @@ use crate::repository::management_tokens::{
 use crate::repository::oauth_providers::{
     OAuthProviderReadRepository, OAuthProviderWriteRepository, SqliteOAuthProviderRepository,
 };
-use crate::repository::pool_scores::{
-    PoolMemberScoreWriteRepository, PoolScoreReadRepository, SqlitePoolMemberScoreRepository,
-};
 use crate::repository::provider_catalog::{
     ProviderCatalogReadRepository, ProviderCatalogWriteRepository,
     SqliteProviderCatalogReadRepository,
-};
-use crate::repository::proxy_nodes::{
-    ProxyNodeReadRepository, ProxyNodeWriteRepository, SqliteProxyNodeReadRepository,
-};
-use crate::repository::quota::{
-    ProviderQuotaReadRepository, ProviderQuotaWriteRepository, SqliteProviderQuotaRepository,
 };
 use crate::repository::routing_profiles::{
     RoutingGroupReadRepository, RoutingGroupWriteRepository, SqliteRoutingGroupRepository,
@@ -66,6 +55,8 @@ use crate::repository::wallet::{
     SqliteWalletReadRepository, WalletReadRepository, WalletWriteRepository,
 };
 use crate::DataLayerError;
+use crate::SqlDatabaseConfig;
+use aether_data_sqlite::{SqlitePool, SqlitePoolFactory};
 
 #[derive(Debug, Clone)]
 pub struct SqliteBackend {
@@ -203,36 +194,12 @@ impl SqliteBackend {
         Arc::new(SqliteProviderCatalogReadRepository::new(self.pool_clone()))
     }
 
-    pub fn pool_score_read_repository(&self) -> Arc<dyn PoolScoreReadRepository> {
-        Arc::new(SqlitePoolMemberScoreRepository::new(self.pool_clone()))
-    }
-
-    pub fn pool_score_write_repository(&self) -> Arc<dyn PoolMemberScoreWriteRepository> {
-        Arc::new(SqlitePoolMemberScoreRepository::new(self.pool_clone()))
-    }
-
     pub fn routing_group_read_repository(&self) -> Arc<dyn RoutingGroupReadRepository> {
         Arc::new(SqliteRoutingGroupRepository::new(self.pool_clone()))
     }
 
     pub fn routing_group_write_repository(&self) -> Arc<dyn RoutingGroupWriteRepository> {
         Arc::new(SqliteRoutingGroupRepository::new(self.pool_clone()))
-    }
-
-    pub fn proxy_node_read_repository(&self) -> Arc<dyn ProxyNodeReadRepository> {
-        Arc::new(SqliteProxyNodeReadRepository::new(self.pool_clone()))
-    }
-
-    pub fn proxy_node_write_repository(&self) -> Arc<dyn ProxyNodeWriteRepository> {
-        Arc::new(SqliteProxyNodeReadRepository::new(self.pool_clone()))
-    }
-
-    pub fn provider_quota_read_repository(&self) -> Arc<dyn ProviderQuotaReadRepository> {
-        Arc::new(SqliteProviderQuotaRepository::new(self.pool_clone()))
-    }
-
-    pub fn provider_quota_write_repository(&self) -> Arc<dyn ProviderQuotaWriteRepository> {
-        Arc::new(SqliteProviderQuotaRepository::new(self.pool_clone()))
     }
 
     pub fn settlement_write_repository(&self) -> Arc<dyn SettlementWriteRepository> {
@@ -269,7 +236,7 @@ mod tests {
     };
     use crate::{
         DatabaseDriver, SqlDatabaseConfig, SqlPoolConfig, StatsDailyAggregationInput,
-        StatsHourlyAggregationInput, WalletDailyUsageAggregationInput,
+        StatsHourlyAggregationInput,
     };
 
     #[tokio::test]
@@ -654,158 +621,6 @@ WHERE request_body IS NOT NULL
             .fetch_one(pool)
             .await
             .expect("count should load")
-    }
-
-    #[tokio::test]
-    async fn wallet_daily_usage_aggregation_uses_settlement_wallets_after_sqlite_migrations() {
-        let config = SqlDatabaseConfig {
-            driver: DatabaseDriver::Sqlite,
-            url: "sqlite::memory:".to_string(),
-            pool: SqlPoolConfig {
-                max_connections: 1,
-                ..SqlPoolConfig::default()
-            },
-        };
-        let backend = SqliteBackend::from_config(config).expect("backend should build");
-        run_sqlite_migrations(backend.pool())
-            .await
-            .expect("sqlite migrations should run");
-
-        sqlx::query(
-            r#"
-INSERT INTO wallets (id, user_id, balance, gift_balance, limit_mode, created_at, updated_at)
-VALUES
-  ('wallet-1', 'user-1', 10.0, 2.0, 'finite', 1, 1),
-  ('wallet-stale', 'user-stale', 0.0, 0.0, 'finite', 1, 1)
-"#,
-        )
-        .execute(backend.pool())
-        .await
-        .expect("wallets should seed");
-
-        sqlx::query(
-            r#"
-INSERT INTO "usage" (
-  request_id, wallet_id, provider_name, model, status, billing_status,
-  total_cost_usd, input_tokens, output_tokens, cache_creation_input_tokens,
-  cache_read_input_tokens, finalized_at, created_at_unix_ms, updated_at_unix_secs
-) VALUES
-  ('request-1', 'wrong-wallet', 'provider', 'model', 'completed', 'pending',
-   1.25, 10, 20, 3, 4, 900, 900000, 900),
-  ('request-2', NULL, 'provider', 'model', 'completed', 'pending',
-   2.00, 5, 7, 1, 2, 901, 901000, 901),
-  ('request-zero', NULL, 'provider', 'model', 'completed', 'pending',
-   0.00, 100, 100, 0, 0, 902, 902000, 902),
-  ('request-outside', NULL, 'provider', 'model', 'completed', 'pending',
-   9.00, 50, 50, 0, 0, 903, 903000, 903)
-"#,
-        )
-        .execute(backend.pool())
-        .await
-        .expect("usage should seed");
-
-        sqlx::query(
-            r#"
-INSERT INTO usage_settlement_snapshots (
-  request_id, billing_status, wallet_id, finalized_at, created_at, updated_at
-) VALUES
-  ('request-1', 'settled', 'wallet-1', 1000, 1000, 1000),
-  ('request-2', 'settled', 'wallet-1', 1100, 1100, 1100),
-  ('request-zero', 'settled', 'wallet-1', 1150, 1150, 1150),
-  ('request-outside', 'settled', 'wallet-1', 1200, 1200, 1200)
-"#,
-        )
-        .execute(backend.pool())
-        .await
-        .expect("settlement snapshots should seed");
-
-        sqlx::query(
-            r#"
-INSERT INTO wallet_daily_usage_ledgers (
-  id, wallet_id, billing_date, billing_timezone, total_cost_usd,
-  total_requests, input_tokens, output_tokens, cache_creation_tokens,
-  cache_read_tokens, aggregated_at, created_at, updated_at
-) VALUES (
-  'stale-ledger', 'wallet-stale', '2026-05-03', 'Asia/Shanghai',
-  7.0, 3, 1, 1, 0, 0, 999, 999, 999
-)
-"#,
-        )
-        .execute(backend.pool())
-        .await
-        .expect("stale ledger should seed");
-
-        let summary = backend
-            .aggregate_wallet_daily_usage(&WalletDailyUsageAggregationInput {
-                billing_date: "2026-05-03".to_string(),
-                billing_timezone: "Asia/Shanghai".to_string(),
-                window_start_unix_secs: 1000,
-                window_end_unix_secs: 1200,
-                aggregated_at_unix_secs: 1300,
-            })
-            .await
-            .expect("wallet daily usage aggregation should run");
-
-        assert_eq!(summary.aggregated_wallets, 1);
-        assert_eq!(summary.deleted_stale_ledgers, 1);
-
-        let ledger = sqlx::query_as::<
-            _,
-            (
-                String,
-                String,
-                f64,
-                i64,
-                i64,
-                i64,
-                i64,
-                i64,
-                Option<i64>,
-                Option<i64>,
-                i64,
-            ),
-        >(
-            r#"
-SELECT
-  id,
-  wallet_id,
-  total_cost_usd,
-  total_requests,
-  input_tokens,
-  output_tokens,
-  cache_creation_tokens,
-  cache_read_tokens,
-  first_finalized_at,
-  last_finalized_at,
-  aggregated_at
-FROM wallet_daily_usage_ledgers
-WHERE billing_date = '2026-05-03'
-  AND billing_timezone = 'Asia/Shanghai'
-"#,
-        )
-        .fetch_one(backend.pool())
-        .await
-        .expect("aggregated ledger should load");
-
-        assert_eq!(ledger.0.len(), 64);
-        assert_eq!(ledger.1, "wallet-1");
-        assert!((ledger.2 - 3.25).abs() < f64::EPSILON);
-        assert_eq!(ledger.3, 2);
-        assert_eq!(ledger.4, 15);
-        assert_eq!(ledger.5, 27);
-        assert_eq!(ledger.6, 4);
-        assert_eq!(ledger.7, 6);
-        assert_eq!(ledger.8, Some(1000));
-        assert_eq!(ledger.9, Some(1100));
-        assert_eq!(ledger.10, 1300);
-
-        let stale_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM wallet_daily_usage_ledgers WHERE id = 'stale-ledger'",
-        )
-        .fetch_one(backend.pool())
-        .await
-        .expect("stale ledger count should load");
-        assert_eq!(stale_count, 0);
     }
 
     #[tokio::test]

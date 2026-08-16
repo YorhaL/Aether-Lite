@@ -1,4 +1,4 @@
-use aether_crypto::{encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
+use aether_crypto::{encrypt_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
 use chrono::{DateTime, Utc};
 use hmac::Mac;
 use serde_json::{json, Map, Value};
@@ -10,8 +10,8 @@ use super::{
     StoredManagementTokenUserSummary, StoredManagementTokenWithUser, StoredOAuthProviderConfig,
     StoredOAuthProviderModuleConfig, StoredProviderActiveGlobalModel,
     StoredProviderCatalogEndpoint, StoredProviderCatalogKey, StoredProviderCatalogProvider,
-    StoredProviderModelStats, StoredProviderQuotaSnapshot, StoredProxyNode,
-    StoredPublicGlobalModel, StoredRequestCandidate,
+    StoredProviderModelStats, StoredPublicGlobalModel,
+    StoredRequestCandidate,
 };
 use crate::AppState;
 
@@ -185,57 +185,6 @@ pub(super) fn sample_provider(
     )
     .expect("provider should build")
     .with_routing_fields(priority)
-}
-
-pub(super) fn sample_proxy_node(node_id: &str) -> StoredProxyNode {
-    StoredProxyNode::new(
-        node_id.to_string(),
-        "proxy-node-1".to_string(),
-        "127.0.0.1".to_string(),
-        0,
-        false,
-        "offline".to_string(),
-        30,
-        0,
-        0,
-        0,
-        0,
-        0,
-        true,
-        false,
-        7,
-    )
-    .expect("proxy node should build")
-    .with_runtime_fields(
-        Some("test".to_string()),
-        Some("system".to_string()),
-        Some(1_710_000_000),
-        None,
-        None,
-        None,
-        None,
-        Some(1_710_000_010),
-        Some(json!({
-            "upgrade_to": "1.2.3",
-            "allowed_ports": [443],
-        })),
-        Some(1_709_000_000),
-        Some(1_710_000_100),
-    )
-}
-
-pub(super) fn sample_provider_quota(provider_id: &str) -> StoredProviderQuotaSnapshot {
-    StoredProviderQuotaSnapshot::new(
-        provider_id.to_string(),
-        "monthly_quota".to_string(),
-        Some(100.0),
-        12.5,
-        Some(30),
-        Some(1_711_000_000),
-        Some(1_711_000_000 + 30 * 24 * 60 * 60),
-        true,
-    )
-    .expect("provider quota should build")
 }
 
 pub(super) fn sample_provider_model_stats(
@@ -427,7 +376,7 @@ pub(super) fn sample_oauth_provider_config(provider_type: &str) -> StoredOAuthPr
     .expect("oauth provider config should build")
     .with_config_fields(
         Some(
-            encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "secret-value")
+            encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "secret-value")
                 .expect("secret should encrypt"),
         ),
         Some("https://connect.linux.do/oauth2/authorize".to_string()),
@@ -476,7 +425,7 @@ pub(super) fn sample_key(
     api_format: &str,
     secret: &str,
 ) -> StoredProviderCatalogKey {
-    let encrypted_api_key = encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, secret)
+    let encrypted_api_key = encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, secret)
         .expect("api key ciphertext should build");
     StoredProviderCatalogKey::new(
         id.to_string(),

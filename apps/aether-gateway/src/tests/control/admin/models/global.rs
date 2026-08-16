@@ -95,7 +95,7 @@ async fn gateway_handles_admin_global_models_locally_with_trusted_admin_principa
         .get(format!(
             "{gateway_url}/api/admin/models/global?skip=0&limit=20"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -256,7 +256,7 @@ async fn gateway_returns_service_unavailable_for_admin_global_models_without_glo
         .get(format!(
             "{gateway_url}/api/admin/models/global?is_active=true&limit=1000"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -337,7 +337,7 @@ async fn gateway_handles_admin_global_model_detail_locally_with_trusted_admin_pr
         .get(format!(
             "{gateway_url}/api/admin/models/global/global-gpt-5"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -419,7 +419,7 @@ async fn gateway_handles_admin_model_catalog_locally_with_trusted_admin_principa
 
     let response = reqwest::Client::new()
         .get(format!("{gateway_url}/api/admin/models/catalog"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -525,7 +525,7 @@ async fn admin_global_models_include_embedding_capability() {
 
     let list_response = client
         .get(format!("{gateway_url}/api/admin/models/global?limit=20"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -546,7 +546,7 @@ async fn admin_global_models_include_embedding_capability() {
 
     let catalog_response = client
         .get(format!("{gateway_url}/api/admin/models/catalog"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -593,7 +593,7 @@ async fn gateway_returns_service_unavailable_for_admin_model_catalog_without_req
 
     let response = reqwest::Client::new()
         .get(format!("{gateway_url}/api/admin/models/catalog"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -645,7 +645,7 @@ async fn gateway_returns_service_unavailable_for_admin_global_model_create_witho
 
     let response = reqwest::Client::new()
         .post(format!("{gateway_url}/api/admin/models/global"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -690,7 +690,7 @@ async fn gateway_handles_admin_model_catalog_locally_with_local_503_when_readers
 
     let response = reqwest::Client::new()
         .get(format!("{gateway_url}/api/admin/models/catalog"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -862,7 +862,7 @@ async fn gateway_handles_admin_global_model_routing_locally_with_trusted_admin_p
         .get(format!(
             "{gateway_url}/api/admin/models/global/global-gpt-5/routing"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -951,9 +951,8 @@ async fn gateway_global_model_routing_counts_image_provider_keys_by_provider_mod
         }),
     );
 
-    let mut image_provider = sample_provider("provider-image", "image", 10);
-    image_provider.provider_type = "chatgpt_web".to_string();
-    let grok_provider = sample_provider("provider-grok", "grok2api", 20);
+    let image_provider = sample_provider("provider-image", "image", 10);
+    let secondary_provider = sample_provider("provider-secondary", "secondary", 20);
 
     let mut image_key = sample_key(
         "key-image-routing",
@@ -962,20 +961,19 @@ async fn gateway_global_model_routing_counts_image_provider_keys_by_provider_mod
         "sk-image-routing-1234",
     );
     image_key.name = "image-account".to_string();
-    image_key.auth_type = "oauth".to_string();
     image_key.allowed_models = Some(json!(["gpt-image-2"]));
 
-    let mut grok_key = sample_key(
-        "key-grok-routing",
-        "provider-grok",
+    let mut secondary_key = sample_key(
+        "key-secondary-routing",
+        "provider-secondary",
         "openai:chat",
-        "sk-grok-routing-5678",
+        "sk-secondary-routing-5678",
     );
-    grok_key.name = "all".to_string();
-    grok_key.allowed_models = Some(json!(["gpt-image-2"]));
+    secondary_key.name = "all".to_string();
+    secondary_key.allowed_models = Some(json!(["gpt-image-2"]));
 
     let provider_catalog_repository = Arc::new(InMemoryProviderCatalogReadRepository::seed(
-        vec![image_provider, grok_provider],
+        vec![image_provider, secondary_provider],
         vec![
             sample_endpoint(
                 "endpoint-image",
@@ -984,13 +982,13 @@ async fn gateway_global_model_routing_counts_image_provider_keys_by_provider_mod
                 "https://chatgpt.example",
             ),
             sample_endpoint(
-                "endpoint-grok-chat",
-                "provider-grok",
+                "endpoint-secondary-chat",
+                "provider-secondary",
                 "openai:chat",
-                "https://grok.example",
+                "https://secondary.example",
             ),
         ],
-        vec![image_key, grok_key],
+        vec![image_key, secondary_key],
     ));
     let global_model_repository = Arc::new(
         InMemoryGlobalModelReadRepository::seed(Vec::new())
@@ -1007,8 +1005,8 @@ async fn gateway_global_model_routing_counts_image_provider_keys_by_provider_mod
                     "gpt-image-2",
                 ),
                 sample_admin_provider_model(
-                    "model-grok-gpt-image",
-                    "provider-grok",
+                    "model-secondary-gpt-image",
+                    "provider-secondary",
                     "global-gpt-image",
                     "gpt-image-2",
                 ),
@@ -1032,7 +1030,7 @@ async fn gateway_global_model_routing_counts_image_provider_keys_by_provider_mod
         .get(format!(
             "{gateway_url}/api/admin/models/global/global-gpt-image/routing"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1058,14 +1056,14 @@ async fn gateway_global_model_routing_counts_image_provider_keys_by_provider_mod
     assert_eq!(image_endpoints[0]["active_keys"], 1);
     assert_eq!(image_endpoints[0]["keys"][0]["name"], "image-account");
 
-    let grok_endpoints = providers[1]["endpoints"]
+    let secondary_endpoints = providers[1]["endpoints"]
         .as_array()
-        .expect("grok endpoints array");
-    assert_eq!(providers[1]["id"], "provider-grok");
-    assert_eq!(grok_endpoints[0]["api_format"], "openai:chat");
-    assert_eq!(grok_endpoints[0]["total_keys"], 1);
-    assert_eq!(grok_endpoints[0]["active_keys"], 1);
-    assert_eq!(grok_endpoints[0]["keys"][0]["name"], "all");
+        .expect("secondary endpoints array");
+    assert_eq!(providers[1]["id"], "provider-secondary");
+    assert_eq!(secondary_endpoints[0]["api_format"], "openai:chat");
+    assert_eq!(secondary_endpoints[0]["total_keys"], 1);
+    assert_eq!(secondary_endpoints[0]["active_keys"], 1);
+    assert_eq!(secondary_endpoints[0]["keys"][0]["name"], "all");
     assert_eq!(*upstream_hits.lock().expect("mutex should lock"), 0);
 
     gateway_handle.abort();
@@ -1102,7 +1100,7 @@ async fn gateway_creates_admin_global_model_locally_with_trusted_admin_principal
 
     let response = reqwest::Client::new()
         .post(format!("{gateway_url}/api/admin/models/global"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1189,7 +1187,7 @@ async fn gateway_updates_and_deletes_admin_global_model_locally_with_trusted_adm
         .patch(format!(
             "{gateway_url}/api/admin/models/global/global-gpt-5"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1223,7 +1221,7 @@ async fn gateway_updates_and_deletes_admin_global_model_locally_with_trusted_adm
         .delete(format!(
             "{gateway_url}/api/admin/models/global/global-gpt-5"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1281,7 +1279,7 @@ async fn gateway_batch_deletes_admin_global_models_locally_with_trusted_admin_pr
         .post(format!(
             "{gateway_url}/api/admin/models/global/batch-delete"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1351,7 +1349,7 @@ async fn gateway_deletes_admin_global_model_with_bound_provider_models_locally()
         .delete(format!(
             "{gateway_url}/api/admin/models/global/global-gpt-5"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1425,7 +1423,7 @@ async fn gateway_assigns_admin_global_model_to_providers_locally_with_trusted_ad
         .post(format!(
             "{gateway_url}/api/admin/models/global/global-gpt-5/assign-to-providers"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1511,7 +1509,7 @@ async fn gateway_handles_admin_global_model_providers_locally_with_trusted_admin
         .get(format!(
             "{gateway_url}/api/admin/models/global/global-gpt-5/providers"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")

@@ -53,7 +53,7 @@ async fn gateway_returns_service_unavailable_for_admin_health_api_formats_when_r
         .get(format!(
             "{gateway_url}/api/admin/endpoints/health/api-formats?lookback_hours=6&per_format_limit=60"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -143,7 +143,7 @@ async fn gateway_handles_admin_health_api_formats_locally_with_trusted_admin_pri
         .get(format!(
             "{gateway_url}/api/admin/endpoints/health/api-formats?lookback_hours=6&per_format_limit=60"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -194,7 +194,7 @@ async fn gateway_returns_service_unavailable_for_admin_health_summary_when_reade
 
     let response = reqwest::Client::new()
         .get(format!("{gateway_url}/api/admin/endpoints/health/summary"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -286,7 +286,7 @@ async fn gateway_handles_admin_health_summary_locally_with_trusted_admin_princip
 
     let response = reqwest::Client::new()
         .get(format!("{gateway_url}/api/admin/endpoints/health/summary"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -372,7 +372,7 @@ async fn gateway_handles_admin_key_health_locally_with_trusted_admin_principal()
         .get(format!(
             "{gateway_url}/api/admin/endpoints/health/key/key-openai?api_format=openai:chat"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -464,7 +464,7 @@ async fn gateway_admin_key_health_summary_treats_expired_unix_circuit_as_closed(
         .get(format!(
             "{gateway_url}/api/admin/endpoints/health/key/key-openai"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -546,7 +546,7 @@ async fn gateway_recovers_admin_key_health_locally_with_trusted_admin_principal(
         .patch(format!(
             "{gateway_url}/api/admin/endpoints/health/keys/key-openai?api_format=openai:chat"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -657,7 +657,7 @@ async fn gateway_recovers_all_admin_key_health_locally_with_trusted_admin_princi
 
     let response = reqwest::Client::new()
         .patch(format!("{gateway_url}/api/admin/endpoints/health/keys"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -776,7 +776,7 @@ async fn gateway_handles_admin_health_status_locally_with_trusted_admin_principa
         .get(format!(
             "{gateway_url}/api/admin/endpoints/health/status?lookback_hours=6"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -855,7 +855,7 @@ async fn gateway_handles_admin_modules_status_locally_with_trusted_admin_princip
 
     let response = reqwest::Client::new()
         .get(format!("{gateway_url}/api/admin/modules/status"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -890,13 +890,6 @@ async fn gateway_handles_admin_modules_status_locally_with_trusted_admin_princip
         payload["important_notification"]["admin_route"],
         "/admin/notification-service"
     );
-    assert_eq!(payload["server_chan_push"]["display_name"], "Server 酱推送");
-    assert_eq!(
-        payload["server_chan_push"]["admin_route"],
-        "/admin/modules/server-chan"
-    );
-    assert_eq!(payload["bark_push"]["display_name"], "Bark 推送");
-    assert_eq!(payload["bark_push"]["admin_route"], "/admin/modules/bark");
     assert_eq!(payload["s3_backup"]["display_name"], "S3 备份");
     assert_eq!(
         payload["s3_backup"]["admin_route"],
@@ -1014,7 +1007,7 @@ async fn gateway_handles_admin_module_status_detail_locally_with_trusted_admin_p
 
     let response = reqwest::Client::new()
         .get(format!("{gateway_url}/api/admin/modules/status/oauth"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1071,7 +1064,7 @@ async fn gateway_handles_chat_pii_redaction_module_status_detail_locally_with_tr
         .get(format!(
             "{gateway_url}/api/admin/modules/status/chat_pii_redaction"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1124,7 +1117,7 @@ async fn gateway_sets_admin_module_enabled_locally_with_trusted_admin_principal(
         .put(format!(
             "{gateway_url}/api/admin/modules/status/management_tokens/enabled"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1144,7 +1137,7 @@ async fn gateway_sets_admin_module_enabled_locally_with_trusted_admin_principal(
         .get(format!(
             "{gateway_url}/api/admin/modules/status/management_tokens"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1193,7 +1186,7 @@ async fn gateway_manages_model_directives_module_from_module_management() {
         .get(format!(
             "{gateway_url}/api/admin/modules/status/model_directives"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1214,7 +1207,7 @@ async fn gateway_manages_model_directives_module_from_module_management() {
         .put(format!(
             "{gateway_url}/api/admin/modules/status/model_directives/enabled"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1233,7 +1226,7 @@ async fn gateway_manages_model_directives_module_from_module_management() {
         .get(format!(
             "{gateway_url}/api/admin/system/configs/enable_model_directives"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1285,7 +1278,7 @@ async fn gateway_handles_admin_management_tokens_locally_with_trusted_admin_prin
         .get(format!(
             "{gateway_url}/api/admin/management-tokens?is_active=true&skip=0&limit=50"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1362,7 +1355,7 @@ async fn gateway_allows_full_management_token_to_fetch_permission_catalog() {
         .get(format!(
             "{gateway_url}/api/admin/management-tokens/permissions/catalog"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .bearer_auth(raw_token)
         .send()
         .await

@@ -4,7 +4,6 @@ pub mod candidate_materialization;
 pub mod candidate_metadata;
 pub mod candidate_persistence;
 pub mod candidate_persistence_policy;
-pub mod candidate_preparation;
 pub mod candidate_preselection;
 pub mod candidate_ranking;
 pub mod candidate_resolution;
@@ -19,39 +18,10 @@ pub mod plan_payload;
 pub mod ports;
 pub mod ranking_metadata;
 pub mod report_context;
-pub mod request_body_diagnostics;
 pub mod runtime_miss;
 pub mod surface_spec;
 
 pub use aether_ai_formats::UPSTREAM_IS_STREAM_KEY;
-pub use aether_pool_core::{
-    normalize_enabled_pool_presets, run_pool_scheduler, PoolCandidateFacts, PoolCandidateInput,
-    PoolCandidateOrchestration, PoolMemberSignals, PoolRuntimeState, PoolScheduledCandidate,
-    PoolSchedulerOutcome, PoolSchedulingConfig, PoolSchedulingPreset, PoolSkippedCandidate,
-    POOL_ACCOUNT_BLOCKED_SKIP_REASON, POOL_ACCOUNT_EXHAUSTED_SKIP_REASON,
-    POOL_COOLDOWN_SKIP_REASON, POOL_COST_LIMIT_REACHED_SKIP_REASON,
-};
-pub use aether_pool_core::{
-    normalize_enabled_pool_presets as normalize_enabled_ai_pool_presets,
-    run_pool_scheduler as run_ai_pool_scheduler, PoolCandidateFacts as AiPoolCandidateFacts,
-    PoolCandidateInput as AiPoolCandidateInput,
-    PoolCandidateOrchestration as AiPoolCandidateOrchestration,
-    PoolMemberSignals as AiPoolCatalogKeyContext, PoolRuntimeState as AiPoolRuntimeState,
-    PoolScheduledCandidate as AiPoolScheduledCandidate,
-    PoolSchedulerOutcome as AiPoolSchedulerOutcome, PoolSchedulingConfig as AiPoolSchedulingConfig,
-    PoolSchedulingPreset as AiPoolSchedulingPreset, PoolSkippedCandidate as AiPoolSkippedCandidate,
-    POOL_ACCOUNT_BLOCKED_SKIP_REASON as AI_POOL_ACCOUNT_BLOCKED_SKIP_REASON,
-    POOL_ACCOUNT_EXHAUSTED_SKIP_REASON as AI_POOL_ACCOUNT_EXHAUSTED_SKIP_REASON,
-    POOL_COOLDOWN_SKIP_REASON as AI_POOL_COOLDOWN_SKIP_REASON,
-    POOL_COST_LIMIT_REACHED_SKIP_REASON as AI_POOL_COST_LIMIT_REACHED_SKIP_REASON,
-};
-pub use aether_pool_core::{
-    probe_freshness_score, probe_freshness_score_with_ttl, score_pool_member,
-    score_pool_member_with_rules, PoolMemberScoreInput, PoolMemberScoreOutput,
-    PoolMemberScoreRules, PoolMemberScoreWeights, POOL_SCORE_VERSION,
-    PROBE_FAILURE_COOLDOWN_THRESHOLD, PROBE_FAILURE_PENALTY, PROBE_FRESHNESS_TTL_SECONDS,
-    REQUEST_FAILURE_PENALTY, UNSCHEDULABLE_SCORE_CAP,
-};
 pub use attempt_loop::{
     run_ai_attempt_loop, AiAttemptExecutionOutcome, AiAttemptLoopOutcome, AiAttemptLoopPort,
     AiAttemptRetryScope, AiExecutionAttempt,
@@ -68,35 +38,27 @@ pub use candidate_materialization::{
     AiCandidateMaterializationPort,
 };
 pub use candidate_metadata::{
-    ai_local_execution_contract_for_formats, append_ai_execution_contract_fields_to_value,
     build_ai_candidate_metadata, build_ai_candidate_metadata_from_candidate,
     AiCandidateMetadataParts,
 };
 pub use candidate_persistence::{
-    ai_candidate_extra_data_with_ranking, ai_should_persist_available_candidate_for_pool_key,
-    ai_should_persist_skipped_candidate_for_pool_membership,
-    run_ai_available_candidate_persistence, run_ai_skipped_candidate_persistence,
-    AiAvailableCandidatePersistencePort, AiSkippedCandidatePersistencePort,
+    ai_candidate_extra_data_with_ranking, run_ai_available_candidate_persistence,
+    run_ai_skipped_candidate_persistence, AiAvailableCandidatePersistencePort,
+    AiSkippedCandidatePersistencePort,
 };
 pub use candidate_persistence_policy::{
     ai_candidate_persistence_policy_spec, AiCandidatePersistencePolicyKind,
     AiCandidatePersistencePolicySpec,
 };
-pub use candidate_preparation::{
-    prepare_ai_header_authenticated_candidate, resolve_ai_candidate_mapped_model,
-    AiPreparedHeaderAuthenticatedCandidate,
-};
-pub use candidate_preselection::{
-    run_ai_candidate_preselection, AiCandidatePreselectionOutcome, AiCandidatePreselectionPort,
-};
+pub use candidate_preselection::AiCandidatePreselectionOutcome;
 pub use candidate_ranking::{
     ai_ranking_context, build_ai_rankable_candidate, run_ai_candidate_ranking,
     AiCandidateRankingPort, AiRankableCandidateParts, AiRankingContextConfig,
     AiRankingSchedulingMode,
 };
 pub use candidate_resolution::{
-    extract_ai_pool_sticky_session_token, run_ai_candidate_resolution, AiCandidateResolutionMode,
-    AiCandidateResolutionOutcome, AiCandidateResolutionPort, AiCandidateResolutionRequest,
+    run_ai_candidate_resolution, AiCandidateResolutionOutcome, AiCandidateResolutionPort,
+    AiCandidateResolutionRequest,
 };
 pub use decision_input::{run_ai_authenticated_decision_input, AiAuthenticatedDecisionInputPort};
 pub use decision_path::{
@@ -108,9 +70,9 @@ pub use decision_payload::{
     AiExecutionDecisionResponseParts,
 };
 pub use dto::{
-    augment_sync_report_context, generic_decision_missing_exact_provider_request, AdaptationMode,
+    augment_sync_report_context, generic_decision_missing_exact_provider_request,
     AiExecutionDecision, AiExecutionPlanPayload, AiRequestGzipPolicy, AiStreamAttempt,
-    AiSyncAttempt, ConversionMode, ExecutionStrategy,
+    AiSyncAttempt,
 };
 pub use execution_path::{
     run_ai_stream_execution_path, run_ai_sync_execution_path, AiPlanFallbackReason,
@@ -125,12 +87,7 @@ pub use plan_payload::{
 pub use ranking_metadata::append_ai_ranking_metadata_to_object;
 pub use report_context::{
     build_ai_execution_report_context, build_ai_report_context_original_request_echo,
-    insert_provider_stream_event_api_format, provider_stream_event_api_format_for_provider_type,
     AiExecutionReportContextParts, AiRequestOrigin,
-};
-pub use request_body_diagnostics::{
-    openai_provider_request_contract_failure_extra_data, request_body_build_failure_extra_data,
-    request_conversion_failure_extra_data, same_format_provider_request_body_failure_extra_data,
 };
 pub use runtime_miss::{
     apply_ai_runtime_candidate_evaluation_progress,

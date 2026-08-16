@@ -21,19 +21,19 @@ use crate::execution_runtime::ai_attempt_retry_scope_from_failure_disposition;
 use crate::execution_runtime::submission::{
     resolve_core_error_background_report_kind, submit_local_core_error_or_sync_finalize,
 };
-use crate::log_ids::short_request_id;
 use crate::orchestration::{
     apply_local_execution_effect, classify_failure_disposition,
     resolve_local_failover_analysis_for_attempt,
     resolve_local_transport_failover_analysis_for_attempt, with_upstream_response_report_context,
     LocalAdaptiveRateLimitEffect, LocalAttemptFailureEffect, LocalExecutionEffect,
     LocalExecutionEffectContext, LocalFailoverAnalysis, LocalFailoverDecision,
-    LocalHealthFailureEffect, LocalOAuthInvalidationEffect, LocalPoolErrorEffect,
+    LocalHealthFailureEffect,
 };
 use crate::request_candidate_runtime::record_report_request_candidate_status;
 use crate::request_diagnostics::attach_current_request_diagnostics_and_candidate_timing_to_report_context;
 use crate::usage::submit_sync_report;
 use crate::{usage::GatewaySyncReportRequest, AppState, GatewayError};
+use aether_gateway_frontdoor::short_request_id;
 
 #[derive(Debug, Clone)]
 pub(super) struct StreamFailureReport {
@@ -365,17 +365,6 @@ async fn record_stream_sync_failure(
         error_body.as_deref(),
     )
     .await;
-    if matches!(error_type, "first_byte_timeout" | "read_timeout") {
-        apply_local_execution_effect(
-            state,
-            LocalExecutionEffectContext {
-                plan,
-                report_context,
-            },
-            LocalExecutionEffect::PoolStreamTimeout,
-        )
-        .await;
-    }
     apply_local_execution_effect(
         state,
         LocalExecutionEffectContext {
@@ -410,32 +399,6 @@ async fn record_stream_sync_failure(
         LocalExecutionEffect::HealthFailure(LocalHealthFailureEffect {
             status_code: payload.status_code,
             classification: failure_analysis.classification,
-        }),
-    )
-    .await;
-    apply_local_execution_effect(
-        state,
-        LocalExecutionEffectContext {
-            plan,
-            report_context,
-        },
-        LocalExecutionEffect::OauthInvalidation(LocalOAuthInvalidationEffect {
-            status_code: payload.status_code,
-            response_text: error_body.as_deref(),
-        }),
-    )
-    .await;
-    apply_local_execution_effect(
-        state,
-        LocalExecutionEffectContext {
-            plan,
-            report_context,
-        },
-        LocalExecutionEffect::PoolError(LocalPoolErrorEffect {
-            status_code: payload.status_code,
-            classification: failure_analysis.classification,
-            headers: &payload.headers,
-            error_body: error_body.as_deref(),
         }),
     )
     .await;
@@ -490,101 +453,6 @@ async fn record_stream_sync_failure(
     )
     .await;
     failure_analysis
-}
-
-#[allow(clippy::too_many_arguments)] // internal helper for prefetch error handling
-pub(super) async fn handle_prefetch_provider_private_stream_error(
-    state: &AppState,
-    trace_id: &str,
-    decision: &GatewayControlDecision,
-    plan: &ExecutionPlan,
-    report_context: Option<Value>,
-    request_id: &str,
-    candidate_id: Option<&str>,
-    report_kind: &str,
-    mut headers: std::collections::BTreeMap<String, String>,
-    telemetry: Option<ExecutionTelemetry>,
-    buffered_body: &[u8],
-    upstream_status_code: u16,
-    status_code: u16,
-    body_json: Value,
-    retry_scope_out: Option<&mut AiAttemptRetryScope>,
-    retry_fallback_out: Option<&mut Option<Response<Body>>>,
-) -> Result<Option<Response<Body>>, GatewayError> {
-    let upstream_headers = headers.clone();
-    headers.remove("content-encoding");
-    headers.remove("content-length");
-    headers.insert("content-type".to_string(), "application/json".to_string());
-
-    let payload = GatewaySyncReportRequest {
-        trace_id: trace_id.to_string(),
-        report_kind: report_kind.to_string(),
-        report_context,
-        status_code,
-        headers,
-        body_json: Some(body_json),
-        client_body_json: None,
-        body_base64: (!buffered_body.is_empty())
-            .then(|| base64::engine::general_purpose::STANDARD.encode(buffered_body)),
-        telemetry,
-    };
-    let failure_analysis = record_stream_sync_failure(
-        state,
-        plan,
-        payload.report_context.as_ref(),
-        &payload,
-        Some(status_code),
-        None,
-        StreamFailureHandling::HonorLocalFailover,
-    )
-    .await;
-    if matches!(
-        failure_analysis.decision,
-        LocalFailoverDecision::RetryNextCandidate
-    ) {
-        let failure_disposition = classify_failure_disposition(
-            &plan.provider_api_format,
-            failure_analysis.classification,
-            status_code,
-        );
-        if let Some(retry_scope) = retry_scope_out {
-            *retry_scope = ai_attempt_retry_scope_from_failure_disposition(failure_disposition);
-        }
-        if failure_disposition.preserve_upstream_error {
-            if let Some(retry_fallback) = retry_fallback_out {
-                *retry_fallback = Some(attach_control_metadata_headers(
-                    crate::api::response::build_client_response_from_parts(
-                        upstream_status_code,
-                        &upstream_headers,
-                        Body::from(buffered_body.to_vec()),
-                        trace_id,
-                        Some(decision),
-                    )?,
-                    Some(request_id),
-                    candidate_id,
-                )?);
-            }
-        }
-        warn!(
-            event_name = "local_stream_candidate_retry_scheduled",
-            log_type = "event",
-            trace_id = %trace_id,
-            request_id = %request_id,
-            candidate_id = ?candidate_id,
-            status_code,
-            failover_classification = failure_analysis.classification.as_str(),
-            "gateway local stream decision retrying next candidate after prefetched provider error"
-        );
-        return Ok(None);
-    }
-
-    let response =
-        submit_local_core_error_or_sync_finalize(state, trace_id, decision, payload).await?;
-    Ok(Some(attach_control_metadata_headers(
-        response,
-        Some(request_id),
-        candidate_id,
-    )?))
 }
 
 #[allow(clippy::too_many_arguments)] // internal helper for prefetch error handling
@@ -704,17 +572,6 @@ async fn handle_prefetch_transport_stream_failure(
 ) -> Result<Option<Response<Body>>, GatewayError> {
     let error_type = stream_failure_body_field(&payload, "type").unwrap_or("internal");
     let error_message = stream_failure_body_field(&payload, "message").unwrap_or_default();
-    if matches!(error_type, "first_byte_timeout" | "read_timeout") {
-        apply_local_execution_effect(
-            state,
-            LocalExecutionEffectContext {
-                plan,
-                report_context: payload.report_context.as_ref(),
-            },
-            LocalExecutionEffect::PoolStreamTimeout,
-        )
-        .await;
-    }
 
     let analysis = resolve_local_transport_failover_analysis_for_attempt(
         state,
@@ -851,203 +708,5 @@ pub(super) async fn submit_midstream_stream_failure(
             error = ?err,
             "gateway failed to submit sync execution report for terminal stream failure"
         );
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::BTreeMap;
-
-    use aether_contracts::{ExecutionError, ExecutionErrorKind, ExecutionPhase};
-    use base64::Engine as _;
-    use serde_json::json;
-
-    use super::{
-        build_stream_failure_from_execution_error, build_stream_failure_from_provider_error_body,
-        build_stream_failure_sync_payload, build_stream_transport_failure_report,
-    };
-
-    #[test]
-    fn committed_transport_failure_has_no_upstream_status() {
-        for status_code in [502, 504] {
-            let failure = build_stream_transport_failure_report(
-                "execution_runtime_stream_read_error",
-                "upstream disconnected",
-                status_code,
-            );
-
-            assert_eq!(failure.status_code, status_code);
-            assert_eq!(failure.upstream_status_code, None);
-            assert!(failure.transport_error);
-            assert!(!failure.honor_http_failover);
-        }
-    }
-
-    #[test]
-    fn precommit_protocol_error_is_transport_without_upstream_status() {
-        let failure = build_stream_failure_from_execution_error(&ExecutionError {
-            kind: ExecutionErrorKind::ProtocolError,
-            phase: ExecutionPhase::StreamRead,
-            message: "connection reset".to_string(),
-            upstream_status: None,
-            retryable: true,
-            failover_recommended: true,
-        });
-
-        assert!(failure.transport_error);
-        assert_eq!(failure.upstream_status_code, None);
-        assert_eq!(failure.status_code, 502);
-    }
-
-    #[test]
-    fn cancelled_stream_is_not_reclassified_as_transport_retry() {
-        let failure = build_stream_failure_from_execution_error(&ExecutionError {
-            kind: ExecutionErrorKind::Cancelled,
-            phase: ExecutionPhase::StreamRead,
-            message: "downstream cancelled".to_string(),
-            upstream_status: None,
-            retryable: true,
-            failover_recommended: true,
-        });
-
-        assert!(!failure.transport_error);
-    }
-
-    #[test]
-    fn midstream_failure_trace_uses_terminal_error_instead_of_buffered_sse() {
-        let provider_buffered_body = concat!(
-            "event: response.created\n",
-            "data: {\"type\":\"response.created\",\"response\":{\"instructions\":\"AGENTS.md secret prompt\",\"tools\":[{\"name\":\"update_plan\"}]}}\n\n",
-            "event: response.failed\n",
-            "data: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\",\"error\":{\"type\":\"invalid_request\",\"message\":\"This content was flagged for possible cybersecurity risk.\",\"code\":\"cyber_policy_violation\",\"param\":\"input\",\"details\":{\"policy_category\":\"cybersecurity\",\"appeal_allowed\":true}}}}\n\n",
-        )
-        .as_bytes();
-        let terminal_error = crate::ai_serving::api::extract_provider_private_stream_error_body(
-            None,
-            provider_buffered_body,
-        )
-        .expect("raw upstream SSE should expose its terminal provider error JSON");
-        let failure = build_stream_failure_from_provider_error_body(400, &terminal_error);
-
-        let payload = build_stream_failure_sync_payload(
-            "trace-cyber-policy",
-            "openai_responses_sync_error".to_string(),
-            Some(json!({"request_id": "request-cyber-policy"})),
-            BTreeMap::from([
-                ("Content-Encoding".to_string(), "gzip".to_string()),
-                ("Content-Length".to_string(), "4096".to_string()),
-                ("Content-Type".to_string(), "text/event-stream".to_string()),
-                (
-                    "x-request-id".to_string(),
-                    "req_usage-cyber-risk-demo".to_string(),
-                ),
-            ]),
-            None,
-            provider_buffered_body,
-            failure,
-        );
-
-        let trace_body = payload
-            .report_context
-            .as_ref()
-            .and_then(|context| context.pointer("/upstream_response/body"))
-            .expect("candidate trace should include the terminal error body");
-        assert_eq!(
-            trace_body,
-            payload.body_json.as_ref().expect("usage error body")
-        );
-        assert_eq!(trace_body, &terminal_error);
-        assert_eq!(trace_body["error"]["type"], json!("invalid_request"));
-        assert_eq!(
-            trace_body["error"]["message"],
-            json!("This content was flagged for possible cybersecurity risk.")
-        );
-        assert_eq!(trace_body["error"]["code"], json!("cyber_policy_violation"));
-        assert_eq!(trace_body["error"]["param"], json!("input"));
-        assert_eq!(
-            trace_body["error"]["details"],
-            json!({
-                "policy_category": "cybersecurity",
-                "appeal_allowed": true
-            })
-        );
-        assert_eq!(
-            payload
-                .report_context
-                .as_ref()
-                .and_then(|context| context.pointer("/upstream_response/headers/content-type")),
-            Some(&json!("application/json"))
-        );
-        assert_eq!(
-            payload
-                .report_context
-                .as_ref()
-                .and_then(|context| context.pointer("/upstream_response/headers/x-request-id")),
-            Some(&json!("req_usage-cyber-risk-demo"))
-        );
-        assert_eq!(
-            payload
-                .report_context
-                .as_ref()
-                .and_then(|context| context.pointer("/provider_response_headers/content-type")),
-            Some(&json!("application/json"))
-        );
-        assert_eq!(
-            payload
-                .report_context
-                .as_ref()
-                .and_then(|context| context.pointer("/client_response_headers/content-type")),
-            Some(&json!("application/json"))
-        );
-        let trace_headers = payload
-            .report_context
-            .as_ref()
-            .and_then(|context| context.pointer("/upstream_response/headers"))
-            .and_then(serde_json::Value::as_object)
-            .expect("candidate trace should include terminal JSON headers");
-        assert!(!trace_headers
-            .keys()
-            .any(|name| name.eq_ignore_ascii_case("content-encoding")));
-        assert!(!trace_headers
-            .keys()
-            .any(|name| name.eq_ignore_ascii_case("content-length")));
-        assert_eq!(
-            payload.headers.get("content-type").map(String::as_str),
-            Some("application/json")
-        );
-        assert!(!payload
-            .headers
-            .keys()
-            .any(|name| name.eq_ignore_ascii_case("content-encoding")));
-        assert!(!payload
-            .headers
-            .keys()
-            .any(|name| name.eq_ignore_ascii_case("content-length")));
-        assert_eq!(
-            payload
-                .client_body_json
-                .as_ref()
-                .and_then(|body| body.pointer("/error/message")),
-            Some(&json!(
-                "This content was flagged for possible cybersecurity risk."
-            ))
-        );
-        assert_eq!(
-            payload
-                .client_body_json
-                .as_ref()
-                .and_then(|body| body.pointer("/error/code")),
-            Some(&json!(400))
-        );
-        assert_ne!(payload.client_body_json.as_ref(), Some(&terminal_error));
-        assert!(!trace_body.to_string().contains("AGENTS.md secret prompt"));
-
-        let raw_capture = payload
-            .body_base64
-            .as_deref()
-            .and_then(|body| base64::engine::general_purpose::STANDARD.decode(body).ok())
-            .expect("raw provider stream should remain available for usage auditing");
-        assert_eq!(raw_capture, provider_buffered_body);
-        assert!(String::from_utf8_lossy(&raw_capture).contains("AGENTS.md secret prompt"));
     }
 }

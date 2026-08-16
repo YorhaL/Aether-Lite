@@ -6101,7 +6101,6 @@ mod tests {
         UsageBodyCapturePolicy, UsageEnqueueRetryDispatcher, UsageRequestRecordLevel,
         UsageRuntimeAccess, UsageWorkerObservation, UsageWorkerSupervisorState,
     };
-    use crate::worker::ManualProxyNodeCounter;
     use crate::{
         apply_usage_body_capture_policy_to_event, build_lifecycle_usage_seed,
         build_terminal_usage_context_seed, SyncTerminalUsagePayloadSeed, TerminalUsageContextSeed,
@@ -6127,7 +6126,6 @@ mod tests {
             client_api_format: "openai:responses".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         }
@@ -6466,19 +6464,6 @@ mod tests {
         }
     }
 
-    #[async_trait]
-    impl ManualProxyNodeCounter for NoRedisUsageStore {
-        async fn increment_manual_proxy_node_requests(
-            &self,
-            _node_id: &str,
-            _total_delta: i64,
-            _failed_delta: i64,
-            _latency_ms: Option<i64>,
-        ) -> Result<(), DataLayerError> {
-            Ok(())
-        }
-    }
-
     impl UsageRuntimeAccess for NoRedisUsageStore {
         fn has_usage_writer(&self) -> bool {
             true
@@ -6520,19 +6505,6 @@ mod tests {
     #[async_trait]
     impl UsageBillingEventEnricher for QueueConfiguredUsageStore {
         async fn enrich_usage_event(&self, _event: &mut UsageEvent) -> Result<(), DataLayerError> {
-            Ok(())
-        }
-    }
-
-    #[async_trait]
-    impl ManualProxyNodeCounter for QueueConfiguredUsageStore {
-        async fn increment_manual_proxy_node_requests(
-            &self,
-            _node_id: &str,
-            _total_delta: i64,
-            _failed_delta: i64,
-            _latency_ms: Option<i64>,
-        ) -> Result<(), DataLayerError> {
             Ok(())
         }
     }
@@ -6910,19 +6882,6 @@ mod tests {
         }
     }
 
-    #[async_trait]
-    impl ManualProxyNodeCounter for CloneQueueConfiguredUsageStore {
-        async fn increment_manual_proxy_node_requests(
-            &self,
-            _node_id: &str,
-            _total_delta: i64,
-            _failed_delta: i64,
-            _latency_ms: Option<i64>,
-        ) -> Result<(), DataLayerError> {
-            Ok(())
-        }
-    }
-
     impl UsageRuntimeAccess for CloneQueueConfiguredUsageStore {
         fn has_usage_writer(&self) -> bool {
             true
@@ -7041,19 +7000,6 @@ mod tests {
         }
     }
 
-    #[async_trait]
-    impl ManualProxyNodeCounter for PanicOnceQueueConfiguredUsageStore {
-        async fn increment_manual_proxy_node_requests(
-            &self,
-            _node_id: &str,
-            _total_delta: i64,
-            _failed_delta: i64,
-            _latency_ms: Option<i64>,
-        ) -> Result<(), DataLayerError> {
-            Ok(())
-        }
-    }
-
     impl UsageRuntimeAccess for PanicOnceQueueConfiguredUsageStore {
         fn has_usage_writer(&self) -> bool {
             true
@@ -7098,19 +7044,6 @@ mod tests {
         async fn enrich_usage_event(&self, event: &mut UsageEvent) -> Result<(), DataLayerError> {
             self.enrich_calls.fetch_add(1, Ordering::AcqRel);
             event.data.total_cost_usd = Some(0.123);
-            Ok(())
-        }
-    }
-
-    #[async_trait]
-    impl ManualProxyNodeCounter for EnrichmentCountingQueueStore {
-        async fn increment_manual_proxy_node_requests(
-            &self,
-            _node_id: &str,
-            _total_delta: i64,
-            _failed_delta: i64,
-            _latency_ms: Option<i64>,
-        ) -> Result<(), DataLayerError> {
             Ok(())
         }
     }
@@ -7181,19 +7114,6 @@ mod tests {
         }
     }
 
-    #[async_trait]
-    impl ManualProxyNodeCounter for FailingWriteQueueConfiguredUsageStore {
-        async fn increment_manual_proxy_node_requests(
-            &self,
-            _node_id: &str,
-            _total_delta: i64,
-            _failed_delta: i64,
-            _latency_ms: Option<i64>,
-        ) -> Result<(), DataLayerError> {
-            Ok(())
-        }
-    }
-
     impl UsageRuntimeAccess for FailingWriteQueueConfiguredUsageStore {
         fn has_usage_writer(&self) -> bool {
             true
@@ -7244,19 +7164,6 @@ mod tests {
         }
     }
 
-    #[async_trait]
-    impl ManualProxyNodeCounter for QueueOnlyUsageStore {
-        async fn increment_manual_proxy_node_requests(
-            &self,
-            _node_id: &str,
-            _total_delta: i64,
-            _failed_delta: i64,
-            _latency_ms: Option<i64>,
-        ) -> Result<(), DataLayerError> {
-            Ok(())
-        }
-    }
-
     impl UsageRuntimeAccess for QueueOnlyUsageStore {
         fn has_usage_writer(&self) -> bool {
             false
@@ -7302,19 +7209,6 @@ mod tests {
     #[async_trait]
     impl UsageBillingEventEnricher for BlockingWriteQueueConfiguredUsageStore {
         async fn enrich_usage_event(&self, _event: &mut UsageEvent) -> Result<(), DataLayerError> {
-            Ok(())
-        }
-    }
-
-    #[async_trait]
-    impl ManualProxyNodeCounter for BlockingWriteQueueConfiguredUsageStore {
-        async fn increment_manual_proxy_node_requests(
-            &self,
-            _node_id: &str,
-            _total_delta: i64,
-            _failed_delta: i64,
-            _latency_ms: Option<i64>,
-        ) -> Result<(), DataLayerError> {
             Ok(())
         }
     }
@@ -7369,19 +7263,6 @@ mod tests {
     }
 
     #[async_trait]
-    impl ManualProxyNodeCounter for BlockingPolicyQueueConfiguredUsageStore {
-        async fn increment_manual_proxy_node_requests(
-            &self,
-            _node_id: &str,
-            _total_delta: i64,
-            _failed_delta: i64,
-            _latency_ms: Option<i64>,
-        ) -> Result<(), DataLayerError> {
-            Ok(())
-        }
-    }
-
-    #[async_trait]
     impl UsageRuntimeAccess for BlockingPolicyQueueConfiguredUsageStore {
         fn has_usage_writer(&self) -> bool {
             true
@@ -7430,19 +7311,6 @@ mod tests {
     #[async_trait]
     impl UsageBillingEventEnricher for FailingPolicyUsageStore {
         async fn enrich_usage_event(&self, _event: &mut UsageEvent) -> Result<(), DataLayerError> {
-            Ok(())
-        }
-    }
-
-    #[async_trait]
-    impl ManualProxyNodeCounter for FailingPolicyUsageStore {
-        async fn increment_manual_proxy_node_requests(
-            &self,
-            _node_id: &str,
-            _total_delta: i64,
-            _failed_delta: i64,
-            _latency_ms: Option<i64>,
-        ) -> Result<(), DataLayerError> {
             Ok(())
         }
     }
@@ -7668,7 +7536,6 @@ mod tests {
             client_api_format: "openai:responses".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -7732,7 +7599,6 @@ mod tests {
             client_api_format: "openai:chat".to_string(),
             provider_api_format: "openai:chat".to_string(),
             model_name: Some("gpt-5".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -9992,7 +9858,6 @@ mod tests {
             client_api_format: "openai:chat".to_string(),
             provider_api_format: "openai:chat".to_string(),
             model_name: Some("gpt-5".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -10877,7 +10742,6 @@ mod tests {
             client_api_format: "openai:responses".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -11104,7 +10968,6 @@ mod tests {
             client_api_format: "openai:responses".to_string(),
             provider_api_format: "openai:responses".to_string(),
             model_name: Some("gpt-5".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };

@@ -4,7 +4,6 @@ use aether_data_contracts::repository::candidates::StoredRequestCandidate;
 use aether_data_contracts::repository::provider_catalog::{
     StoredProviderCatalogKey, StoredProviderCatalogProvider,
 };
-use aether_data_contracts::repository::quota::StoredProviderQuotaSnapshot;
 use aether_scheduler_core::SchedulerAffinityTarget;
 use async_trait::async_trait;
 
@@ -14,11 +13,6 @@ use super::config::SchedulerOrderingConfig;
 
 #[async_trait]
 pub(crate) trait SchedulerRuntimeState {
-    async fn read_provider_quota_snapshot(
-        &self,
-        provider_id: &str,
-    ) -> Result<Option<StoredProviderQuotaSnapshot>, GatewayError>;
-
     async fn read_provider_catalog_providers_by_ids(
         &self,
         provider_ids: &[String],

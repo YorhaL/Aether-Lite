@@ -1,13 +1,9 @@
-use crate::handlers::admin::provider::shared::model_test_capabilities::{
-    admin_provider_model_supports_image_generation, admin_provider_model_test_capabilities_payload,
-};
 use crate::handlers::admin::request::AdminAppState;
 use crate::GatewayError;
 use aether_admin::provider::models as admin_provider_models_pure;
 use aether_data_contracts::repository::global_models::{
     AdminProviderModelListQuery, StoredAdminProviderModel,
 };
-use aether_data_contracts::repository::provider_catalog::StoredProviderCatalogProvider;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(super) fn admin_provider_model_effective_input_price(
@@ -30,32 +26,10 @@ pub(super) fn admin_provider_model_effective_capability(
 }
 
 pub(super) fn build_admin_provider_model_response(
-    provider: &StoredProviderCatalogProvider,
     model: &StoredAdminProviderModel,
     now_unix_secs: u64,
 ) -> serde_json::Value {
-    let mut payload =
-        admin_provider_models_pure::build_admin_provider_model_response(model, now_unix_secs);
-    let fallback_supports_image_generation = payload
-        .get("effective_supports_image_generation")
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false);
-    let supports_image_generation = admin_provider_model_supports_image_generation(
-        &provider.provider_type,
-        &model.provider_model_name,
-        fallback_supports_image_generation,
-    );
-    if let Some(object) = payload.as_object_mut() {
-        object.insert(
-            "model_test_capabilities".to_string(),
-            admin_provider_model_test_capabilities_payload(
-                &provider.provider_type,
-                &model.provider_model_name,
-                supports_image_generation,
-            ),
-        );
-    }
-    payload
+    admin_provider_models_pure::build_admin_provider_model_response(model, now_unix_secs)
 }
 
 pub(super) async fn build_admin_provider_models_payload(
@@ -68,13 +42,13 @@ pub(super) async fn build_admin_provider_models_payload(
     if !state.has_provider_catalog_data_reader() || !state.has_global_model_data_reader() {
         return None;
     }
-    let provider = state
+    state
         .read_provider_catalog_providers_by_ids(&[provider_id.to_string()])
         .await
         .ok()?
         .into_iter()
         .next()?;
-    let provider_id = provider.id.clone();
+    let provider_id = provider_id.to_string();
     let mut models = state
         .list_admin_provider_models(&AdminProviderModelListQuery {
             provider_id,
@@ -97,7 +71,7 @@ pub(super) async fn build_admin_provider_models_payload(
     Some(serde_json::Value::Array(
         models
             .iter()
-            .map(|model| build_admin_provider_model_response(&provider, model, now_unix_secs))
+            .map(|model| build_admin_provider_model_response(model, now_unix_secs))
             .collect(),
     ))
 }
@@ -110,7 +84,7 @@ pub(super) async fn build_admin_provider_model_payload(
     if !state.has_provider_catalog_data_reader() || !state.has_global_model_data_reader() {
         return None;
     }
-    let provider = state
+    state
         .read_provider_catalog_providers_by_ids(&[provider_id.to_string()])
         .await
         .ok()?
@@ -125,11 +99,7 @@ pub(super) async fn build_admin_provider_model_payload(
         .ok()
         .map(|duration| duration.as_secs())
         .unwrap_or(0);
-    Some(build_admin_provider_model_response(
-        &provider,
-        &model,
-        now_unix_secs,
-    ))
+    Some(build_admin_provider_model_response(&model, now_unix_secs))
 }
 
 pub(super) async fn admin_provider_model_name_exists(

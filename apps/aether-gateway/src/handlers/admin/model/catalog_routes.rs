@@ -1,6 +1,5 @@
 use crate::handlers::admin::model::build_admin_model_catalog_payload;
 use crate::handlers::admin::request::{AdminAppState, AdminRequestContext};
-use crate::handlers::admin::shared::attach_admin_audit_response;
 use crate::GatewayError;
 use axum::{
     body::{Body, Bytes},
@@ -23,7 +22,7 @@ fn build_admin_model_catalog_data_unavailable_response() -> Response<Body> {
 pub(crate) async fn maybe_build_local_admin_model_catalog_response(
     state: &AdminAppState<'_>,
     request_context: &AdminRequestContext<'_>,
-    request_body: Option<&Bytes>,
+    _request_body: Option<&Bytes>,
 ) -> Result<Option<Response<Body>>, GatewayError> {
     let Some(decision) = request_context.decision() else {
         return Ok(None);
@@ -61,47 +60,6 @@ pub(crate) async fn maybe_build_local_admin_model_catalog_response(
                     })),
                 )
                     .into_response(),
-            },
-        ));
-    }
-
-    if decision.route_family.as_deref() == Some("model_external_manage")
-        && decision.route_kind.as_deref() == Some("external_config_get")
-        && request_context.method() == http::Method::GET
-        && request_context.path() == "/api/admin/models/external/config"
-    {
-        return Ok(Some(
-            Json(state.build_admin_external_models_config_payload().await?).into_response(),
-        ));
-    }
-
-    if decision.route_family.as_deref() == Some("model_external_manage")
-        && decision.route_kind.as_deref() == Some("external_config_set")
-        && request_context.method() == http::Method::PUT
-        && request_context.path() == "/api/admin/models/external/config"
-    {
-        let Some(request_body) = request_body else {
-            return Ok(Some(
-                (
-                    http::StatusCode::BAD_REQUEST,
-                    Json(json!({ "detail": "请求数据验证失败" })),
-                )
-                    .into_response(),
-            ));
-        };
-        return Ok(Some(
-            match state
-                .apply_admin_external_models_config_update(request_body)
-                .await?
-            {
-                Ok(payload) => attach_admin_audit_response(
-                    Json(payload).into_response(),
-                    "admin_external_models_config_updated",
-                    "update_external_models_config",
-                    "external_models_catalog",
-                    "global",
-                ),
-                Err((status, payload)) => (status, Json(payload)).into_response(),
             },
         ));
     }

@@ -10,14 +10,6 @@ pub enum SchedulerRankingMode {
     LoadBalance,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub enum SchedulerTunnelAffinityBucket {
-    LocalTunnel = 0,
-    #[default]
-    Neutral = 1,
-    RemoteTunnel = 2,
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct SchedulerRankableCandidate {
     pub provider_id: String,
@@ -30,9 +22,6 @@ pub struct SchedulerRankableCandidate {
     pub capability_priority: (u32, u32),
     pub cached_affinity_match: bool,
     pub affinity_hash: Option<u64>,
-    pub tunnel_bucket: SchedulerTunnelAffinityBucket,
-    pub demote_cross_format: bool,
-    pub format_preference: (u8, u8),
     pub health_bucket: Option<ProviderKeyHealthBucket>,
     pub health_score: f64,
     pub original_index: usize,
@@ -54,9 +43,6 @@ impl SchedulerRankableCandidate {
             capability_priority: (0, 0),
             cached_affinity_match: false,
             affinity_hash: None,
-            tunnel_bucket: SchedulerTunnelAffinityBucket::Neutral,
-            demote_cross_format: false,
-            format_preference: (0, 0),
             health_bucket: None,
             health_score: 1.0,
             original_index,
@@ -75,21 +61,6 @@ impl SchedulerRankableCandidate {
 
     pub fn with_affinity_hash(mut self, value: Option<u64>) -> Self {
         self.affinity_hash = value;
-        self
-    }
-
-    pub fn with_tunnel_bucket(mut self, value: SchedulerTunnelAffinityBucket) -> Self {
-        self.tunnel_bucket = value;
-        self
-    }
-
-    pub fn with_format_state(
-        mut self,
-        demote_cross_format: bool,
-        format_preference: (u8, u8),
-    ) -> Self {
-        self.demote_cross_format = demote_cross_format;
-        self.format_preference = format_preference;
         self
     }
 
@@ -127,5 +98,4 @@ pub struct SchedulerRankingOutcome {
     pub ranking_mode: SchedulerRankingMode,
     pub priority_slot: i32,
     pub promoted_by: Option<&'static str>,
-    pub demoted_by: Option<&'static str>,
 }

@@ -10,6 +10,7 @@ use tower::ServiceExt;
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::warn;
 
+use aether_gateway_frontdoor::access_log_middleware;
 use aether_runtime::{prometheus_response, ConcurrencyError};
 use aether_runtime_state::RuntimeSemaphoreError;
 
@@ -37,7 +38,7 @@ pub fn build_router_with_state(state: AppState) -> Router {
     router = api::mount_admin_routes(router);
     let mut router = router
         .route("/{*path}", any(proxy_request))
-        .layer(axum::middleware::from_fn(middleware::access_log_middleware))
+        .layer(axum::middleware::from_fn(access_log_middleware))
         .with_state(state);
     if cors_state.frontdoor_cors().is_some() {
         router = router.layer(axum::middleware::from_fn_with_state(
@@ -90,7 +91,6 @@ fn frontend_path_bypasses_static(path: &str) -> bool {
         || path.starts_with("/_gateway/")
         || path.starts_with("/.well-known/")
         || path.starts_with("/install/")
-        || path.starts_with("/install-tunnel/")
         || path.starts_with("/i/")
 }
 

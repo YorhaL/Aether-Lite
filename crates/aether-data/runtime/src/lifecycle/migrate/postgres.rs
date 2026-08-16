@@ -3,10 +3,10 @@ use sqlx::{
     PgConnection, PgPool,
 };
 
-use super::types::PendingMigrationInfo;
+use aether_data_contracts::PendingMigrationInfo;
 
 pub use aether_data_postgres::pending_migrations;
-#[cfg(all(test, feature = "postgres", feature = "mysql", feature = "sqlite"))]
+#[cfg(all(test, feature = "postgres", feature = "sqlite"))]
 pub(super) use aether_data_postgres::{
     all_up_migrations, pending_migrations_from_applied, POSTGRES_MIGRATOR,
 };

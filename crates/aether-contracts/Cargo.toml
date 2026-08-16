@@ -4,7 +4,7 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Shared contracts for Python and Rust Aether components"
+description = "Shared contracts for Aether components"
 
 [dependencies]
 aes-gcm.workspace = true

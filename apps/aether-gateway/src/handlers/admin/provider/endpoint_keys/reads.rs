@@ -1,5 +1,5 @@
 use crate::handlers::admin::provider::shared::paths::{
-    admin_export_key_id, admin_provider_id_for_keys, admin_reveal_key_id,
+    admin_provider_id_for_keys, admin_reveal_key_id,
 };
 use crate::handlers::admin::request::{AdminAppState, AdminRequestContext};
 use crate::handlers::admin::shared::{attach_admin_audit_response, query_param_value};
@@ -107,54 +107,6 @@ pub(super) async fn maybe_handle(
             )
                 .into_response(),
         }));
-    }
-
-    if decision.route_family.as_deref() == Some("endpoints_manage")
-        && decision.route_kind.as_deref() == Some("export_key")
-        && request_context
-            .path()
-            .starts_with("/api/admin/endpoints/keys/")
-        && request_context.path().ends_with("/export")
-    {
-        let Some(key_id) = admin_export_key_id(request_context.path()) else {
-            return Ok(Some(
-                (
-                    http::StatusCode::NOT_FOUND,
-                    Json(json!({ "detail": "Key 不存在" })),
-                )
-                    .into_response(),
-            ));
-        };
-        let Some(key) = state
-            .read_provider_catalog_keys_by_ids(std::slice::from_ref(&key_id))
-            .await?
-            .into_iter()
-            .next()
-        else {
-            return Ok(Some(
-                (
-                    http::StatusCode::NOT_FOUND,
-                    Json(json!({ "detail": format!("Key {key_id} 不存在") })),
-                )
-                    .into_response(),
-            ));
-        };
-        return Ok(Some(
-            match state.build_admin_export_key_payload(&key).await {
-                Ok(payload) => attach_admin_audit_response(
-                    Json(payload).into_response(),
-                    "admin_provider_key_exported",
-                    "export_provider_key",
-                    "provider_key_export",
-                    &key_id,
-                ),
-                Err(detail) => (
-                    http::StatusCode::BAD_REQUEST,
-                    Json(json!({ "detail": detail })),
-                )
-                    .into_response(),
-            },
-        ));
     }
 
     if decision.route_family.as_deref() == Some("endpoints_manage")

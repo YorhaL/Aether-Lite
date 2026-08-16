@@ -115,9 +115,7 @@ pub(crate) async fn build_admin_key_health_payload(
     } else {
         let mut formats_payload = serde_json::Map::new();
         let mut any_circuit_open = false;
-        for format_name in
-            provider_key_effective_api_formats(&key, &provider.provider_type, &endpoints)
-        {
+        for format_name in provider_key_effective_api_formats(&key) {
             let health_data = health_by_format.and_then(|formats| formats.get(&format_name));
             let circuit_data = circuit_by_format.and_then(|formats| formats.get(&format_name));
             let active_open = circuit_data.is_some_and(|value| {
@@ -388,9 +386,7 @@ pub(crate) async fn recover_all_admin_key_health(
             .unwrap_or_default();
         let api_formats = provider
             .as_ref()
-            .map(|provider| {
-                provider_key_effective_api_formats(&key, &provider.provider_type, &endpoints)
-            })
+            .map(|provider| provider_key_effective_api_formats(&key))
             .unwrap_or_default();
         payload_items.push(json!({
             "key_id": key.id,

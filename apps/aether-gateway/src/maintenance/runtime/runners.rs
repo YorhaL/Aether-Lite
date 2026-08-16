@@ -8,16 +8,12 @@ use crate::data::GatewayDataState;
 use crate::{AppState, GatewayError};
 
 use super::{
-    advance_proxy_upgrade_rollout_once, cleanup_audit_logs_once,
-    cleanup_expired_gemini_file_mappings_once, cleanup_proxy_node_metrics_once,
-    cleanup_request_candidates_once, cleanup_stale_pending_requests_once,
-    cleanup_stale_proxy_nodes_once, collect_proxy_upgrade_rollout_probes, now_unix_secs,
-    perform_db_maintenance_once, perform_manual_usage_cleanup_once, perform_provider_checkin_once,
-    perform_stats_aggregation_once, perform_stats_hourly_aggregation_once,
-    perform_usage_cleanup_once, perform_wallet_daily_usage_aggregation_once,
-    record_admin_cleanup_run, record_completed_cleanup_run, record_failed_cleanup_run,
-    record_proxy_upgrade_traffic_success, summarize_database_pool, AdminCleanupRunRecord,
-    ManualUsageCleanupOptions,
+    cleanup_audit_logs_once, cleanup_expired_gemini_file_mappings_once,
+    cleanup_request_candidates_once, cleanup_stale_pending_requests_once, now_unix_secs,
+    perform_db_maintenance_once, perform_manual_usage_cleanup_once, perform_stats_aggregation_once,
+    perform_stats_hourly_aggregation_once, perform_usage_cleanup_once, record_admin_cleanup_run,
+    record_completed_cleanup_run, record_failed_cleanup_run, summarize_database_pool,
+    AdminCleanupRunRecord, ManualUsageCleanupOptions,
 };
 
 pub(super) async fn run_audit_cleanup_once(data: &GatewayDataState) -> Result<(), DataLayerError> {
@@ -76,108 +72,6 @@ pub(super) async fn run_gemini_file_mapping_cleanup_once(
     Ok(())
 }
 
-pub(super) async fn run_proxy_node_stale_cleanup_once(
-    data: &GatewayDataState,
-) -> Result<(), DataLayerError> {
-    let stale_marked = cleanup_stale_proxy_nodes_once(data).await?;
-    if stale_marked > 0 {
-        info!(
-            event_name = "proxy_node_stale_cleanup_completed",
-            log_type = "ops",
-            worker = "proxy_node_stale_cleanup",
-            stale_marked,
-            "gateway marked stale proxy nodes offline"
-        );
-    }
-    Ok(())
-}
-
-pub(super) async fn run_proxy_node_metrics_cleanup_once(
-    data: &GatewayDataState,
-) -> Result<(), DataLayerError> {
-    let summary = cleanup_proxy_node_metrics_once(data).await?;
-    if summary.deleted_1m_rows > 0 || summary.deleted_1h_rows > 0 {
-        info!(
-            event_name = "proxy_node_metrics_cleanup_completed",
-            log_type = "ops",
-            worker = "proxy_node_metrics_cleanup",
-            deleted_1m_rows = summary.deleted_1m_rows,
-            deleted_1h_rows = summary.deleted_1h_rows,
-            "gateway deleted expired proxy node metrics buckets"
-        );
-    }
-    Ok(())
-}
-
-pub(super) async fn run_proxy_upgrade_rollout_once(state: &AppState) -> Result<(), DataLayerError> {
-    let mut summary = advance_proxy_upgrade_rollout_once(&state.data).await?;
-    let probes = collect_proxy_upgrade_rollout_probes(&state.data).await?;
-    let mut probe_recorded = false;
-    for probe in probes {
-        match state
-            .tunnel
-            .probe_node_url_routed(state, &probe.node_id, &probe.url, probe.timeout_secs)
-            .await
-        {
-            Ok(status) if (200..300).contains(&status) => {
-                let _ = record_proxy_upgrade_traffic_success(&state.data, &probe.node_id).await?;
-                probe_recorded = true;
-                info!(
-                    event_name = "proxy_upgrade_rollout_probe_succeeded",
-                    log_type = "ops",
-                    worker = "proxy_upgrade_rollout",
-                    node_id = %probe.node_id,
-                    url = %probe.url,
-                    status,
-                    "gateway confirmed proxy upgrade health probe"
-                );
-            }
-            Ok(status) => {
-                warn!(
-                    event_name = "proxy_upgrade_rollout_probe_unhealthy",
-                    log_type = "ops",
-                    worker = "proxy_upgrade_rollout",
-                    node_id = %probe.node_id,
-                    url = %probe.url,
-                    status,
-                    "gateway proxy upgrade health probe returned non-success status"
-                );
-            }
-            Err(error) => {
-                warn!(
-                    event_name = "proxy_upgrade_rollout_probe_failed",
-                    log_type = "ops",
-                    worker = "proxy_upgrade_rollout",
-                    node_id = %probe.node_id,
-                    url = %probe.url,
-                    error = %error,
-                    "gateway proxy upgrade health probe failed"
-                );
-            }
-        }
-    }
-
-    if probe_recorded {
-        summary = advance_proxy_upgrade_rollout_once(&state.data).await?;
-    }
-    if summary.updated > 0 || !summary.pending_node_ids.is_empty() || !summary.version.is_empty() {
-        info!(
-            event_name = "proxy_upgrade_rollout_checked",
-            log_type = "ops",
-            worker = "proxy_upgrade_rollout",
-            version = %summary.version,
-            updated = summary.updated,
-            blocked = summary.blocked,
-            pending = summary.pending_node_ids.len(),
-            completed = summary.completed,
-            remaining = summary.remaining,
-            rollout_active = summary.rollout_active,
-            "gateway checked proxy upgrade rollout"
-        );
-    }
-    Ok(())
-}
-
 pub(super) async fn run_db_maintenance_once(data: &GatewayDataState) -> Result<(), DataLayerError> {
     let summary = perform_db_maintenance_once(data).await?;
     if summary.attempted > 0 {
@@ -191,23 +85,6 @@ pub(super) async fn run_db_maintenance_once(data: &GatewayDataState) -> Result<(
             "gateway finished db maintenance"
         );
     }
-    Ok(())
-}
-
-pub(super) async fn run_wallet_daily_usage_aggregation_once(
-    data: &GatewayDataState,
-) -> Result<(), DataLayerError> {
-    let summary = perform_wallet_daily_usage_aggregation_once(data).await?;
-    info!(
-        event_name = "wallet_daily_usage_aggregation_completed",
-        log_type = "ops",
-        worker = "wallet_daily_usage_aggregation",
-        billing_date = %summary.billing_date,
-        billing_timezone = %summary.billing_timezone,
-        wallets = summary.aggregated_wallets,
-        stale_deleted = summary.deleted_stale_ledgers,
-        "gateway aggregated wallet daily usage ledgers"
-    );
     Ok(())
 }
 
@@ -634,21 +511,4 @@ pub(super) async fn run_stats_hourly_aggregation_once(
         "gateway aggregated stats hourly tables"
     );
     Ok(true)
-}
-
-pub(super) async fn run_provider_checkin_once(state: &AppState) -> Result<(), GatewayError> {
-    let summary = perform_provider_checkin_once(state).await?;
-    if summary.attempted > 0 {
-        info!(
-            event_name = "provider_checkin_completed",
-            log_type = "ops",
-            worker = "provider_checkin",
-            attempted = summary.attempted,
-            succeeded = summary.succeeded,
-            failed = summary.failed,
-            skipped = summary.skipped,
-            "gateway finished provider checkin"
-        );
-    }
-    Ok(())
 }

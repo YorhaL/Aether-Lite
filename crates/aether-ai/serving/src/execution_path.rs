@@ -16,37 +16,18 @@ pub enum AiPlanFallbackReason {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AiSyncExecutionStep {
-    VideoTaskFollowUp,
-    LocalVideo,
-    LocalImage,
-    LocalOpenAiChat,
-    LocalOpenAiResponses,
-    LocalStandardFamily,
     LocalSameFormatProvider,
-    LocalGeminiFiles,
     RemoteDecision,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AiStreamExecutionStep {
-    LocalVideoContent,
-    LocalImage,
-    LocalOpenAiChat,
-    LocalOpenAiResponses,
-    LocalStandardFamily,
     LocalSameFormatProvider,
-    LocalGeminiFiles,
     RemoteDecision,
 }
 
 pub const DEFAULT_STREAM_EXECUTION_STEPS: &[AiStreamExecutionStep] = &[
-    AiStreamExecutionStep::LocalVideoContent,
-    AiStreamExecutionStep::LocalImage,
-    AiStreamExecutionStep::LocalOpenAiChat,
-    AiStreamExecutionStep::LocalOpenAiResponses,
-    AiStreamExecutionStep::LocalStandardFamily,
     AiStreamExecutionStep::LocalSameFormatProvider,
-    AiStreamExecutionStep::LocalGeminiFiles,
     AiStreamExecutionStep::RemoteDecision,
 ];
 
@@ -101,26 +82,9 @@ where
     let mut exhausted = None;
     let mut deferred = None;
 
-    if let Some(response) = absorb_sync_step(
-        port,
-        AiSyncExecutionStep::VideoTaskFollowUp,
-        &mut deferred,
-        &mut exhausted,
-    )
-    .await?
-    {
-        return Ok(response);
-    }
-
     if port.scheduler_decision_supported() {
         for step in [
-            AiSyncExecutionStep::LocalVideo,
-            AiSyncExecutionStep::LocalImage,
-            AiSyncExecutionStep::LocalOpenAiChat,
-            AiSyncExecutionStep::LocalOpenAiResponses,
-            AiSyncExecutionStep::LocalStandardFamily,
             AiSyncExecutionStep::LocalSameFormatProvider,
-            AiSyncExecutionStep::LocalGeminiFiles,
             AiSyncExecutionStep::RemoteDecision,
         ] {
             if let Some(response) =
@@ -131,31 +95,7 @@ where
         }
     }
 
-    if let Some(response) = deferred {
-        return Ok(AiServingExecutionOutcome::Deferred(response));
-    }
-
-    if let Some(outcome) = exhausted {
-        return Ok(AiServingExecutionOutcome::Exhausted(outcome));
-    }
-
-    let fallback_reason = if port.scheduler_decision_supported() {
-        AiPlanFallbackReason::RemoteDecisionMiss
-    } else {
-        AiPlanFallbackReason::SchedulerDecisionUnsupported
-    };
-    match port.execute_sync_plan_fallback(fallback_reason).await? {
-        AiServingExecutionOutcome::Responded(response) => {
-            Ok(AiServingExecutionOutcome::Responded(response))
-        }
-        AiServingExecutionOutcome::Deferred(response) => {
-            Ok(AiServingExecutionOutcome::Deferred(response))
-        }
-        AiServingExecutionOutcome::Exhausted(outcome) => {
-            Ok(AiServingExecutionOutcome::Exhausted(outcome))
-        }
-        AiServingExecutionOutcome::NoPath => Ok(AiServingExecutionOutcome::NoPath),
-    }
+    finish_sync_path(port, deferred, exhausted).await
 }
 
 pub async fn run_ai_stream_execution_path<Port>(
@@ -167,42 +107,60 @@ where
     let mut exhausted = None;
     let mut deferred = None;
 
-    for step in port.stream_execution_steps() {
-        if *step != AiStreamExecutionStep::LocalVideoContent && !port.scheduler_decision_supported()
-        {
-            continue;
-        }
-        if let Some(response) =
-            absorb_stream_step(port, *step, &mut deferred, &mut exhausted).await?
-        {
-            return Ok(response);
+    if port.scheduler_decision_supported() {
+        for step in port.stream_execution_steps() {
+            if let Some(response) =
+                absorb_stream_step(port, *step, &mut deferred, &mut exhausted).await?
+            {
+                return Ok(response);
+            }
         }
     }
 
+    finish_stream_path(port, deferred, exhausted).await
+}
+
+async fn finish_sync_path<Port>(
+    port: &Port,
+    deferred: Option<Port::Response>,
+    exhausted: Option<Port::Exhaustion>,
+) -> Result<AiServingExecutionOutcome<Port::Response, Port::Exhaustion>, Port::Error>
+where
+    Port: AiSyncExecutionPathPort,
+{
     if let Some(response) = deferred {
         return Ok(AiServingExecutionOutcome::Deferred(response));
     }
-
     if let Some(outcome) = exhausted {
         return Ok(AiServingExecutionOutcome::Exhausted(outcome));
     }
+    let reason = fallback_reason(port.scheduler_decision_supported());
+    port.execute_sync_plan_fallback(reason).await
+}
 
-    let fallback_reason = if port.scheduler_decision_supported() {
+async fn finish_stream_path<Port>(
+    port: &Port,
+    deferred: Option<Port::Response>,
+    exhausted: Option<Port::Exhaustion>,
+) -> Result<AiServingExecutionOutcome<Port::Response, Port::Exhaustion>, Port::Error>
+where
+    Port: AiStreamExecutionPathPort,
+{
+    if let Some(response) = deferred {
+        return Ok(AiServingExecutionOutcome::Deferred(response));
+    }
+    if let Some(outcome) = exhausted {
+        return Ok(AiServingExecutionOutcome::Exhausted(outcome));
+    }
+    let reason = fallback_reason(port.scheduler_decision_supported());
+    port.execute_stream_plan_fallback(reason).await
+}
+
+fn fallback_reason(scheduler_supported: bool) -> AiPlanFallbackReason {
+    if scheduler_supported {
         AiPlanFallbackReason::RemoteDecisionMiss
     } else {
         AiPlanFallbackReason::SchedulerDecisionUnsupported
-    };
-    match port.execute_stream_plan_fallback(fallback_reason).await? {
-        AiServingExecutionOutcome::Responded(response) => {
-            Ok(AiServingExecutionOutcome::Responded(response))
-        }
-        AiServingExecutionOutcome::Deferred(response) => {
-            Ok(AiServingExecutionOutcome::Deferred(response))
-        }
-        AiServingExecutionOutcome::Exhausted(outcome) => {
-            Ok(AiServingExecutionOutcome::Exhausted(outcome))
-        }
-        AiServingExecutionOutcome::NoPath => Ok(AiServingExecutionOutcome::NoPath),
     }
 }
 
@@ -215,20 +173,11 @@ async fn absorb_sync_step<Port>(
 where
     Port: AiSyncExecutionPathPort,
 {
-    match port.execute_sync_step(step).await? {
-        AiServingExecutionOutcome::Responded(response) => {
-            Ok(Some(AiServingExecutionOutcome::Responded(response)))
-        }
-        AiServingExecutionOutcome::Deferred(response) => {
-            *deferred = Some(response);
-            Ok(None)
-        }
-        AiServingExecutionOutcome::Exhausted(outcome) => {
-            *exhausted = Some(outcome);
-            Ok(None)
-        }
-        AiServingExecutionOutcome::NoPath => Ok(None),
-    }
+    Ok(absorb_outcome(
+        port.execute_sync_step(step).await?,
+        deferred,
+        exhausted,
+    ))
 }
 
 async fn absorb_stream_step<Port>(
@@ -240,335 +189,30 @@ async fn absorb_stream_step<Port>(
 where
     Port: AiStreamExecutionPathPort,
 {
-    match port.execute_stream_step(step).await? {
+    Ok(absorb_outcome(
+        port.execute_stream_step(step).await?,
+        deferred,
+        exhausted,
+    ))
+}
+
+fn absorb_outcome<Response, Exhaustion>(
+    outcome: AiServingExecutionOutcome<Response, Exhaustion>,
+    deferred: &mut Option<Response>,
+    exhausted: &mut Option<Exhaustion>,
+) -> Option<AiServingExecutionOutcome<Response, Exhaustion>> {
+    match outcome {
         AiServingExecutionOutcome::Responded(response) => {
-            Ok(Some(AiServingExecutionOutcome::Responded(response)))
+            Some(AiServingExecutionOutcome::Responded(response))
         }
         AiServingExecutionOutcome::Deferred(response) => {
             *deferred = Some(response);
-            Ok(None)
+            None
         }
         AiServingExecutionOutcome::Exhausted(outcome) => {
             *exhausted = Some(outcome);
-            Ok(None)
+            None
         }
-        AiServingExecutionOutcome::NoPath => Ok(None),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::VecDeque;
-    use std::sync::Mutex;
-
-    #[derive(Default)]
-    struct TestSyncPort {
-        scheduler_supported: bool,
-        outcomes: Mutex<VecDeque<AiServingExecutionOutcome<&'static str, &'static str>>>,
-        calls: Mutex<Vec<String>>,
-    }
-
-    #[async_trait]
-    impl AiSyncExecutionPathPort for TestSyncPort {
-        type Response = &'static str;
-        type Exhaustion = &'static str;
-        type Error = std::convert::Infallible;
-
-        fn scheduler_decision_supported(&self) -> bool {
-            self.scheduler_supported
-        }
-
-        async fn execute_sync_step(
-            &self,
-            step: AiSyncExecutionStep,
-        ) -> Result<AiServingExecutionOutcome<Self::Response, Self::Exhaustion>, Self::Error>
-        {
-            self.calls.lock().unwrap().push(format!("{step:?}"));
-            Ok(self
-                .outcomes
-                .lock()
-                .unwrap()
-                .pop_front()
-                .unwrap_or(AiServingExecutionOutcome::NoPath))
-        }
-
-        async fn execute_sync_plan_fallback(
-            &self,
-            reason: AiPlanFallbackReason,
-        ) -> Result<AiServingExecutionOutcome<Self::Response, Self::Exhaustion>, Self::Error>
-        {
-            self.calls
-                .lock()
-                .unwrap()
-                .push(format!("Fallback:{reason:?}"));
-            Ok(self
-                .outcomes
-                .lock()
-                .unwrap()
-                .pop_front()
-                .unwrap_or(AiServingExecutionOutcome::NoPath))
-        }
-    }
-
-    #[derive(Default)]
-    struct TestStreamPort {
-        scheduler_supported: bool,
-        stream_steps: Option<&'static [AiStreamExecutionStep]>,
-        outcomes: Mutex<VecDeque<AiServingExecutionOutcome<&'static str, &'static str>>>,
-        calls: Mutex<Vec<String>>,
-    }
-
-    #[async_trait]
-    impl AiStreamExecutionPathPort for TestStreamPort {
-        type Response = &'static str;
-        type Exhaustion = &'static str;
-        type Error = std::convert::Infallible;
-
-        fn scheduler_decision_supported(&self) -> bool {
-            self.scheduler_supported
-        }
-
-        fn stream_execution_steps(&self) -> &'static [AiStreamExecutionStep] {
-            self.stream_steps
-                .unwrap_or(super::DEFAULT_STREAM_EXECUTION_STEPS)
-        }
-
-        async fn execute_stream_step(
-            &self,
-            step: AiStreamExecutionStep,
-        ) -> Result<AiServingExecutionOutcome<Self::Response, Self::Exhaustion>, Self::Error>
-        {
-            self.calls.lock().unwrap().push(format!("{step:?}"));
-            Ok(self
-                .outcomes
-                .lock()
-                .unwrap()
-                .pop_front()
-                .unwrap_or(AiServingExecutionOutcome::NoPath))
-        }
-
-        async fn execute_stream_plan_fallback(
-            &self,
-            reason: AiPlanFallbackReason,
-        ) -> Result<AiServingExecutionOutcome<Self::Response, Self::Exhaustion>, Self::Error>
-        {
-            self.calls
-                .lock()
-                .unwrap()
-                .push(format!("Fallback:{reason:?}"));
-            Ok(self
-                .outcomes
-                .lock()
-                .unwrap()
-                .pop_front()
-                .unwrap_or(AiServingExecutionOutcome::NoPath))
-        }
-    }
-
-    #[tokio::test]
-    async fn sync_path_runs_scheduler_steps_before_remote_and_fallback() {
-        let port = TestSyncPort {
-            scheduler_supported: true,
-            ..TestSyncPort::default()
-        };
-
-        let outcome = run_ai_sync_execution_path(&port).await.unwrap();
-
-        assert!(matches!(outcome, AiServingExecutionOutcome::NoPath));
-        assert_eq!(
-            port.calls.lock().unwrap().as_slice(),
-            [
-                "VideoTaskFollowUp",
-                "LocalVideo",
-                "LocalImage",
-                "LocalOpenAiChat",
-                "LocalOpenAiResponses",
-                "LocalStandardFamily",
-                "LocalSameFormatProvider",
-                "LocalGeminiFiles",
-                "RemoteDecision",
-                "Fallback:RemoteDecisionMiss",
-            ]
-        );
-    }
-
-    #[tokio::test]
-    async fn sync_path_returns_last_exhaustion_when_fallback_has_no_path() {
-        let port = TestSyncPort {
-            scheduler_supported: true,
-            outcomes: Mutex::new(VecDeque::from([
-                AiServingExecutionOutcome::NoPath,
-                AiServingExecutionOutcome::Exhausted("local_video_exhausted"),
-            ])),
-            calls: Mutex::default(),
-        };
-
-        let outcome = run_ai_sync_execution_path(&port).await.unwrap();
-
-        assert!(matches!(
-            outcome,
-            AiServingExecutionOutcome::Exhausted("local_video_exhausted")
-        ));
-        assert_eq!(
-            port.calls.lock().unwrap().as_slice(),
-            [
-                "VideoTaskFollowUp",
-                "LocalVideo",
-                "LocalImage",
-                "LocalOpenAiChat",
-                "LocalOpenAiResponses",
-                "LocalStandardFamily",
-                "LocalSameFormatProvider",
-                "LocalGeminiFiles",
-                "RemoteDecision",
-            ]
-        );
-    }
-
-    #[tokio::test]
-    async fn sync_path_keeps_deferred_error_until_a_later_step_succeeds() {
-        let port = TestSyncPort {
-            scheduler_supported: true,
-            outcomes: Mutex::new(VecDeque::from([
-                AiServingExecutionOutcome::NoPath,
-                AiServingExecutionOutcome::Deferred("preserved_upstream_error"),
-                AiServingExecutionOutcome::Responded("later_success"),
-            ])),
-            calls: Mutex::default(),
-        };
-
-        let outcome = run_ai_sync_execution_path(&port).await.unwrap();
-
-        assert!(matches!(
-            outcome,
-            AiServingExecutionOutcome::Responded("later_success")
-        ));
-        assert_eq!(
-            port.calls.lock().unwrap().as_slice(),
-            ["VideoTaskFollowUp", "LocalVideo", "LocalImage"]
-        );
-    }
-
-    #[tokio::test]
-    async fn stream_path_skips_scheduler_steps_when_unsupported() {
-        let port = TestStreamPort {
-            scheduler_supported: false,
-            ..TestStreamPort::default()
-        };
-
-        let outcome = run_ai_stream_execution_path(&port).await.unwrap();
-
-        assert!(matches!(outcome, AiServingExecutionOutcome::NoPath));
-        assert_eq!(
-            port.calls.lock().unwrap().as_slice(),
-            ["LocalVideoContent", "Fallback:SchedulerDecisionUnsupported",]
-        );
-    }
-
-    #[tokio::test]
-    async fn stream_path_stops_at_first_response() {
-        let port = TestStreamPort {
-            scheduler_supported: true,
-            stream_steps: None,
-            outcomes: Mutex::new(VecDeque::from([
-                AiServingExecutionOutcome::NoPath,
-                AiServingExecutionOutcome::Responded("image_response"),
-            ])),
-            calls: Mutex::default(),
-        };
-
-        let outcome = run_ai_stream_execution_path(&port).await.unwrap();
-
-        assert!(matches!(
-            outcome,
-            AiServingExecutionOutcome::Responded("image_response")
-        ));
-        assert_eq!(
-            port.calls.lock().unwrap().as_slice(),
-            ["LocalVideoContent", "LocalImage"]
-        );
-    }
-
-    #[tokio::test]
-    async fn stream_path_runs_preferred_steps_only() {
-        const CHAT_ONLY: &[AiStreamExecutionStep] = &[AiStreamExecutionStep::LocalOpenAiChat];
-        let port = TestStreamPort {
-            scheduler_supported: true,
-            stream_steps: Some(CHAT_ONLY),
-            outcomes: Mutex::new(VecDeque::from([AiServingExecutionOutcome::Responded(
-                "chat_response",
-            )])),
-            calls: Mutex::default(),
-        };
-
-        let outcome = run_ai_stream_execution_path(&port).await.unwrap();
-
-        assert!(matches!(
-            outcome,
-            AiServingExecutionOutcome::Responded("chat_response")
-        ));
-        assert_eq!(port.calls.lock().unwrap().as_slice(), ["LocalOpenAiChat"]);
-    }
-
-    #[tokio::test]
-    async fn stream_path_returns_deferred_error_only_after_steps_exhaust() {
-        const TWO_STEPS: &[AiStreamExecutionStep] = &[
-            AiStreamExecutionStep::LocalOpenAiChat,
-            AiStreamExecutionStep::LocalSameFormatProvider,
-        ];
-        let port = TestStreamPort {
-            scheduler_supported: true,
-            stream_steps: Some(TWO_STEPS),
-            outcomes: Mutex::new(VecDeque::from([
-                AiServingExecutionOutcome::Deferred("preserved_upstream_error"),
-                AiServingExecutionOutcome::NoPath,
-            ])),
-            calls: Mutex::default(),
-        };
-
-        let outcome = run_ai_stream_execution_path(&port).await.unwrap();
-
-        assert!(matches!(
-            outcome,
-            AiServingExecutionOutcome::Deferred("preserved_upstream_error")
-        ));
-        assert_eq!(
-            port.calls.lock().unwrap().as_slice(),
-            ["LocalOpenAiChat", "LocalSameFormatProvider"]
-        );
-    }
-
-    #[tokio::test]
-    async fn stream_path_returns_last_exhaustion_without_plan_fallback() {
-        let port = TestStreamPort {
-            scheduler_supported: true,
-            stream_steps: None,
-            outcomes: Mutex::new(VecDeque::from([
-                AiServingExecutionOutcome::NoPath,
-                AiServingExecutionOutcome::Exhausted("local_image_exhausted"),
-            ])),
-            calls: Mutex::default(),
-        };
-
-        let outcome = run_ai_stream_execution_path(&port).await.unwrap();
-
-        assert!(matches!(
-            outcome,
-            AiServingExecutionOutcome::Exhausted("local_image_exhausted")
-        ));
-        assert_eq!(
-            port.calls.lock().unwrap().as_slice(),
-            [
-                "LocalVideoContent",
-                "LocalImage",
-                "LocalOpenAiChat",
-                "LocalOpenAiResponses",
-                "LocalStandardFamily",
-                "LocalSameFormatProvider",
-                "LocalGeminiFiles",
-                "RemoteDecision",
-            ]
-        );
+        AiServingExecutionOutcome::NoPath => None,
     }
 }

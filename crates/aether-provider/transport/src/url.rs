@@ -120,13 +120,6 @@ fn build_claude_messages_operation_url(
             .strip_suffix("/count_tokens")
             .unwrap_or(trimmed)
             .to_string()
-    } else if parsed_path.is_empty()
-        && parsed_url
-            .as_ref()
-            .and_then(Url::host_str)
-            .is_some_and(|host| host.eq_ignore_ascii_case("api.anthropic.com"))
-    {
-        format!("{trimmed}/v1/messages")
     } else if parsed_path.is_empty() {
         format!("{trimmed}/messages")
     } else if parsed_path.rsplit('/').next() == Some("messages") {
@@ -261,31 +254,7 @@ pub fn build_passthrough_path_url(
     Some(url)
 }
 
-pub fn build_bigmodel_coding_models_url(upstream_base_url: &str) -> Option<String> {
-    let (trimmed_base_url, base_query) = split_base_url_query(upstream_base_url);
-    let trimmed_base_url = trimmed_base_url.trim_end_matches('/');
-    if trimmed_base_url.is_empty() || !bigmodel_coding_models_base_is_supported(trimmed_base_url) {
-        return None;
-    }
-
-    let path = Url::parse(trimmed_base_url)
-        .ok()
-        .map(|url| url.path().trim_end_matches('/').to_string())
-        .unwrap_or_else(|| trimmed_base_url.trim_end_matches('/').to_string());
-    let mut url = if path.ends_with("/models") {
-        trimmed_base_url.to_string()
-    } else {
-        format!("{trimmed_base_url}/models")
-    };
-    append_merged_query(&mut url, base_query, None, None, &[]);
-    Some(url)
-}
-
 pub fn build_openai_compatible_models_url(upstream_base_url: &str) -> Option<String> {
-    if let Some(url) = build_bigmodel_coding_models_url(upstream_base_url) {
-        return Some(url);
-    }
-
     let (trimmed_base_url, base_query) = split_base_url_query(upstream_base_url);
     let trimmed_base_url = trimmed_base_url.trim_end_matches('/');
     if trimmed_base_url.is_empty() {
@@ -335,32 +304,9 @@ fn split_base_url_query(base_url: &str) -> (&str, Option<&str>) {
         .unwrap_or((trimmed, None))
 }
 
-pub(crate) fn google_openai_compat_base_includes_api_root(base_url: &str) -> bool {
-    let Ok(parsed) = Url::parse(base_url.trim()) else {
-        return false;
-    };
-    let Some(host) = parsed.host_str().map(|value| value.to_ascii_lowercase()) else {
-        return false;
-    };
-    let path = parsed.path().trim_end_matches('/');
-
-    if host == "generativelanguage.googleapis.com" {
-        return path == "/v1beta/openai" || path == "/v1/openai";
-    }
-
-    if looks_like_vertex_ai_host(&host) {
-        return path.ends_with("/endpoints/openapi");
-    }
-
-    false
-}
-
 pub fn openai_compatible_base_includes_api_root(base_url: &str) -> bool {
     let trimmed = base_url.trim().trim_end_matches('/');
-    trimmed.ends_with("/v1")
-        || google_openai_compat_base_includes_api_root(trimmed)
-        || bigmodel_coding_base_includes_api_root(trimmed)
-        || openai_compatible_base_includes_unversioned_api_root(trimmed)
+    trimmed.ends_with("/v1") || openai_compatible_base_includes_unversioned_api_root(trimmed)
 }
 
 pub fn v1_compatible_base_includes_api_root(base_url: &str) -> bool {
@@ -382,39 +328,6 @@ pub fn openai_compatible_base_includes_unversioned_api_root(base_url: &str) -> b
                 .to_ascii_lowercase()
         });
     !path.is_empty()
-}
-
-fn bigmodel_coding_base_includes_api_root(base_url: &str) -> bool {
-    let Ok(parsed) = Url::parse(base_url.trim()) else {
-        return false;
-    };
-    let Some(host) = parsed.host_str().map(|value| value.to_ascii_lowercase()) else {
-        return false;
-    };
-    host == "open.bigmodel.cn" && parsed.path().trim_end_matches('/') == "/api/coding/paas/v4"
-}
-
-fn bigmodel_coding_models_base_is_supported(base_url: &str) -> bool {
-    let Ok(parsed) = Url::parse(base_url.trim()) else {
-        return false;
-    };
-    let Some(host) = parsed.host_str().map(|value| value.to_ascii_lowercase()) else {
-        return false;
-    };
-    if host != "open.bigmodel.cn" {
-        return false;
-    }
-    matches!(
-        parsed.path().trim_end_matches('/'),
-        "/api/coding/paas/v4" | "/api/coding/paas/v4/models"
-    )
-}
-
-fn looks_like_vertex_ai_host(host: &str) -> bool {
-    const VERTEX_AI_HOST: &str = "aiplatform.googleapis.com";
-    host == VERTEX_AI_HOST
-        || host.ends_with(&format!(".{VERTEX_AI_HOST}"))
-        || host.ends_with(&format!("-{VERTEX_AI_HOST}"))
 }
 
 fn split_path_query(path: &str) -> (&str, Option<&str>) {
@@ -500,11 +413,11 @@ fn merge_query_string(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_bigmodel_coding_models_url, build_claude_count_tokens_url, build_claude_messages_url,
-        build_gemini_content_url, build_gemini_files_passthrough_url,
-        build_gemini_video_predict_long_running_url, build_openai_chat_url,
-        build_openai_compatible_models_url, build_openai_image_url, build_openai_responses_url,
-        build_openai_search_url, build_passthrough_path_url, normalize_gemini_content_action_path,
+        build_claude_count_tokens_url, build_claude_messages_url, build_gemini_content_url,
+        build_gemini_files_passthrough_url, build_gemini_video_predict_long_running_url,
+        build_openai_chat_url, build_openai_compatible_models_url, build_openai_image_url,
+        build_openai_responses_url, build_openai_search_url, build_passthrough_path_url,
+        normalize_gemini_content_action_path,
     };
 
     #[test]
@@ -515,39 +428,6 @@ mod tests {
                 Some("mode=fast&tenant=override")
             ),
             "https://api.openai.example/v1/chat/completions?mode=fast&tenant=override"
-        );
-    }
-
-    #[test]
-    fn openai_chat_url_preserves_google_openai_compat_roots() {
-        assert_eq!(
-            build_openai_chat_url(
-                "https://generativelanguage.googleapis.com/v1beta/openai",
-                Some("trace=1")
-            ),
-            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions?trace=1"
-        );
-        assert_eq!(
-            build_openai_chat_url(
-                "https://aiplatform.googleapis.com/v1/projects/project-1/locations/global/endpoints/openapi",
-                None,
-            ),
-            "https://aiplatform.googleapis.com/v1/projects/project-1/locations/global/endpoints/openapi/chat/completions"
-        );
-    }
-
-    #[test]
-    fn openai_urls_preserve_bigmodel_coding_api_root() {
-        assert_eq!(
-            build_openai_chat_url(
-                "https://open.bigmodel.cn/api/coding/paas/v4",
-                Some("trace=1")
-            ),
-            "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions?trace=1"
-        );
-        assert_eq!(
-            build_openai_responses_url("https://open.bigmodel.cn/api/coding/paas/v4", None, false),
-            "https://open.bigmodel.cn/api/coding/paas/v4/responses"
         );
     }
 
@@ -566,16 +446,8 @@ mod tests {
             "https://proxy.example.com/chat/completions"
         );
         assert_eq!(
-            build_openai_chat_url("https://api.deepseek.com", None),
-            "https://api.deepseek.com/chat/completions"
-        );
-        assert_eq!(
             build_openai_responses_url("https://proxy.example.com/api", None, false),
             "https://proxy.example.com/api/responses"
-        );
-        assert_eq!(
-            build_openai_responses_url("https://api.deepseek.com", None, false),
-            "https://api.deepseek.com/responses"
         );
         assert_eq!(
             build_openai_image_url(
@@ -606,10 +478,6 @@ mod tests {
             "https://api.anthropic.example/messages"
         );
         assert_eq!(
-            build_claude_messages_url("https://api.anthropic.com", None),
-            "https://api.anthropic.com/v1/messages"
-        );
-        assert_eq!(
             build_claude_messages_url(
                 "https://proxy.example.com/anthropic?key=base-secret&tenant=base",
                 Some("KEY=request-secret&trace=1")
@@ -626,10 +494,6 @@ mod tests {
                 Some("key=request-secret&trace=1")
             ),
             "https://proxy.example.com/anthropic/messages/count_tokens?key=base-secret&tenant=base&trace=1"
-        );
-        assert_eq!(
-            build_claude_count_tokens_url("https://api.anthropic.com", None),
-            "https://api.anthropic.com/v1/messages/count_tokens"
         );
         assert_eq!(
             build_claude_count_tokens_url("https://api.anthropic.example", None),
@@ -652,22 +516,6 @@ mod tests {
         assert_eq!(
             build_claude_messages_url("https://proxy.example.com/v1/messages/count_tokens", None),
             "https://proxy.example.com/v1/messages"
-        );
-    }
-
-    #[test]
-    fn bigmodel_coding_models_url_uses_models_resource() {
-        assert_eq!(
-            build_bigmodel_coding_models_url(
-                "https://open.bigmodel.cn/api/coding/paas/v4?tenant=demo"
-            )
-            .as_deref(),
-            Some("https://open.bigmodel.cn/api/coding/paas/v4/models?tenant=demo")
-        );
-        assert_eq!(
-            build_bigmodel_coding_models_url("https://open.bigmodel.cn/api/coding/paas/v4/models")
-                .as_deref(),
-            Some("https://open.bigmodel.cn/api/coding/paas/v4/models")
         );
     }
 

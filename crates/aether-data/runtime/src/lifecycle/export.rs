@@ -6,26 +6,20 @@ use serde_json::Value;
 #[cfg(all(feature = "postgres", feature = "sqlite"))]
 use sqlx::Acquire;
 use sqlx::Row;
-#[cfg(any(feature = "mysql", feature = "sqlite"))]
+#[cfg(feature = "sqlite")]
 use sqlx::{Column, TypeInfo, ValueRef};
 
 use crate::error::SqlResultExt;
 use crate::{DataLayerError, DatabaseDriver, SqlDatabaseConfig};
 
-#[cfg(feature = "mysql")]
-mod mysql;
 #[cfg(feature = "postgres")]
 mod postgres;
 #[cfg(feature = "sqlite")]
 mod sqlite;
 
-#[cfg(all(test, feature = "postgres", feature = "mysql", feature = "sqlite"))]
+#[cfg(all(test, feature = "postgres", feature = "sqlite"))]
 mod tests;
 
-#[cfg(feature = "mysql")]
-pub use mysql::{
-    export_mysql_core_jsonl, export_mysql_jsonl, import_mysql_jsonl, import_mysql_plan,
-};
 #[cfg(feature = "postgres")]
 pub use postgres::{
     export_postgres_core_jsonl, export_postgres_jsonl, import_postgres_jsonl, import_postgres_plan,
@@ -40,7 +34,7 @@ use postgres::{
     is_postgres_boolean_column, is_postgres_timestamp_column, load_postgres_import_columns,
 };
 
-#[cfg(all(test, feature = "postgres", feature = "mysql", feature = "sqlite"))]
+#[cfg(all(test, feature = "postgres", feature = "sqlite"))]
 use postgres::normalize_postgres_import_payload;
 
 pub const EXPORT_FORMAT_VERSION: u32 = 2;
@@ -63,7 +57,6 @@ pub enum ExportDomain {
     UserOAuthLinks,
     UserGroups,
     UserGroupMembers,
-    ProxyNodes,
     SystemConfigs,
     Wallets,
     Usage,
@@ -86,7 +79,6 @@ impl ExportDomain {
             Self::UserOAuthLinks => "user_oauth_links",
             Self::UserGroups => "user_groups",
             Self::UserGroupMembers => "user_group_members",
-            Self::ProxyNodes => "proxy_nodes",
             Self::SystemConfigs => "system_configs",
             Self::Wallets => "wallets",
             Self::Usage => "usage",
@@ -132,15 +124,7 @@ const AUXILIARY_TABLES: &[AuxiliaryTable] = &[
         primary_key: &["id"],
     },
     AuxiliaryTable {
-        name: "pool_member_scores",
-        primary_key: &["id"],
-    },
-    AuxiliaryTable {
         name: "api_key_provider_mappings",
-        primary_key: &["id"],
-    },
-    AuxiliaryTable {
-        name: "provider_usage_tracking",
         primary_key: &["id"],
     },
     AuxiliaryTable {
@@ -157,46 +141,6 @@ const AUXILIARY_TABLES: &[AuxiliaryTable] = &[
     },
     AuxiliaryTable {
         name: "routing_group_bindings",
-        primary_key: &["id"],
-    },
-    AuxiliaryTable {
-        name: "proxy_node_events",
-        primary_key: &["id"],
-    },
-    AuxiliaryTable {
-        name: "proxy_node_metrics_1m",
-        primary_key: &["node_id", "bucket_start_unix_secs"],
-    },
-    AuxiliaryTable {
-        name: "proxy_node_metrics_1h",
-        primary_key: &["node_id", "bucket_start_unix_secs"],
-    },
-    AuxiliaryTable {
-        name: "user_invite_codes",
-        primary_key: &["user_id"],
-    },
-    AuxiliaryTable {
-        name: "user_referrals",
-        primary_key: &["id"],
-    },
-    AuxiliaryTable {
-        name: "referral_rewards",
-        primary_key: &["id"],
-    },
-    AuxiliaryTable {
-        name: "payment_gateway_configs",
-        primary_key: &["provider"],
-    },
-    AuxiliaryTable {
-        name: "billing_plans",
-        primary_key: &["id"],
-    },
-    AuxiliaryTable {
-        name: "user_plan_entitlements",
-        primary_key: &["id"],
-    },
-    AuxiliaryTable {
-        name: "entitlement_usage_ledgers",
         primary_key: &["id"],
     },
     AuxiliaryTable {
@@ -505,7 +449,7 @@ struct PostgresImportColumn {
 
 #[cfg(feature = "postgres")]
 type PostgresImportColumns = BTreeMap<String, PostgresImportColumn>;
-#[cfg(any(feature = "mysql", feature = "sqlite"))]
+#[cfg(feature = "sqlite")]
 type ImportColumnNames = BTreeSet<String>;
 
 const USAGE_REQUEST_BODY_DETAIL_COLUMNS: &[&str] = &[
@@ -536,7 +480,7 @@ const REQUEST_BODY_DETAIL_TABLES: &[&str] = &["usage_body_blobs"];
 #[cfg(all(feature = "postgres", feature = "sqlite"))]
 const LIFECYCLE_TABLES: &[&str] = &["_sqlx_migrations", "schema_backfills"];
 
-#[cfg(any(feature = "mysql", feature = "postgres", feature = "sqlite"))]
+#[cfg(any(feature = "postgres", feature = "sqlite"))]
 fn import_column_stores_timestamp(column_name: &str) -> bool {
     column_name.ends_with("_at")
         || column_name.ends_with("_unix_secs")
@@ -548,7 +492,7 @@ fn import_column_stores_timestamp(column_name: &str) -> bool {
         )
 }
 
-#[cfg(any(feature = "mysql", feature = "postgres", feature = "sqlite"))]
+#[cfg(any(feature = "postgres", feature = "sqlite"))]
 fn import_timestamp_uses_millis(table_name: &str, column_name: &str) -> bool {
     if !column_name.ends_with("_unix_ms") {
         return false;
@@ -564,7 +508,7 @@ fn import_timestamp_uses_millis(table_name: &str, column_name: &str) -> bool {
     !(relation_name == "usage" && column_name == "created_at_unix_ms")
 }
 
-#[cfg(any(feature = "mysql", feature = "postgres", feature = "sqlite"))]
+#[cfg(any(feature = "postgres", feature = "sqlite"))]
 fn normalize_imported_integer_timestamp(
     driver_name: &str,
     table_name: &str,
@@ -600,7 +544,7 @@ fn normalize_imported_integer_timestamp(
     Ok(Some(timestamp))
 }
 
-#[cfg(any(feature = "mysql", feature = "postgres", feature = "sqlite"))]
+#[cfg(any(feature = "postgres", feature = "sqlite"))]
 fn parse_imported_datetime(value: &str) -> Option<chrono::DateTime<chrono::Utc>> {
     let value = value.trim();
     if let Ok(datetime) = chrono::DateTime::parse_from_rfc3339(value) {
@@ -620,7 +564,7 @@ fn parse_imported_datetime(value: &str) -> Option<chrono::DateTime<chrono::Utc>>
         .map(|datetime| datetime.and_utc())
 }
 
-#[cfg(any(feature = "mysql", feature = "postgres", feature = "sqlite"))]
+#[cfg(any(feature = "postgres", feature = "sqlite"))]
 fn normalize_imported_binary(
     driver_name: &str,
     column_name: &str,
@@ -816,17 +760,12 @@ pub fn sqlite_core_export_domains() -> Vec<ExportDomain> {
         ExportDomain::UserOAuthLinks,
         ExportDomain::UserGroups,
         ExportDomain::UserGroupMembers,
-        ExportDomain::ProxyNodes,
         ExportDomain::SystemConfigs,
         ExportDomain::Wallets,
         ExportDomain::Usage,
         ExportDomain::Billing,
         ExportDomain::Auxiliary,
     ]
-}
-
-pub fn mysql_core_export_domains() -> Vec<ExportDomain> {
-    sqlite_core_export_domains()
 }
 
 pub fn postgres_core_export_domains() -> Vec<ExportDomain> {
@@ -841,26 +780,17 @@ pub async fn export_database_jsonl(
     match database.driver {
         #[cfg(feature = "sqlite")]
         DatabaseDriver::Sqlite => {
-            let pool = crate::driver::sqlite::SqlitePoolFactory::new(database)?.connect_lazy()?;
+            let pool = aether_data_sqlite::SqlitePoolFactory::new(database)?.connect_lazy()?;
             if domains.is_empty() {
                 export_sqlite_core_jsonl(&pool, created_at_unix_secs).await
             } else {
                 export_sqlite_jsonl(&pool, domains, created_at_unix_secs).await
             }
         }
-        #[cfg(feature = "mysql")]
-        DatabaseDriver::Mysql => {
-            let pool = crate::driver::mysql::MysqlPoolFactory::new(database)?.connect_lazy()?;
-            if domains.is_empty() {
-                export_mysql_core_jsonl(&pool, created_at_unix_secs).await
-            } else {
-                export_mysql_jsonl(&pool, domains, created_at_unix_secs).await
-            }
-        }
         #[cfg(feature = "postgres")]
         DatabaseDriver::Postgres => {
             let pool =
-                crate::driver::postgres::PostgresPoolFactory::new(database.to_postgres_config()?)?
+                aether_data_postgres::PostgresPoolFactory::new(database.to_postgres_config()?)?
                     .connect_lazy()?;
             if domains.is_empty() {
                 export_postgres_core_jsonl(&pool, created_at_unix_secs).await
@@ -871,10 +801,6 @@ pub async fn export_database_jsonl(
         #[cfg(not(feature = "sqlite"))]
         DatabaseDriver::Sqlite => Err(DataLayerError::InvalidInput(
             "SQLite driver is not enabled for aether-data".to_string(),
-        )),
-        #[cfg(not(feature = "mysql"))]
-        DatabaseDriver::Mysql => Err(DataLayerError::InvalidInput(
-            "MySQL driver is not enabled for aether-data".to_string(),
         )),
         #[cfg(not(feature = "postgres"))]
         DatabaseDriver::Postgres => Err(DataLayerError::InvalidInput(
@@ -890,28 +816,19 @@ pub async fn import_database_jsonl(
     match database.driver {
         #[cfg(feature = "sqlite")]
         DatabaseDriver::Sqlite => {
-            let pool = crate::driver::sqlite::SqlitePoolFactory::new(database)?.connect_lazy()?;
+            let pool = aether_data_sqlite::SqlitePoolFactory::new(database)?.connect_lazy()?;
             import_sqlite_jsonl(&pool, input).await
-        }
-        #[cfg(feature = "mysql")]
-        DatabaseDriver::Mysql => {
-            let pool = crate::driver::mysql::MysqlPoolFactory::new(database)?.connect_lazy()?;
-            import_mysql_jsonl(&pool, input).await
         }
         #[cfg(feature = "postgres")]
         DatabaseDriver::Postgres => {
             let pool =
-                crate::driver::postgres::PostgresPoolFactory::new(database.to_postgres_config()?)?
+                aether_data_postgres::PostgresPoolFactory::new(database.to_postgres_config()?)?
                     .connect_lazy()?;
             import_postgres_jsonl(&pool, input).await
         }
         #[cfg(not(feature = "sqlite"))]
         DatabaseDriver::Sqlite => Err(DataLayerError::InvalidInput(
             "SQLite driver is not enabled for aether-data".to_string(),
-        )),
-        #[cfg(not(feature = "mysql"))]
-        DatabaseDriver::Mysql => Err(DataLayerError::InvalidInput(
-            "MySQL driver is not enabled for aether-data".to_string(),
         )),
         #[cfg(not(feature = "postgres"))]
         DatabaseDriver::Postgres => Err(DataLayerError::InvalidInput(
@@ -988,9 +905,9 @@ async fn copy_postgres_to_sqlite_from_target_schema(
     target.pool.max_connections = 1;
 
     let postgres_pool =
-        crate::driver::postgres::PostgresPoolFactory::new(source.to_postgres_config()?)?
+        aether_data_postgres::PostgresPoolFactory::new(source.to_postgres_config()?)?
             .connect_lazy()?;
-    let sqlite_pool = crate::driver::sqlite::SqlitePoolFactory::new(target)?.connect_lazy()?;
+    let sqlite_pool = aether_data_sqlite::SqlitePoolFactory::new(target)?.connect_lazy()?;
     let mut postgres_tx = postgres_pool.begin().await.map_sql_err()?;
     sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         .execute(&mut *postgres_tx)
@@ -1090,7 +1007,7 @@ async fn ensure_no_nonempty_source_tables_outside_target_schema(
 #[cfg(all(feature = "postgres", feature = "sqlite"))]
 async fn build_postgres_sqlite_copy_table_plan(
     postgres_tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    sqlite_pool: &crate::driver::sqlite::SqlitePool,
+    sqlite_pool: &aether_data_sqlite::SqlitePool,
     table_name: &str,
     options: DataCopyOptions,
 ) -> Result<SchemaCopyTable, DataLayerError> {
@@ -1334,7 +1251,7 @@ ORDER BY table_name
 
 #[cfg(all(feature = "postgres", feature = "sqlite"))]
 async fn load_sqlite_copy_table_names(
-    pool: &crate::driver::sqlite::SqlitePool,
+    pool: &aether_data_sqlite::SqlitePool,
 ) -> Result<BTreeSet<String>, DataLayerError> {
     let rows = sqlx::query(
         r#"
@@ -1361,7 +1278,7 @@ ORDER BY name
 
 #[cfg(all(feature = "postgres", feature = "sqlite"))]
 async fn load_sqlite_copy_columns(
-    pool: &crate::driver::sqlite::SqlitePool,
+    pool: &aether_data_sqlite::SqlitePool,
     table_name: &str,
 ) -> Result<Vec<SqliteCopyColumn>, DataLayerError> {
     let table_sql = sqlite_quote_identifier(table_name)?;
@@ -1687,7 +1604,7 @@ pub(super) fn postgres_quote_identifier(identifier: &str) -> Result<String, Data
     Ok(format!(r#""{identifier}""#))
 }
 
-#[cfg(any(feature = "mysql", feature = "sqlite"))]
+#[cfg(feature = "sqlite")]
 fn filter_import_payload(
     driver_name: &str,
     table_name: &str,

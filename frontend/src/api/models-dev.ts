@@ -73,14 +73,6 @@ export interface ModelsDevProvider {
 
 export type ModelsDevData = Record<string, ModelsDevProvider>
 
-export interface ExternalModelsAccessConfig {
-  proxy_node_id: string | null
-}
-
-export interface ExternalModelsAccessConfigUpdate extends ExternalModelsAccessConfig {
-  cache_cleared: boolean
-}
-
 // 扁平化的模型列表项（用于搜索和选择）
 export interface ModelsDevModelItem {
   providerId: string
@@ -171,29 +163,6 @@ export async function getModelsDevData(): Promise<ModelsDevData> {
   }
 
   return data
-}
-
-/**
- * 获取 models.dev 目录的出站访问配置。
- */
-export async function getExternalModelsAccessConfig(): Promise<ExternalModelsAccessConfig> {
-  const response = await api.get<ExternalModelsAccessConfig>('/api/admin/models/external/config')
-  return response.data
-}
-
-/**
- * 更新 models.dev 目录的代理节点。null 表示直连。
- * 后端会清理共享目录缓存；前端同时清理内存和 localStorage 缓存。
- */
-export async function updateExternalModelsAccessConfig(
-  proxyNodeId: string | null,
-): Promise<ExternalModelsAccessConfigUpdate> {
-  const response = await api.put<ExternalModelsAccessConfigUpdate>(
-    '/api/admin/models/external/config',
-    { proxy_node_id: proxyNodeId },
-  )
-  clearModelsDevCache()
-  return response.data
 }
 
 // 模型列表缓存（避免重复转换）

@@ -12,8 +12,6 @@ mod model_provider_families;
 mod observability_families;
 #[path = "admin/operations_families.rs"]
 mod operations_families;
-#[path = "admin/provider_ops_routes.rs"]
-mod provider_ops_routes;
 #[path = "admin/routing_families.rs"]
 mod routing_families;
 #[path = "admin/system_families.rs"]
@@ -24,7 +22,6 @@ use endpoints_families::classify_admin_endpoints_family_route;
 use model_provider_families::classify_admin_model_provider_family_route;
 use observability_families::classify_admin_observability_family_route;
 use operations_families::classify_admin_operations_family_route;
-use provider_ops_routes::classify_admin_provider_ops_routes;
 use routing_families::classify_admin_routing_family_route;
 use system_families::classify_admin_system_family_route;
 
@@ -52,9 +49,7 @@ pub(super) fn classify_admin_route(
             "admin:providers",
             false,
         ))
-    } else if let Some(route) =
-        classify_admin_basic_family_route(method, normalized_path, normalized_path_no_trailing)
-    {
+    } else if let Some(route) = classify_admin_basic_family_route(method, normalized_path) {
         Some(route)
     } else if let Some(route) = classify_admin_observability_family_route(
         method,
@@ -62,9 +57,7 @@ pub(super) fn classify_admin_route(
         normalized_path_no_trailing,
     ) {
         Some(route)
-    } else if let Some(route) =
-        classify_admin_operations_family_route(method, normalized_path, normalized_path_no_trailing)
-    {
+    } else if let Some(route) = classify_admin_operations_family_route(method, normalized_path) {
         Some(route)
     } else if let Some(route) =
         classify_admin_system_family_route(method, normalized_path, normalized_path_no_trailing)
@@ -73,8 +66,6 @@ pub(super) fn classify_admin_route(
     } else if let Some(route) =
         classify_admin_routing_family_route(method, normalized_path_no_trailing)
     {
-        Some(route)
-    } else if let Some(route) = classify_admin_provider_ops_routes(method, normalized_path) {
         Some(route)
     } else if let Some(route) = classify_admin_model_provider_family_route(method, normalized_path)
     {

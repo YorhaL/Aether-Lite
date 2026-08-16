@@ -215,13 +215,6 @@
         </div>
 
         <div
-          v-if="inviteCode"
-          class="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground"
-        >
-          {{ inviteCodeText }}
-        </div>
-
-        <div
           v-if="privacyPolicyEnabled"
           class="rounded-lg border border-border bg-muted/30 p-3"
         >
@@ -349,8 +342,6 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<Emits>()
 
-const INVITE_CODE_STORAGE_KEY = 'aether_invite_code'
-
 interface Props {
   open?: boolean
   requireEmailVerification?: boolean
@@ -384,7 +375,6 @@ const registerUi = computed(() => ({
   confirmPassword: t('auth.register.confirmPassword'),
   confirmPasswordPlaceholder: t('auth.register.confirmPasswordPlaceholder'),
   passwordMismatch: t('auth.register.passwordMismatch'),
-  inviteCode: (code: string) => t('auth.register.inviteCode', { code }),
   privacyPrefix: t('auth.register.privacyPrefix'),
   privacyTitle: t('site.privacy.title'),
   openInNewWindow: t('auth.register.openInNewWindow'),
@@ -395,7 +385,6 @@ const registerUi = computed(() => ({
   cancel: t('common.cancel'),
 }))
 
-const inviteCodeText = computed(() => inviteCode.value ? registerUi.value.inviteCode(inviteCode.value) : '')
 const privacyVersionText = computed(() => t('site.privacy.currentVersion', { version: privacyPolicyVersion.value }))
 
 // Form nonce for password fields (prevent autofill)
@@ -529,7 +518,6 @@ const handleTurnstileError = (message: string) => {
   showError(message, t('auth.register.turnstile'))
 }
 
-const inviteCode = ref<string | null>(null)
 const privacyAccepted = ref(false)
 const privacyDialogOpen = ref(false)
 const privacyPolicyEnabled = computed(() => !!props.privacyPolicy?.enabled)
@@ -543,17 +531,6 @@ const renderedPrivacyPolicy = computed(() => {
   const rawHtml = marked(policy.content) as string
   return sanitizeMarkdown(rawHtml)
 })
-
-function loadInviteCode(): string | null {
-  if (typeof window === 'undefined') return null
-  const fromQuery = new URLSearchParams(window.location.search).get('invite')
-  const normalized = (fromQuery || localStorage.getItem(INVITE_CODE_STORAGE_KEY) || '')
-    .trim()
-    .toUpperCase()
-  if (!normalized) return null
-  localStorage.setItem(INVITE_CODE_STORAGE_KEY, normalized)
-  return normalized
-}
 
 // Send code cooldown timer
 const canSendCode = computed(() => {
@@ -755,7 +732,6 @@ const resetForm = () => {
   isSendingCode.value = false
   codeSentAt.value = null
   cooldownSeconds.value = 0
-  inviteCode.value = loadInviteCode()
   privacyAccepted.value = false
   privacyDialogOpen.value = false
 
@@ -901,9 +877,6 @@ const handleSubmit = async () => {
     }
     if (turnstileRequired.value && currentTurnstileAction.value === 'register') {
       registerData.turnstile_token = turnstileToken.value
-    }
-    if (inviteCode.value) {
-      registerData.invite_code = inviteCode.value
     }
     if (privacyPolicyEnabled.value) {
       registerData.privacy_policy_accepted = privacyAccepted.value

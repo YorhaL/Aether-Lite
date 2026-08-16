@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use sqlx::{sqlite::SqliteRow, QueryBuilder, Row, Sqlite};
+use sqlx::{sqlite::SqliteRow, QueryBuilder, Row, Sqlite, Transaction};
 
 use aether_data_contracts::repository::auth::{
     AuthApiKeyExportSummary, AuthApiKeyLookupKey, AuthApiKeyReadRepository,
@@ -31,7 +31,8 @@ SELECT
   api_keys.is_locked AS api_key_is_locked,
   api_keys.is_standalone AS api_key_is_standalone,
   api_keys.rate_limit AS api_key_rate_limit,
-  api_keys.daily_usage_limit_usd AS api_key_daily_usage_limit_usd,
+  (SELECT daily_usage_limit_usd FROM lite_api_key_daily_usage_limits AS lite_limits
+   WHERE lite_limits.api_key_id = api_keys.id) AS api_key_daily_usage_limit_usd,
   api_keys.concurrent_limit AS api_key_concurrent_limit,
   api_keys.expires_at AS api_key_expires_at_unix_secs,
   api_keys.allowed_providers AS api_key_allowed_providers,
@@ -54,7 +55,8 @@ SELECT
   api_keys.allowed_models,
   api_keys.ip_rules,
   api_keys.rate_limit,
-  api_keys.daily_usage_limit_usd,
+  (SELECT daily_usage_limit_usd FROM lite_api_key_daily_usage_limits AS lite_limits
+   WHERE lite_limits.api_key_id = api_keys.id) AS daily_usage_limit_usd,
   api_keys.concurrent_limit,
   api_keys.force_capabilities,
   api_keys.feature_settings,
@@ -113,17 +115,17 @@ impl SqliteAuthApiKeyReadRepository {
         record: CreateApiKeyInsertRecord,
     ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
         let now = current_unix_secs();
+        let mut tx = self.pool.begin().await.map_sql_err()?;
         sqlx::query(
             r#"
 INSERT INTO api_keys (
   id, user_id, key_hash, key_encrypted, name, allowed_providers,
-  allowed_api_formats, allowed_models, ip_rules, rate_limit, daily_usage_limit_usd,
-  concurrent_limit,
+  allowed_api_formats, allowed_models, ip_rules, rate_limit, concurrent_limit,
   force_capabilities, feature_settings, is_active, expires_at, auto_delete_on_expiry,
   total_requests, total_tokens, total_cost_usd, is_standalone,
   created_at, updated_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 "#,
         )
         .bind(&record.api_key_id)
@@ -148,7 +150,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "api_keys.ip_rules",
         )?)
         .bind(record.rate_limit)
-        .bind(record.daily_usage_limit_usd)
         .bind(record.concurrent_limit)
         .bind(optional_json_to_string(
             &record.force_capabilities,
@@ -169,10 +170,16 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         .bind(record.is_standalone)
         .bind(now as i64)
         .bind(now as i64)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_sql_err()?;
-
+        set_sqlite_api_key_daily_usage_limit(
+            &mut tx,
+            &record.api_key_id,
+            record.daily_usage_limit_usd,
+        )
+        .await?;
+        tx.commit().await.map_sql_err()?;
         self.reload_export_by_id(&record.api_key_id).await
     }
 }
@@ -480,12 +487,12 @@ WHERE id = ?
         record: UpdateUserApiKeyBasicRecord,
     ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
         let now = current_unix_secs() as i64;
-        sqlx::query(
+        let mut tx = self.pool.begin().await.map_sql_err()?;
+        let result = sqlx::query(
             r#"
 UPDATE api_keys
 SET name = COALESCE(?, name),
     rate_limit = COALESCE(?, rate_limit),
-    daily_usage_limit_usd = CASE WHEN ? THEN ? ELSE daily_usage_limit_usd END,
     concurrent_limit = COALESCE(?, concurrent_limit),
     ip_rules = CASE WHEN ? THEN ? ELSE ip_rules END,
     updated_at = ?
@@ -496,8 +503,6 @@ WHERE id = ?
         )
         .bind(record.name.as_deref())
         .bind(record.rate_limit)
-        .bind(record.daily_usage_limit_present)
-        .bind(record.daily_usage_limit_usd)
         .bind(record.concurrent_limit)
         .bind(record.ip_rules.is_some())
         .bind(json_string_from_nested_string_list(
@@ -507,9 +512,21 @@ WHERE id = ?
         .bind(now)
         .bind(&record.api_key_id)
         .bind(&record.user_id)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_sql_err()?;
+        if result.rows_affected() > 0 && record.daily_usage_limit_present {
+            set_sqlite_api_key_daily_usage_limit(
+                &mut tx,
+                &record.api_key_id,
+                record.daily_usage_limit_usd,
+            )
+            .await?;
+        }
+        tx.commit().await.map_sql_err()?;
+        if result.rows_affected() == 0 {
+            return Ok(None);
+        }
         self.reload_export_by_id(&record.api_key_id).await
     }
 
@@ -518,12 +535,12 @@ WHERE id = ?
         record: UpdateStandaloneApiKeyBasicRecord,
     ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
         let now = current_unix_secs() as i64;
-        sqlx::query(
+        let mut tx = self.pool.begin().await.map_sql_err()?;
+        let result = sqlx::query(
             r#"
 UPDATE api_keys
 SET name = COALESCE(?, name),
     rate_limit = CASE WHEN ? THEN ? ELSE rate_limit END,
-    daily_usage_limit_usd = CASE WHEN ? THEN ? ELSE daily_usage_limit_usd END,
     concurrent_limit = CASE WHEN ? THEN ? ELSE concurrent_limit END,
     allowed_providers = CASE WHEN ? THEN ? ELSE allowed_providers END,
     allowed_api_formats = CASE WHEN ? THEN ? ELSE allowed_api_formats END,
@@ -539,8 +556,6 @@ WHERE id = ?
         .bind(record.name.as_deref())
         .bind(record.rate_limit_present)
         .bind(record.rate_limit)
-        .bind(record.daily_usage_limit_present)
-        .bind(record.daily_usage_limit_usd)
         .bind(record.concurrent_limit_present)
         .bind(record.concurrent_limit)
         .bind(record.allowed_providers.is_some())
@@ -572,9 +587,21 @@ WHERE id = ?
         .bind(record.auto_delete_on_expiry)
         .bind(now)
         .bind(&record.api_key_id)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_sql_err()?;
+        if result.rows_affected() > 0 && record.daily_usage_limit_present {
+            set_sqlite_api_key_daily_usage_limit(
+                &mut tx,
+                &record.api_key_id,
+                record.daily_usage_limit_usd,
+            )
+            .await?;
+        }
+        tx.commit().await.map_sql_err()?;
+        if result.rows_affected() == 0 {
+            return Ok(None);
+        }
         self.reload_export_by_id(&record.api_key_id).await
     }
 
@@ -802,6 +829,7 @@ impl SqliteAuthApiKeyReadRepository {
         user_id: Option<&str>,
         is_standalone: bool,
     ) -> Result<bool, DataLayerError> {
+        let mut tx = self.pool.begin().await.map_sql_err()?;
         let mut builder = QueryBuilder::<Sqlite>::new("DELETE FROM api_keys WHERE id = ");
         builder
             .push_bind(api_key_id)
@@ -812,12 +840,49 @@ impl SqliteAuthApiKeyReadRepository {
         }
         let rows_affected = builder
             .build()
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_sql_err()?
             .rows_affected();
+        if rows_affected > 0 {
+            sqlx::query("DELETE FROM lite_api_key_daily_usage_limits WHERE api_key_id = ?")
+                .bind(api_key_id)
+                .execute(&mut *tx)
+                .await
+                .map_sql_err()?;
+        }
+        tx.commit().await.map_sql_err()?;
         Ok(rows_affected > 0)
     }
+}
+
+async fn set_sqlite_api_key_daily_usage_limit(
+    tx: &mut Transaction<'_, Sqlite>,
+    api_key_id: &str,
+    daily_usage_limit_usd: Option<f64>,
+) -> Result<(), DataLayerError> {
+    if let Some(limit) = daily_usage_limit_usd {
+        sqlx::query(
+            r#"
+INSERT INTO lite_api_key_daily_usage_limits (api_key_id, daily_usage_limit_usd)
+VALUES (?, ?)
+ON CONFLICT(api_key_id) DO UPDATE
+SET daily_usage_limit_usd = excluded.daily_usage_limit_usd
+"#,
+        )
+        .bind(api_key_id)
+        .bind(limit)
+        .execute(&mut **tx)
+        .await
+        .map_sql_err()?;
+    } else {
+        sqlx::query("DELETE FROM lite_api_key_daily_usage_limits WHERE api_key_id = ?")
+            .bind(api_key_id)
+            .execute(&mut **tx)
+            .await
+            .map_sql_err()?;
+    }
+    Ok(())
 }
 
 fn push_in_clause<'args>(
@@ -1077,6 +1142,7 @@ mod tests {
         run_migrations(&pool)
             .await
             .expect("sqlite migrations should run");
+        run_lite_migrations(&pool).await;
         seed_auth_api_key_rows(&pool).await;
 
         let repository = SqliteAuthApiKeyReadRepository::new(pool);
@@ -1149,6 +1215,7 @@ mod tests {
         run_migrations(&pool)
             .await
             .expect("sqlite migrations should run");
+        run_lite_migrations(&pool).await;
         seed_auth_user(&pool).await;
 
         let repository = SqliteAuthApiKeyReadRepository::new(pool);
@@ -1347,6 +1414,21 @@ mod tests {
             .delete_user_api_key("user-1", "key-created-user")
             .await
             .expect("user key should delete"));
+        let remaining_lite_limits: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM lite_api_key_daily_usage_limits")
+                .fetch_one(&repository.pool)
+                .await
+                .expect("Lite API key limits should be inspectable");
+        assert_eq!(remaining_lite_limits, 0);
+    }
+
+    async fn run_lite_migrations(pool: &sqlx::SqlitePool) {
+        sqlx::raw_sql(include_str!(
+            "../../../runtime/migrations/lite/sqlite/20260803000000_daily_usage_limits.sql"
+        ))
+        .execute(pool)
+        .await
+        .expect("Lite SQLite migrations should run");
     }
 
     async fn seed_auth_api_key_rows(pool: &sqlx::SqlitePool) {

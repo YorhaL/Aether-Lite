@@ -60,7 +60,7 @@ pub(super) async fn maybe_build_local_oauth_response(
         Some("unbind") if request_context.request_method == http::Method::DELETE => {
             Some(handle_oauth_unbind(state, request_context, headers).await)
         }
-        _ => Some(super::build_unhandled_public_support_response(
+        _ => Some(super::build_public_support_route_not_found_response(
             request_context,
         )),
     }

@@ -1,5 +1,4 @@
 mod mutations;
-mod quota;
 mod reads;
 
 use crate::handlers::admin::request::{AdminAppState, AdminRequestContext};
@@ -19,10 +18,6 @@ pub(crate) async fn maybe_build_local_admin_endpoints_keys_response(
     }
 
     if let Some(response) = mutations::maybe_handle(state, request_context, request_body).await? {
-        return Ok(Some(response));
-    }
-
-    if let Some(response) = quota::maybe_handle(state, request_context, request_body).await? {
         return Ok(Some(response));
     }
 

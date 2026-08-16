@@ -1,4 +1,4 @@
-use crate::handlers::public::support::build_unhandled_public_support_response;
+use crate::handlers::public::support::build_public_support_route_not_found_response;
 use axum::{body::Body, http, response::Response};
 
 use super::{
@@ -15,12 +15,12 @@ use super::{
     handle_users_me_management_token_update, handle_users_me_management_tokens_list,
     handle_users_me_model_capabilities_get, handle_users_me_model_capabilities_put,
     handle_users_me_password_patch, handle_users_me_preferences_get,
-    handle_users_me_preferences_put, handle_users_me_providers_get, handle_users_me_referral_get,
-    handle_users_me_sessions_get, handle_users_me_update_session, handle_users_me_usage_active_get,
-    handle_users_me_usage_get, handle_users_me_usage_heatmap_get,
-    handle_users_me_usage_interval_timeline_get, users_me_api_key_capabilities_path_matches,
-    users_me_api_key_detail_path_matches, users_me_api_key_install_sessions_path_matches,
-    users_me_api_key_providers_path_matches, users_me_management_token_detail_path_matches,
+    handle_users_me_preferences_put, handle_users_me_providers_get, handle_users_me_sessions_get,
+    handle_users_me_update_session, handle_users_me_usage_active_get, handle_users_me_usage_get,
+    handle_users_me_usage_heatmap_get, handle_users_me_usage_interval_timeline_get,
+    users_me_api_key_capabilities_path_matches, users_me_api_key_detail_path_matches,
+    users_me_api_key_install_sessions_path_matches, users_me_api_key_providers_path_matches,
+    users_me_management_token_detail_path_matches,
     users_me_management_token_regenerate_path_matches,
     users_me_management_token_toggle_path_matches, users_me_management_tokens_root,
     users_me_session_detail_path_matches, AppState, GatewayPublicRequestContext,
@@ -212,9 +212,6 @@ pub(crate) async fn maybe_build_local_users_me_response(
         Some("preferences") if request_context.request_path == "/api/users/me/preferences" => {
             Some(handle_users_me_preferences_get(state, request_context, headers).await)
         }
-        Some("referral") if request_context.request_path == "/api/users/me/referral" => {
-            Some(handle_users_me_referral_get(state, request_context, headers).await)
-        }
         Some("available_models")
             if request_context.request_path == "/api/users/me/available-models" =>
         {
@@ -249,6 +246,8 @@ pub(crate) async fn maybe_build_local_users_me_response(
                     .await,
             )
         }
-        _ => Some(build_unhandled_public_support_response(request_context)),
+        _ => Some(build_public_support_route_not_found_response(
+            request_context,
+        )),
     }
 }

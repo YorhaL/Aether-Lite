@@ -1,23 +1,17 @@
-use crate::handlers::admin::provider::oauth::provisioning::rotate_codex_credential_generation;
 use crate::handlers::admin::provider::shared::payloads::AdminProviderKeyUpdatePatch;
 use crate::handlers::admin::provider::write::normalize::{
-    normalize_allow_auth_channel_mismatch_formats, normalize_api_format_json_object_keys,
-    normalize_api_format_list, normalize_auth_type, normalize_auth_type_by_format,
+    normalize_api_format_json_object_keys, normalize_api_format_list, normalize_auth_type,
     normalize_max_probe_interval_minutes, normalize_rate_multipliers,
-    reconcile_allow_auth_channel_mismatch_formats, validate_vertex_api_formats,
 };
 use crate::handlers::admin::request::AdminAppState;
 use crate::handlers::admin::shared::{
-    decrypt_catalog_secret_with_fallbacks, encrypt_catalog_secret_with_fallbacks, json_string_list,
-    normalize_json_object, normalize_string_list, parse_catalog_auth_config_json,
+    decrypt_catalog_secret_with_fallbacks, encrypt_catalog_secret_with_fallbacks,
+    normalize_json_object, normalize_string_list,
 };
 use crate::handlers::shared::normalize_optional_api_key_concurrent_limit;
-use crate::provider_key_auth::provider_key_is_oauth_managed;
 use aether_data_contracts::repository::provider_catalog::{
-    ProviderCatalogKeyAdminCasUpdate, ProviderCatalogKeyOAuthCredentialFence,
     StoredProviderCatalogKey, StoredProviderCatalogProvider,
 };
-use aether_provider_transport::provider_types::provider_type_is_fixed;
 use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -60,155 +54,43 @@ pub(crate) fn build_admin_update_provider_key_record_with_existing_keys(
         .map(|value| normalize_auth_type(Some(value)))
         .transpose()?
         .unwrap_or_else(|| current_auth_type.clone());
-    let auth_type_switch = payload
-        .auth_type
-        .as_deref()
-        .is_some_and(|_| target_auth_type != current_auth_type);
-    let managed_fixed_oauth_key = provider_type_is_fixed(&provider.provider_type)
-        && (provider_key_is_oauth_managed(existing, &provider.provider_type)
-            || target_auth_type.eq_ignore_ascii_case("oauth"));
-
     let api_key_present = fields.contains("api_key");
     let api_key_value = payload
         .api_key
         .as_deref()
         .map(str::trim)
         .map(ToOwned::to_owned);
-    let auth_config_present = fields.contains("auth_config");
-    let auth_config = normalize_json_object(payload.auth_config, "auth_config")?;
-    let auth_config_object = auth_config
-        .as_ref()
-        .and_then(serde_json::Value::as_object)
-        .cloned();
-
-    if auth_config
-        .as_ref()
-        .is_some_and(aether_provider_transport::is_codex_agent_identity_auth_config_value)
+    if let Some(api_key) = api_key_value
+        .as_deref()
+        .filter(|value| !value.is_empty() && *value != "__placeholder__")
     {
-        return Err(
-            "Agent Identity 凭据必须通过专属创建或导入接口管理，不能通过通用 Key 接口写入"
-                .to_string(),
-        );
-    }
-
-    match target_auth_type.as_str() {
-        "api_key" | "bearer" => {
-            if let Some(api_key) = api_key_value
-                .as_deref()
-                .filter(|value| !value.is_empty() && *value != "__placeholder__")
-            {
-                for existing_key in existing_keys
-                    .iter()
-                    .filter(|key| key.id != existing.id && raw_secret_auth_type(&key.auth_type))
-                {
-                    let Some(decrypted) =
-                        existing_key
-                            .encrypted_api_key
-                            .as_deref()
-                            .and_then(|ciphertext| {
-                                decrypt_catalog_secret_with_fallbacks(
-                                    state.encryption_key(),
-                                    ciphertext,
-                                )
-                            })
-                    else {
-                        continue;
-                    };
-                    if decrypted != "__placeholder__" && decrypted == api_key {
-                        return Err(format!(
-                            "该 API Key 已存在于当前 Provider 中（名称: {}）",
-                            existing_key.name
-                        ));
-                    }
-                }
-                updated.encrypted_api_key = Some(
-                    encrypt_catalog_secret_with_fallbacks(state, api_key)
-                        .ok_or_else(|| "gateway 未配置 provider key 加密密钥".to_string())?,
-                );
-            } else if api_key_present {
-                updated.encrypted_api_key = None;
-            }
-            updated.encrypted_auth_config = None;
-        }
-        "service_account" => {
-            if auth_type_switch && auth_config_object.is_none() {
-                return Err(
-                    "切换到 Service Account 认证模式时，必须提供 Service Account JSON".to_string(),
-                );
-            }
-            if api_key_present
-                && !matches!(
-                    api_key_value.as_deref(),
-                    None | Some("") | Some("__placeholder__")
-                )
-            {
-                return Err("Service Account 认证模式下不允许直接填写 api_key".to_string());
-            }
-            if auth_type_switch || api_key_present {
-                updated.encrypted_api_key = None;
-            }
-            if let Some(client_email) = auth_config_object
-                .as_ref()
-                .and_then(|config| config.get("client_email"))
-                .and_then(serde_json::Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-            {
-                for existing_key in existing_keys.iter().filter(|key| {
-                    key.id != existing.id
-                        && matches!(
-                            key.auth_type.trim().to_ascii_lowercase().as_str(),
-                            "service_account" | "vertex_ai"
-                        )
-                }) {
-                    let Some(existing_config) = parse_catalog_auth_config_json(state, existing_key)
-                    else {
-                        continue;
-                    };
-                    let Some(existing_email) = existing_config
-                        .get("client_email")
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::trim)
-                        .filter(|value| !value.is_empty())
-                    else {
-                        continue;
-                    };
-                    if existing_email == client_email {
-                        return Err(format!(
-                            "该 Service Account ({client_email}) 已存在于当前 Provider 中（名称: {}）",
-                            existing_key.name
-                        ));
-                    }
-                }
-            }
-            if auth_config_present {
-                updated.encrypted_auth_config = auth_config
-                    .as_ref()
-                    .map(serde_json::to_string)
-                    .transpose()
-                    .map_err(|err| err.to_string())?
-                    .map(|plaintext| {
-                        encrypt_catalog_secret_with_fallbacks(state, &plaintext)
-                            .ok_or_else(|| "gateway 未配置 provider key 加密密钥".to_string())
+        for existing_key in existing_keys
+            .iter()
+            .filter(|key| key.id != existing.id && raw_secret_auth_type(&key.auth_type))
+        {
+            let Some(decrypted) =
+                existing_key
+                    .encrypted_api_key
+                    .as_deref()
+                    .and_then(|ciphertext| {
+                        decrypt_catalog_secret_with_fallbacks(state.encryption_key(), ciphertext)
                     })
-                    .transpose()?;
+            else {
+                continue;
+            };
+            if decrypted != "__placeholder__" && decrypted == api_key {
+                return Err(format!(
+                    "该 API Key 已存在于当前 Provider 中（名称: {}）",
+                    existing_key.name
+                ));
             }
         }
-        "oauth" => {
-            if api_key_present
-                && !matches!(
-                    api_key_value.as_deref(),
-                    None | Some("") | Some("__placeholder__")
-                )
-            {
-                return Err("OAuth 认证模式下不允许直接填写 api_key".to_string());
-            }
-            if auth_type_switch {
-                updated.encrypted_api_key = None;
-                updated.encrypted_auth_config = None;
-            }
-        }
-        _ => {}
+        updated.encrypted_api_key = Some(
+            encrypt_catalog_secret_with_fallbacks(state, api_key)
+                .ok_or_else(|| "gateway 未配置 provider key 加密密钥".to_string())?,
+        );
+    } else if api_key_present {
+        updated.encrypted_api_key = None;
     }
 
     if fields.contains("api_formats") {
@@ -216,63 +98,7 @@ pub(crate) fn build_admin_update_provider_key_record_with_existing_keys(
             normalize_string_list(payload.api_formats)
                 .ok_or_else(|| "api_formats 为必填字段".to_string())?,
         );
-        if managed_fixed_oauth_key {
-            updated.api_formats = None;
-            updated.auth_type_by_format = None;
-        } else {
-            validate_vertex_api_formats(&provider.provider_type, &target_auth_type, &api_formats)?;
-            updated.api_formats = Some(json!(api_formats));
-        }
-    } else if payload.auth_type.is_some() {
-        if managed_fixed_oauth_key {
-            updated.api_formats = None;
-        } else {
-            let api_formats =
-                normalize_api_format_list(json_string_list(existing.api_formats.as_ref()));
-            validate_vertex_api_formats(&provider.provider_type, &target_auth_type, &api_formats)?;
-        }
-    }
-
-    let effective_api_formats =
-        normalize_api_format_list(json_string_list(updated.api_formats.as_ref()));
-    if matches!(target_auth_type.as_str(), "api_key" | "bearer") {
-        if fields.contains("auth_type_by_format") {
-            updated.auth_type_by_format = normalize_auth_type_by_format(
-                payload.auth_type_by_format,
-                "auth_type_by_format",
-                &effective_api_formats,
-            )?;
-        } else if fields.contains("api_formats") {
-            updated.auth_type_by_format = normalize_auth_type_by_format(
-                updated.auth_type_by_format.clone(),
-                "auth_type_by_format",
-                &effective_api_formats,
-            )?;
-        }
-    } else {
-        updated.auth_type_by_format = None;
-    }
-    if fields.contains("allow_auth_channel_mismatch_formats") {
-        updated.allow_auth_channel_mismatch_formats =
-            normalize_allow_auth_channel_mismatch_formats(
-                payload.allow_auth_channel_mismatch_formats,
-                "allow_auth_channel_mismatch_formats",
-                &effective_api_formats,
-            )?;
-    } else if fields.contains("api_formats") && !managed_fixed_oauth_key {
-        let existing = updated
-            .allow_auth_channel_mismatch_formats
-            .as_ref()
-            .and_then(serde_json::Value::as_array)
-            .map(|items| {
-                items
-                    .iter()
-                    .filter_map(serde_json::Value::as_str)
-                    .map(ToOwned::to_owned)
-                    .collect::<Vec<_>>()
-            });
-        updated.allow_auth_channel_mismatch_formats =
-            reconcile_allow_auth_channel_mismatch_formats(existing, &effective_api_formats);
+        updated.api_formats = Some(json!(api_formats));
     }
 
     updated.auth_type = target_auth_type;
@@ -347,35 +173,13 @@ pub(crate) fn build_admin_update_provider_key_record_with_existing_keys(
         updated.model_exclude_patterns =
             normalize_string_list(payload.model_exclude_patterns).map(|value| json!(value));
     }
-    if fields.contains("proxy") {
-        updated.proxy = normalize_json_object(payload.proxy, "proxy")?;
-    }
     if fields.contains("fingerprint") {
         updated.fingerprint = normalize_json_object(payload.fingerprint, "fingerprint")?;
     }
-    if auth_config_present && !auth_type_switch && !raw_secret_auth_type(&updated.auth_type) {
-        updated.encrypted_auth_config = auth_config
-            .as_ref()
-            .map(serde_json::to_string)
-            .transpose()
-            .map_err(|err| err.to_string())?
-            .map(|plaintext| {
-                encrypt_catalog_secret_with_fallbacks(state, &plaintext)
-                    .ok_or_else(|| "gateway 未配置 provider key 加密密钥".to_string())
-            })
-            .transpose()?;
-    }
-
     updated.updated_at_unix_secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .ok()
         .map(|duration| duration.as_secs());
-    let credential_identity_changed = !updated.auth_type.eq_ignore_ascii_case(&existing.auth_type)
-        || updated.encrypted_api_key != existing.encrypted_api_key
-        || updated.encrypted_auth_config != existing.encrypted_auth_config;
-    if credential_identity_changed {
-        rotate_codex_credential_generation(&mut updated, &provider.provider_type);
-    }
     Ok(updated)
 }
 
@@ -388,49 +192,6 @@ pub(crate) fn admin_provider_key_update_requires_immediate_model_fetch(
     let locked_models_changed = existing.locked_models != updated.locked_models;
     updated.auto_fetch_models
         && (!existing.auto_fetch_models || filters_changed || locked_models_changed)
-}
-
-pub(crate) fn build_provider_catalog_key_admin_cas_update(
-    existing: &StoredProviderCatalogKey,
-    updated: StoredProviderCatalogKey,
-    provider_type: &str,
-) -> ProviderCatalogKeyAdminCasUpdate {
-    let previous_generation = existing
-        .upstream_metadata
-        .as_ref()
-        .and_then(|metadata| metadata.pointer("/codex/credential_generation"))
-        .and_then(serde_json::Value::as_str);
-    let next_generation = updated
-        .upstream_metadata
-        .as_ref()
-        .and_then(|metadata| metadata.pointer("/codex/credential_generation"))
-        .and_then(serde_json::Value::as_str);
-    let credential_changed = existing.auth_type != updated.auth_type
-        || existing.encrypted_api_key != updated.encrypted_api_key
-        || existing.encrypted_auth_config != updated.encrypted_auth_config;
-    let codex_rotation = provider_type
-        .trim()
-        .eq_ignore_ascii_case("codex")
-        .then(|| next_generation.filter(|next| Some(*next) != previous_generation))
-        .flatten()
-        .map(|generation| {
-            json!({
-                aether_admin::provider::quota::CODEX_CREDENTIAL_GENERATION_KEY: generation,
-            })
-        });
-
-    ProviderCatalogKeyAdminCasUpdate {
-        expected_encrypted_auth_config: existing.encrypted_auth_config.clone(),
-        expected_credential: ProviderCatalogKeyOAuthCredentialFence {
-            encrypted_api_key: existing.encrypted_api_key.clone(),
-            auth_type: existing.auth_type.clone(),
-            provider_id: existing.provider_id.clone(),
-            provider_type: provider_type.to_string(),
-        },
-        key: updated,
-        codex_rotation,
-        reset_oauth_runtime: credential_changed,
-    }
 }
 
 fn raw_secret_auth_type(value: &str) -> bool {

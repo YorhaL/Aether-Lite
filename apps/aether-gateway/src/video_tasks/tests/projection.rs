@@ -3,12 +3,12 @@ use serde_json::{json, Value};
 
 use super::{
     GeminiVideoTaskSeed, LocalVideoTaskContentAction, LocalVideoTaskSnapshot, LocalVideoTaskStatus,
-    OpenAiVideoTaskSeed, VideoTaskService, VideoTaskTruthSourceMode,
+    OpenAiVideoTaskSeed, VideoTaskService,
 };
 
 #[test]
-fn rust_authoritative_service_projects_openai_status_into_local_read_response() {
-    let service = VideoTaskService::new(VideoTaskTruthSourceMode::RustAuthoritative);
+fn video_task_service_projects_openai_status_into_local_read_response() {
+    let service = VideoTaskService::new();
     service.record_snapshot(LocalVideoTaskSnapshot::OpenAi(OpenAiVideoTaskSeed {
         local_task_id: "task-local-123".to_string(),
         upstream_task_id: "ext-video-task-123".to_string(),
@@ -84,8 +84,8 @@ fn rust_authoritative_service_projects_openai_status_into_local_read_response() 
 }
 
 #[test]
-fn rust_authoritative_service_builds_openai_content_stream_plan_from_direct_video_url() {
-    let service = VideoTaskService::new(VideoTaskTruthSourceMode::RustAuthoritative);
+fn video_task_service_builds_openai_content_stream_plan_from_direct_video_url() {
+    let service = VideoTaskService::new();
     service.record_snapshot(LocalVideoTaskSnapshot::OpenAi(OpenAiVideoTaskSeed {
         local_task_id: "task-local-123".to_string(),
         upstream_task_id: "ext-video-task-123".to_string(),
@@ -128,8 +128,8 @@ fn rust_authoritative_service_builds_openai_content_stream_plan_from_direct_vide
 }
 
 #[test]
-fn rust_authoritative_service_returns_processing_content_response_for_pending_openai_task() {
-    let service = VideoTaskService::new(VideoTaskTruthSourceMode::RustAuthoritative);
+fn video_task_service_returns_processing_content_response_for_pending_openai_task() {
+    let service = VideoTaskService::new();
     service.record_snapshot(LocalVideoTaskSnapshot::OpenAi(OpenAiVideoTaskSeed {
         local_task_id: "task-local-123".to_string(),
         upstream_task_id: "ext-video-task-123".to_string(),
@@ -175,8 +175,8 @@ fn rust_authoritative_service_returns_processing_content_response_for_pending_op
 }
 
 #[test]
-fn rust_authoritative_service_projects_gemini_status_into_local_read_response() {
-    let service = VideoTaskService::new(VideoTaskTruthSourceMode::RustAuthoritative);
+fn video_task_service_projects_gemini_status_into_local_read_response() {
+    let service = VideoTaskService::new();
     service.record_snapshot(LocalVideoTaskSnapshot::Gemini(GeminiVideoTaskSeed {
         local_short_id: "localshort123".to_string(),
         upstream_operation_name: "operations/ext-video-123".to_string(),

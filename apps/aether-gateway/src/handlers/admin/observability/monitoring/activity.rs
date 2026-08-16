@@ -189,7 +189,6 @@ pub(super) async fn build_admin_monitoring_system_status_response(
             .await?,
     )
     .unwrap_or(usize::MAX);
-    let tunnel = state.tunnel.stats();
     let usage_counter_snapshot = state
         .read_cached_usage_counter_health()
         .await
@@ -208,9 +207,6 @@ pub(super) async fn build_admin_monitoring_system_status_response(
         today_requests,
         today_tokens,
         today_cost,
-        tunnel.proxy_connections,
-        tunnel.nodes,
-        tunnel.active_streams,
         INTERNAL_GATEWAY_PATH_PREFIXES,
         recent_errors,
         usage_counter,

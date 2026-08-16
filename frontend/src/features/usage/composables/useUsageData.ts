@@ -652,7 +652,6 @@ export function useUsageData(options: UseUsageDataOptions) {
         client_is_stream: clientIsStream,
         api_format: record.api_format || existing.api_format,
         endpoint_api_format: record.endpoint_api_format || existing.endpoint_api_format,
-        has_format_conversion: record.has_format_conversion ?? existing.has_format_conversion,
         has_fallback: existing.has_fallback === true || record.has_fallback === true,
         has_retry: existing.has_retry === true || record.has_retry === true,
         api_key_name: record.api_key_name || existing.api_key_name,

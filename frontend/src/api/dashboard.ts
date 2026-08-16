@@ -206,7 +206,6 @@ export interface RequestDetail {
   provider: string
   api_format?: string
   endpoint_api_format?: string
-  has_format_conversion?: boolean | null
   model: string
   target_model?: string | null  // 映射后的目标模型名
   requested_reasoning_effort?: string | null
@@ -297,7 +296,6 @@ export interface RequestDetail {
     billing_snapshot_schema_version?: string
     billing_snapshot_status?: string
     rate_multiplier?: number
-    is_free_tier?: boolean
     input_price_per_1m?: number
     output_price_per_1m?: number
     cache_creation_price_per_1m?: number

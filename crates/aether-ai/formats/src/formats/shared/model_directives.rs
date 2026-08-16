@@ -295,21 +295,6 @@ pub fn model_directive_base_model(model: &str) -> Option<String> {
     parse_model_directive(model).map(|directive| directive.base_model)
 }
 
-pub(crate) fn model_directive_display_model(model: &str) -> Option<String> {
-    let model = model.trim();
-    parse_model_directive(model)?;
-    Some(model.to_string())
-}
-
-pub(crate) fn model_directive_display_model_from_report_context(
-    report_context: &Value,
-) -> Option<String> {
-    report_context
-        .get("model")
-        .and_then(Value::as_str)
-        .and_then(model_directive_display_model)
-}
-
 pub fn normalize_model_directive_model(model: &str) -> String {
     parse_model_directive(model)
         .map(|directive| directive.base_model)
@@ -683,13 +668,6 @@ pub fn reasoning_effort_supported_for_model(
         ),
         _ => false,
     }
-}
-
-pub(crate) fn openai_model_resolves_to_gpt_5_6(provider_model: &str, source_model: &str) -> bool {
-    matches!(
-        resolved_openai_model_identity(provider_model, source_model).0,
-        OpenAiModelIdentity::Gpt56 | OpenAiModelIdentity::Opaque
-    )
 }
 
 pub(crate) fn openai_model_capability_identity(provider_model: &str, source_model: &str) -> String {

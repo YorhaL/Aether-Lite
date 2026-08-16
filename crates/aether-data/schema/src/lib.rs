@@ -140,8 +140,6 @@ pub struct DriverColumnOverrides {
     #[serde(default)]
     pub postgres: Option<DriverColumnOverride>,
     #[serde(default)]
-    pub mysql: Option<DriverColumnOverride>,
-    #[serde(default)]
     pub sqlite: Option<DriverColumnOverride>,
 }
 
@@ -430,9 +428,6 @@ pub fn generate_sources_to_dir(
     write_driver_sources(output_root, "postgres", sources, |tables| {
         dialect::postgres::emit_named_schema(schema, tables)
     })?;
-    write_driver_sources(output_root, "mysql", sources, |tables| {
-        dialect::mysql::emit_named_schema(schema, tables)
-    })?;
     write_driver_sources(output_root, "sqlite", sources, |tables| {
         dialect::sqlite::emit_named_schema(schema, tables)
     })?;
@@ -448,9 +443,6 @@ pub fn check_generated_dir(
     assert_generated_root_files(output_root)?;
     check_driver_sources(output_root, "postgres", &loaded.sources, |tables| {
         dialect::postgres::emit_named_schema(&loaded.schema, tables)
-    })?;
-    check_driver_sources(output_root, "mysql", &loaded.sources, |tables| {
-        dialect::mysql::emit_named_schema(&loaded.schema, tables)
     })?;
     check_driver_sources(output_root, "sqlite", &loaded.sources, |tables| {
         dialect::sqlite::emit_named_schema(&loaded.schema, tables)
@@ -690,7 +682,6 @@ fn write_generated_readme(output_root: &Path) -> Result<(), SchemaError> {
 fn assert_generated_root_files(output_root: &Path) -> Result<(), SchemaError> {
     let expected = BTreeSet::from([
         "README.md".to_string(),
-        "mysql".to_string(),
         "postgres".to_string(),
         "sqlite".to_string(),
     ]);
@@ -774,7 +765,7 @@ fn generated_readme() -> String {
      bash crates/aether-data/runtime/schema/compose_schema.sh generate\n\
      ```\n\n\
      Runtime migrations are not loaded from this directory. The executable SQL lives under \
-     `crates/aether-data/adapters/{postgres,mysql,sqlite}/migrations`, and the Postgres bootstrap snapshot \
+     `crates/aether-data/adapters/{postgres,sqlite}/migrations`, and the Postgres bootstrap snapshot \
      is generated at build time from `crates/aether-data/runtime/schema/bootstrap/postgres` into the crate \
      build output until a generated fragment is deliberately promoted into the driver-specific \
      schema manifests.\n"
@@ -808,7 +799,7 @@ fn write_generated(path: PathBuf, contents: &str) -> Result<(), SchemaError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dialect::{mysql, postgres, sqlite};
+    use crate::dialect::{postgres, sqlite};
 
     fn announcements_schema() -> LogicalSchema {
         LogicalSchema {
@@ -879,11 +870,6 @@ mod tests {
         assert!(postgres_sql.contains(
             "CREATE INDEX IF NOT EXISTS announcements_is_active_idx ON public.announcements USING btree (is_active);"
         ));
-
-        let mysql_sql = mysql::emit_schema(&schema);
-        assert!(mysql_sql.contains("`id` VARCHAR(64) NOT NULL"));
-        assert!(mysql_sql.contains("`is_active` TINYINT(1) NOT NULL DEFAULT 1"));
-        assert!(mysql_sql.contains("KEY announcements_is_active_idx (`is_active`)"));
 
         let sqlite_sql = sqlite::emit_schema(&schema);
         assert!(sqlite_sql.contains("id TEXT PRIMARY KEY NOT NULL"));
@@ -1006,7 +992,7 @@ ALTER TABLE users ADD COLUMN ldap_dn VARCHAR(1024);
         let schema_dir = workspace.join("crates/aether-data/runtime/schema/logical");
         let mut required_sql_paths = vec![workspace
             .join("crates/aether-data/adapters/postgres/migrations/20260403000000_baseline.sql")];
-        for driver in ["mysql", "sqlite"] {
+        for driver in ["sqlite"] {
             let driver_dir =
                 workspace.join(format!("crates/aether-data/adapters/{driver}/migrations"));
             let mut paths = std::fs::read_dir(&driver_dir)

@@ -3,10 +3,8 @@ use serde_json::{Map, Value};
 use std::collections::BTreeSet;
 
 const BATCH_EDITABLE_KEY_FIELDS: &[&str] = &[
-    "allow_auth_channel_mismatch_formats",
     "allowed_models",
     "api_formats",
-    "auth_type_by_format",
     "auto_fetch_models",
     "cache_ttl_minutes",
     "capabilities",
@@ -19,7 +17,6 @@ const BATCH_EDITABLE_KEY_FIELDS: &[&str] = &[
     "model_exclude_patterns",
     "model_include_patterns",
     "note",
-    "proxy",
     "rate_multipliers",
     "rpm_limit",
 ];

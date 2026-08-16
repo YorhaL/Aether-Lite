@@ -1,13 +1,9 @@
 use std::collections::BTreeMap;
 
 use aether_ai_serving::{
-    build_ai_execution_report_context,
-    insert_provider_stream_event_api_format as insert_ai_provider_stream_event_api_format,
-    provider_stream_event_api_format_for_provider_type as ai_provider_stream_event_api_format_for_provider_type,
-    AiExecutionReportContextParts, AiRequestOrigin,
+    build_ai_execution_report_context, AiExecutionReportContextParts, AiRequestOrigin,
 };
 use aether_routing_core::ResolvedRoutingPolicy;
-use aether_runtime_state::RuntimeLockLease;
 use aether_scheduler_core::{ClientSessionAffinity, SchedulerRankingOutcome};
 use serde_json::{Map, Value};
 
@@ -19,10 +15,7 @@ use crate::ai_serving::{
 use crate::client_session_affinity::{
     client_session_affinity_report_context_value, CLIENT_SESSION_AFFINITY_REPORT_CONTEXT_FIELD,
 };
-use crate::orchestration::{
-    insert_pool_key_lease_report_context_fields, ExecutionAttemptIdentity,
-    ROUTING_POOL_POLICY_OVERRIDE_REPORT_FIELD, SCHEDULER_AFFINITY_EPOCH_REPORT_FIELD,
-};
+use crate::orchestration::{ExecutionAttemptIdentity, SCHEDULER_AFFINITY_EPOCH_REPORT_FIELD};
 use crate::scheduler::affinity::insert_scheduler_affinity_policy_report_context_field;
 
 pub(crate) struct LocalExecutionReportContextParts<'a> {
@@ -42,8 +35,6 @@ pub(crate) struct LocalExecutionReportContextParts<'a> {
     pub(crate) provider_api_format: &'a str,
     pub(crate) client_api_format: &'a str,
     pub(crate) mapped_model: Option<&'a str>,
-    pub(crate) candidate_group_id: Option<&'a str>,
-    pub(crate) pool_key_lease: Option<&'a RuntimeLockLease>,
     pub(crate) ranking: Option<&'a SchedulerRankingOutcome>,
     pub(crate) upstream_url: Option<&'a str>,
     pub(crate) header_rules: Option<&'a Value>,
@@ -62,7 +53,6 @@ pub(crate) struct LocalExecutionReportContextParts<'a> {
     pub(crate) client_requested_stream: bool,
     pub(crate) upstream_is_stream: bool,
     pub(crate) has_envelope: bool,
-    pub(crate) needs_conversion: bool,
     pub(crate) extra_fields: Map<String, Value>,
 }
 
@@ -107,17 +97,7 @@ pub(crate) fn build_local_execution_report_context(
     {
         merge_incoming_tls_fingerprint(&mut extra_fields, incoming_tls);
     }
-    insert_pool_key_lease_report_context_fields(&mut extra_fields, parts.pool_key_lease);
     insert_scheduler_affinity_policy_report_context_field(&mut extra_fields, parts.routing_policy);
-    if let Some(override_policy) = parts
-        .routing_policy
-        .and_then(|policy| policy.pool_policy_overrides.get(parts.provider_id))
-        .filter(|override_policy| !override_policy.scheduling_presets.is_empty())
-    {
-        if let Ok(value) = serde_json::to_value(override_policy) {
-            extra_fields.insert(ROUTING_POOL_POLICY_OVERRIDE_REPORT_FIELD.to_string(), value);
-        }
-    }
     if let Some(epoch) = parts.scheduler_affinity_epoch {
         extra_fields.insert(
             SCHEDULER_AFFINITY_EPOCH_REPORT_FIELD.to_string(),
@@ -140,7 +120,6 @@ pub(crate) fn build_local_execution_report_context(
         candidate_id: parts.candidate_id,
         candidate_index: parts.attempt_identity.candidate_index,
         retry_index: parts.attempt_identity.retry_index,
-        pool_key_index: parts.attempt_identity.pool_key_index,
         model: parts.model,
         provider_name: parts.provider_name,
         provider_id: parts.provider_id,
@@ -153,7 +132,6 @@ pub(crate) fn build_local_execution_report_context(
         provider_api_format: parts.provider_api_format,
         client_api_format: parts.client_api_format,
         mapped_model: parts.mapped_model,
-        candidate_group_id: parts.candidate_group_id,
         ranking: parts.ranking,
         upstream_url: parts.upstream_url,
         header_rules: parts.header_rules,
@@ -169,7 +147,6 @@ pub(crate) fn build_local_execution_report_context(
         client_requested_stream,
         upstream_is_stream: parts.upstream_is_stream,
         has_envelope: parts.has_envelope,
-        needs_conversion: parts.needs_conversion,
         extra_fields,
     })
 }
@@ -198,34 +175,6 @@ fn insert_request_path_fields(
         .or_insert_with(|| Value::String(path_and_query));
 }
 
-pub(crate) fn provider_stream_event_api_format_for_provider_type(
-    provider_type: &str,
-) -> Option<&'static str> {
-    ai_provider_stream_event_api_format_for_provider_type(provider_type)
-}
-
-pub(crate) fn insert_provider_stream_event_api_format(
-    extra_fields: &mut Map<String, Value>,
-    provider_type: &str,
-) {
-    insert_ai_provider_stream_event_api_format(extra_fields, provider_type);
-}
-
-pub(crate) fn insert_native_client_envelope_name(
-    extra_fields: &mut Map<String, Value>,
-    envelope_name: &str,
-    request_path: &str,
-) {
-    if envelope_name.eq_ignore_ascii_case("antigravity:v1internal")
-        && request_path == "/v1internal:streamGenerateContent"
-    {
-        extra_fields.insert(
-            "client_envelope_name".to_string(),
-            Value::String(envelope_name.to_string()),
-        );
-    }
-}
-
 fn merge_incoming_tls_fingerprint(extra_fields: &mut Map<String, Value>, incoming_tls: Value) {
     let entry = extra_fields
         .entry("tls_fingerprint".to_string())
@@ -242,37 +191,10 @@ mod tests {
     use aether_scheduler_core::ClientSessionAffinity;
     use serde_json::{json, Map, Value};
 
-    use super::{
-        build_local_execution_report_context, provider_stream_event_api_format_for_provider_type,
-        LocalExecutionReportContextParts,
-    };
+    use super::{build_local_execution_report_context, LocalExecutionReportContextParts};
     use crate::ai_serving::ExecutionRuntimeAuthContext;
     use crate::ai_serving::RequestOrigin;
     use crate::orchestration::ExecutionAttemptIdentity;
-
-    #[test]
-    fn codex_provider_uses_openai_responses_stream_event_format() {
-        assert_eq!(
-            provider_stream_event_api_format_for_provider_type("codex"),
-            Some("openai:responses")
-        );
-        assert_eq!(
-            provider_stream_event_api_format_for_provider_type("CODEX"),
-            Some("openai:responses")
-        );
-    }
-
-    #[test]
-    fn ordinary_providers_do_not_override_stream_event_format() {
-        assert_eq!(
-            provider_stream_event_api_format_for_provider_type("openai"),
-            None
-        );
-        assert_eq!(
-            provider_stream_event_api_format_for_provider_type("anthropic"),
-            None
-        );
-    }
 
     #[test]
     fn local_execution_report_context_records_request_origin_and_session_affinity() {
@@ -310,8 +232,6 @@ mod tests {
                 provider_api_format: "openai:chat",
                 client_api_format: "openai:chat",
                 mapped_model: None,
-                candidate_group_id: None,
-                pool_key_lease: None,
                 ranking: None,
                 upstream_url: None,
                 header_rules: None,
@@ -333,7 +253,6 @@ mod tests {
                 client_requested_stream: false,
                 upstream_is_stream: false,
                 has_envelope: false,
-                needs_conversion: false,
                 extra_fields: Map::new(),
             });
 
@@ -392,8 +311,6 @@ mod tests {
                 provider_api_format: "gemini:generate_content",
                 client_api_format: "gemini:generate_content",
                 mapped_model: None,
-                candidate_group_id: None,
-                pool_key_lease: None,
                 ranking: None,
                 upstream_url: None,
                 header_rules: None,
@@ -416,7 +333,6 @@ mod tests {
                 client_requested_stream: false,
                 upstream_is_stream: true,
                 has_envelope: false,
-                needs_conversion: false,
                 extra_fields: Map::new(),
             });
 
@@ -463,8 +379,6 @@ mod tests {
                 provider_api_format: "openai:chat",
                 client_api_format: "openai:chat",
                 mapped_model: None,
-                candidate_group_id: None,
-                pool_key_lease: None,
                 ranking: None,
                 upstream_url: None,
                 header_rules: None,
@@ -483,7 +397,6 @@ mod tests {
                 client_requested_stream: false,
                 upstream_is_stream: false,
                 has_envelope: false,
-                needs_conversion: false,
                 extra_fields: Map::new(),
             });
 

@@ -1,12 +1,7 @@
-use crate::handlers::admin::admin_provider_pool_config;
 use crate::handlers::admin::provider::shared::paths::admin_update_key_id;
 use crate::handlers::admin::provider::shared::payloads::AdminProviderKeyUpdatePatch;
-use crate::handlers::admin::provider::write::keys::{
-    admin_provider_key_update_requires_immediate_model_fetch,
-    build_provider_catalog_key_admin_cas_update,
-};
+use crate::handlers::admin::provider::write::keys::admin_provider_key_update_requires_immediate_model_fetch;
 use crate::handlers::admin::request::{AdminAppState, AdminRequestContext};
-use crate::maintenance::ensure_provider_key_pool_scores_for_keys;
 use crate::provider_key_auth::provider_key_effective_api_formats;
 use crate::{model_fetch::perform_model_fetch_for_key, GatewayError};
 use axum::{
@@ -85,19 +80,7 @@ pub(super) async fn maybe_handle(
         Ok(record) => record,
         Err(detail) => return Ok(Some(bad_request_response(detail))),
     };
-    let admin_update = build_provider_catalog_key_admin_cas_update(
-        &existing_key,
-        updated_record.clone(),
-        &provider.provider_type,
-    );
-    if !state
-        .compare_and_update_provider_catalog_key_admin_state(&admin_update)
-        .await?
-    {
-        return Ok(Some(conflict_response(
-            "Key 凭据或配置已被其他请求更新，请刷新后重试",
-        )));
-    }
+    state.update_provider_catalog_key(&updated_record).await?;
     let Some(mut updated) = state
         .read_provider_catalog_keys_by_ids(std::slice::from_ref(&key_id))
         .await?
@@ -154,38 +137,11 @@ pub(super) async fn maybe_handle(
     let endpoints = state
         .list_provider_catalog_endpoints_by_provider_ids(std::slice::from_ref(&provider.id))
         .await?;
-    if let Some(pool_config) = admin_provider_pool_config(&provider) {
-        let score_ensure_budget = (pool_config.score_fallback_scan_limit as usize).clamp(1, 50_000);
-        if let Err(err) = ensure_provider_key_pool_scores_for_keys(
-            state.as_ref(),
-            &provider,
-            &pool_config,
-            &endpoints,
-            std::slice::from_ref(&updated),
-            now_unix_secs,
-            score_ensure_budget,
-        )
-        .await
-        {
-            tracing::debug!(
-                provider_id = %provider.id,
-                key_id = %updated.id,
-                error = ?err,
-                "gateway admin provider key update: failed to seed pool score rows"
-            );
-        }
-    }
-    let api_formats =
-        provider_key_effective_api_formats(&updated, &provider.provider_type, &endpoints);
+    let api_formats = provider_key_effective_api_formats(&updated);
 
     Ok(Some(
-        Json(state.build_admin_provider_key_response(
-            &updated,
-            &provider.provider_type,
-            &api_formats,
-            now_unix_secs,
-        ))
-        .into_response(),
+        Json(state.build_admin_provider_key_response(&updated, &api_formats, now_unix_secs))
+            .into_response(),
     ))
 }
 

@@ -474,7 +474,7 @@ onMounted(async () => {
     }
 
     oauthProviders.value = providers
-    if (allowRegistration.value && (route.path === '/register' || typeof route.query.invite === 'string')) {
+    if (allowRegistration.value && route.path === '/register') {
       isOpen.value = false
       showRegisterDialog.value = true
     }

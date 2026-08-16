@@ -604,14 +604,14 @@
           </div>
         </Card>
 
-        <!-- 钱包状态 -->
+        <!-- 额度状态 -->
         <Card class="p-6">
           <h3 class="text-lg font-medium text-foreground mb-4">
-            钱包状态
+            额度状态
           </h3>
           <div class="space-y-4">
             <div class="flex justify-between text-sm">
-              <span class="text-muted-foreground">总余额</span>
+              <span class="text-muted-foreground">当前可用额度</span>
               <span class="text-foreground">
                 <template v-if="isUnlimitedBilling()">
                   无限制
@@ -622,29 +622,8 @@
               </span>
             </div>
             <div class="flex justify-between text-sm">
-              <span class="text-muted-foreground">充值余额</span>
-              <span class="text-foreground">{{ formatCurrency(profile?.billing?.recharge_balance || 0) }}</span>
-            </div>
-            <div class="flex justify-between text-sm">
-              <span class="text-muted-foreground">赠款余额</span>
-              <span class="text-foreground">{{ formatCurrency(profile?.billing?.gift_balance || 0) }}</span>
-            </div>
-            <div class="flex justify-between text-sm">
               <span class="text-muted-foreground">累计消费</span>
               <span class="text-foreground">{{ formatCurrency(profile?.billing?.total_consumed || 0) }}</span>
-            </div>
-
-            <div v-if="!isUnlimitedBilling()">
-              <div class="flex justify-between text-sm mb-1">
-                <span class="text-muted-foreground">累计消费占比</span>
-                <span class="text-foreground">{{ getBillingUsagePercentage().toFixed(1) }}%</span>
-              </div>
-              <div class="w-full bg-muted rounded-full h-2.5">
-                <div
-                  class="bg-success h-2.5 rounded-full"
-                  :style="`width: ${getBillingUsagePercentage()}%`"
-                />
-              </div>
             </div>
           </div>
         </Card>
@@ -1175,15 +1154,6 @@ async function updatePreferences() {
     log.error('更新偏好设置失败:', error)
     showError('保存设置失败')
   }
-}
-
-function getBillingUsagePercentage(): number {
-  const billing = profile.value?.billing
-  if (!billing) return 0
-  const consumed = billing.total_consumed || 0
-  const denominator = consumed + (billing.balance || 0)
-  if (denominator <= 0) return 0
-  return Math.min(100, (consumed / denominator) * 100)
 }
 
 function isUnlimitedBilling(): boolean {

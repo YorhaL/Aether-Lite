@@ -1,4 +1,4 @@
-use aether_crypto::{encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
+use aether_crypto::{encrypt_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
 use aether_data::repository::candidates::InMemoryRequestCandidateRepository;
 use aether_data::repository::gemini_file_mappings::{
     GeminiFileMappingReadRepository, InMemoryGeminiFileMappingRepository,
@@ -84,7 +84,7 @@ fn sample_admin_gemini_key(id: &str, name: &str, secret: &str) -> StoredProvider
     .expect("key should build")
     .with_transport_fields(
         Some(json!(["gemini:generate_content"])),
-        encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, secret)
+        encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, secret)
             .expect("api key should encrypt"),
         None,
         None,
@@ -252,7 +252,7 @@ async fn gateway_uploads_admin_gemini_file_locally_with_trusted_admin_principal(
         .post(format!(
             "{gateway_url}/api/admin/gemini-files/upload?key_ids=key-gemini-admin-ok,key-gemini-admin-fail"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")

@@ -51,7 +51,6 @@ pub use types::{
     LocalVideoTaskReadResponse, LocalVideoTaskRegistryMutation, LocalVideoTaskSeed,
     LocalVideoTaskSnapshot, LocalVideoTaskStatus, LocalVideoTaskSuccessPlan,
     LocalVideoTaskTransport, LocalVideoTaskTransportBridgeInput, OpenAiVideoTaskSeed,
-    VideoTaskSyncReportMode, VideoTaskTruthSourceMode, DEFAULT_VIDEO_TASK_MAX_POLL_COUNT,
-    DEFAULT_VIDEO_TASK_POLL_INTERVAL_SECONDS,
+    DEFAULT_VIDEO_TASK_MAX_POLL_COUNT, DEFAULT_VIDEO_TASK_POLL_INTERVAL_SECONDS,
 };
 pub use util::non_empty_owned;

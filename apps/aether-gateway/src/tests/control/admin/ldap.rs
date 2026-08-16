@@ -48,7 +48,7 @@ async fn gateway_handles_admin_ldap_config_locally_with_trusted_admin_principal(
 
     let response = reqwest::Client::new()
         .get(format!("{gateway_url}/api/admin/ldap/config"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -110,7 +110,7 @@ async fn gateway_updates_admin_ldap_config_locally_with_trusted_admin_principal(
     let client = reqwest::Client::new();
     let update_response = client
         .put(format!("{gateway_url}/api/admin/ldap/config"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -142,7 +142,7 @@ async fn gateway_updates_admin_ldap_config_locally_with_trusted_admin_principal(
 
     let get_response = client
         .get(format!("{gateway_url}/api/admin/ldap/config"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -197,7 +197,7 @@ async fn gateway_tests_admin_ldap_connection_locally_with_trusted_admin_principa
 
     let response = reqwest::Client::new()
         .post(format!("{gateway_url}/api/admin/ldap/test"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")

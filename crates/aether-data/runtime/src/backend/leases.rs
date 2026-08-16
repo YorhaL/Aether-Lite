@@ -3,9 +3,9 @@ use std::fmt;
 #[cfg(feature = "postgres")]
 use super::PostgresBackend;
 #[cfg(feature = "postgres")]
-use crate::driver::postgres::{PostgresLeaseRunner, PostgresLeaseRunnerConfig};
-#[cfg(feature = "postgres")]
 use crate::DataLayerError;
+#[cfg(feature = "postgres")]
+use aether_data_postgres::{PostgresLeaseRunner, PostgresLeaseRunnerConfig};
 
 #[derive(Clone, Default)]
 pub struct DataLeaseBackends {
@@ -56,7 +56,7 @@ impl DataLeaseBackends {
 mod tests {
     use super::DataLeaseBackends;
     use crate::backend::PostgresBackend;
-    use crate::driver::postgres::PostgresPoolConfig;
+    use aether_data_postgres::PostgresPoolConfig;
 
     #[tokio::test]
     async fn builds_postgres_lease_runner_from_backend() {

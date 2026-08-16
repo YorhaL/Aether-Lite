@@ -11,51 +11,26 @@ use crate::{
     extract_openai_task_id_from_path, extract_openai_task_id_from_remix_path,
     resolve_local_video_registry_mutation, FileVideoTaskStore, InMemoryVideoTaskStore,
     LocalVideoTaskContentAction, LocalVideoTaskFollowUpPlan, LocalVideoTaskProjectionTarget,
-    LocalVideoTaskReadRefreshPlan, LocalVideoTaskReadResponse, LocalVideoTaskSnapshot,
-    LocalVideoTaskSuccessPlan, VideoTaskStore, VideoTaskTruthSourceMode,
+    LocalVideoTaskReadRefreshPlan, LocalVideoTaskReadResponse, LocalVideoTaskSeed,
+    LocalVideoTaskSnapshot, LocalVideoTaskSuccessPlan, VideoTaskStore,
 };
 
 #[derive(Debug)]
 pub struct VideoTaskService {
-    truth_source_mode: VideoTaskTruthSourceMode,
     store: Arc<dyn VideoTaskStore>,
 }
 
 impl VideoTaskService {
-    pub fn new(mode: VideoTaskTruthSourceMode) -> Self {
-        Self::with_store(mode, Arc::new(InMemoryVideoTaskStore::default()))
+    pub fn new() -> Self {
+        Self::with_store(Arc::new(InMemoryVideoTaskStore::default()))
     }
 
-    pub fn with_file_store(
-        mode: VideoTaskTruthSourceMode,
-        path: impl Into<PathBuf>,
-    ) -> std::io::Result<Self> {
-        Ok(Self::with_store(
-            mode,
-            Arc::new(FileVideoTaskStore::new(path)?),
-        ))
+    pub fn with_file_store(path: impl Into<PathBuf>) -> std::io::Result<Self> {
+        Ok(Self::with_store(Arc::new(FileVideoTaskStore::new(path)?)))
     }
 
-    fn with_store(mode: VideoTaskTruthSourceMode, store: Arc<dyn VideoTaskStore>) -> Self {
-        Self {
-            truth_source_mode: mode,
-            store,
-        }
-    }
-
-    pub fn with_truth_source_mode(&self, mode: VideoTaskTruthSourceMode) -> Self {
-        Self {
-            truth_source_mode: mode,
-            store: self.store.clone(),
-        }
-    }
-
-    pub fn is_rust_authoritative(&self) -> bool {
-        self.truth_source_mode == VideoTaskTruthSourceMode::RustAuthoritative
-    }
-
-    pub fn truth_source_mode(&self) -> VideoTaskTruthSourceMode {
-        self.truth_source_mode
+    fn with_store(store: Arc<dyn VideoTaskStore>) -> Self {
+        Self { store }
     }
 
     pub fn prepare_sync_success(
@@ -65,12 +40,13 @@ impl VideoTaskService {
         report_context: &Map<String, Value>,
         plan: &ExecutionPlan,
     ) -> Option<LocalVideoTaskSuccessPlan> {
-        self.truth_source_mode.prepare_sync_success(
+        let seed = LocalVideoTaskSeed::from_sync_finalize(
             report_kind,
             provider_body,
             report_context,
             plan,
-        )
+        )?;
+        Some(LocalVideoTaskSuccessPlan { seed })
     }
 
     pub fn record_snapshot(&self, snapshot: LocalVideoTaskSnapshot) {
@@ -86,11 +62,8 @@ impl VideoTaskService {
     }
 
     pub fn apply_finalize_mutation(&self, request_path: &str, report_kind: &str) {
-        let Some(mutation) = resolve_local_video_registry_mutation(
-            self.truth_source_mode,
-            request_path,
-            report_kind,
-        ) else {
+        let Some(mutation) = resolve_local_video_registry_mutation(request_path, report_kind)
+        else {
             return;
         };
         self.store.apply_mutation(mutation);
@@ -101,9 +74,6 @@ impl VideoTaskService {
         route_family: Option<&str>,
         request_path: &str,
     ) -> Option<LocalVideoTaskReadResponse> {
-        if self.truth_source_mode != VideoTaskTruthSourceMode::RustAuthoritative {
-            return None;
-        }
         match route_family {
             Some("openai") => extract_openai_task_id_from_path(request_path)
                 .and_then(|task_id| self.store.read_openai(task_id)),
@@ -135,9 +105,6 @@ impl VideoTaskService {
         query_string: Option<&str>,
         trace_id: &str,
     ) -> Option<LocalVideoTaskContentAction> {
-        if self.truth_source_mode != VideoTaskTruthSourceMode::RustAuthoritative {
-            return None;
-        }
         let task_id = extract_openai_task_id_from_content_path(request_path)?;
         let seed = self.store.clone_openai(task_id)?;
         seed.build_content_stream_action(query_string, trace_id)
@@ -164,9 +131,6 @@ impl VideoTaskService {
         task_id: &str,
         provider_body: &Map<String, Value>,
     ) -> bool {
-        if self.truth_source_mode != VideoTaskTruthSourceMode::RustAuthoritative {
-            return false;
-        }
         self.store.project_openai(task_id, provider_body)
     }
 
@@ -175,9 +139,6 @@ impl VideoTaskService {
         short_id: &str,
         provider_body: &Map<String, Value>,
     ) -> bool {
-        if self.truth_source_mode != VideoTaskTruthSourceMode::RustAuthoritative {
-            return false;
-        }
         self.store.project_gemini(short_id, provider_body)
     }
 
@@ -187,9 +148,6 @@ impl VideoTaskService {
         request_path: &str,
         trace_id: &str,
     ) -> Option<LocalVideoTaskReadRefreshPlan> {
-        if self.truth_source_mode != VideoTaskTruthSourceMode::RustAuthoritative {
-            return None;
-        }
         match route_family {
             Some("openai") => {
                 let task_id = extract_openai_task_id_from_path(request_path)?;
@@ -220,7 +178,7 @@ impl VideoTaskService {
         limit: usize,
         trace_prefix: &str,
     ) -> Vec<LocalVideoTaskReadRefreshPlan> {
-        if self.truth_source_mode != VideoTaskTruthSourceMode::RustAuthoritative || limit == 0 {
+        if limit == 0 {
             return Vec::new();
         }
 
@@ -253,10 +211,6 @@ impl VideoTaskService {
         task: &StoredVideoTask,
         trace_id: &str,
     ) -> Option<LocalVideoTaskReadRefreshPlan> {
-        if self.truth_source_mode != VideoTaskTruthSourceMode::RustAuthoritative {
-            return None;
-        }
-
         let snapshot = LocalVideoTaskSnapshot::from_stored_task(task)?;
         match snapshot {
             LocalVideoTaskSnapshot::OpenAi(seed) => Some(LocalVideoTaskReadRefreshPlan {

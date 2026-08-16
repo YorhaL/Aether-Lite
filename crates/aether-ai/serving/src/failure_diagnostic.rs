@@ -3,7 +3,6 @@ use serde_json::{json, Value};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CandidateFailureDiagnosticKind {
     RequestBodyBuild,
-    RequestConversion,
     BodyRules,
     HeaderRules,
     UrlBuild,
@@ -15,7 +14,6 @@ impl CandidateFailureDiagnosticKind {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::RequestBodyBuild => "request_body_build",
-            Self::RequestConversion => "request_conversion",
             Self::BodyRules => "body_rules",
             Self::HeaderRules => "header_rules",
             Self::UrlBuild => "url_build",
@@ -85,17 +83,6 @@ impl CandidateFailureDiagnostic {
                 CandidateFailureDiagnosticKind::RequestBodyBuild => {
                     object.insert(
                         "request_body_build_error".to_string(),
-                        json!({
-                            "path": self.path,
-                            "message": self.message,
-                            "client_api_format": self.client_api_format,
-                            "provider_api_format": self.provider_api_format,
-                        }),
-                    );
-                }
-                CandidateFailureDiagnosticKind::RequestConversion => {
-                    object.insert(
-                        "request_conversion_error".to_string(),
                         json!({
                             "path": self.path,
                             "message": self.message,
@@ -176,21 +163,6 @@ impl CandidateFailureDiagnostic {
             CandidateFailureDiagnosticKind::RequestBodyBuild,
             "$",
             "无法构建上游请求体；请检查请求体是否为支持的 JSON object，以及该任务类型必需字段是否存在且取值受支持",
-        )
-        .formats(client_api_format, provider_api_format)
-        .source(source)
-    }
-
-    pub fn request_conversion_failed(
-        client_api_format: impl Into<String>,
-        provider_api_format: impl Into<String>,
-        source: impl Into<String>,
-        message: impl Into<String>,
-    ) -> Self {
-        Self::new(
-            CandidateFailureDiagnosticKind::RequestConversion,
-            "$",
-            message,
         )
         .formats(client_api_format, provider_api_format)
         .source(source)

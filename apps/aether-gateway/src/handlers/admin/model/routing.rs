@@ -81,13 +81,6 @@ pub(crate) async fn build_admin_global_model_routing_payload(
         .flatten()
         .and_then(|value| value.as_str().map(ToOwned::to_owned))
         .unwrap_or_else(|| "provider".to_string());
-    let keep_priority_on_conversion = state
-        .read_system_config_json_value("keep_priority_on_conversion")
-        .await
-        .ok()
-        .flatten()
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false);
     let now_unix_secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
@@ -135,13 +128,7 @@ pub(crate) async fn build_admin_global_model_routing_payload(
                 .cloned()
                 .unwrap_or_default()
                 .into_iter()
-                .filter(|key| {
-                    provider_catalog_key_supports_format(
-                        key,
-                        provider.provider_type.as_str(),
-                        &endpoint.api_format,
-                    )
-                })
+                .filter(|key| provider_catalog_key_supports_format(key, &endpoint.api_format))
                 .filter(|key| {
                     key_allowed_models_match_global_model_for_routing(
                         key.allowed_models.as_ref(),
@@ -192,7 +179,6 @@ pub(crate) async fn build_admin_global_model_routing_payload(
                         "name": key.name,
                         "masked_key": state.masked_catalog_api_key_for_provider(
                             key,
-                            &provider.provider_type,
                         ),
                         "is_active": key.is_active,
                         "is_adaptive": is_adaptive,
@@ -211,7 +197,6 @@ pub(crate) async fn build_admin_global_model_routing_payload(
                 "api_format": endpoint.api_format,
                 "base_url": endpoint.base_url,
                 "custom_path": endpoint.custom_path,
-                "format_acceptance_config": endpoint.format_acceptance_config,
                 "is_active": endpoint.is_active,
                 "keys": key_payloads,
                 "total_keys": key_payloads.len(),
@@ -229,11 +214,6 @@ pub(crate) async fn build_admin_global_model_routing_payload(
             "name": &provider.name,
             "model_id": &model.id,
             "provider_priority": provider.provider_priority,
-            "enable_format_conversion": provider.enable_format_conversion,
-            "keep_priority_on_conversion": provider.keep_priority_on_conversion,
-            "billing_type": provider.billing_type.clone(),
-            "monthly_quota_usd": provider.monthly_quota_usd,
-            "monthly_used_usd": provider.monthly_used_usd,
             "is_active": provider.is_active,
             "provider_model_name": &model.provider_model_name,
             "model_mappings": model_mappings,
@@ -244,7 +224,7 @@ pub(crate) async fn build_admin_global_model_routing_payload(
         }));
     }
 
-    // 与 Python 逻辑对齐：供前端实时匹配的白名单数据来自“全站活跃 Provider 的活跃 Key”
+    // 供前端实时匹配的白名单数据来自“全站活跃 Provider 的活跃 Key”
     // （仅保留配置了非空 allowed_models 的 Key），而不是仅当前 GlobalModel 关联 Provider。
     let active_providers = state
         .list_provider_catalog_providers(true)
@@ -257,7 +237,7 @@ pub(crate) async fn build_admin_global_model_routing_payload(
         .collect::<Vec<_>>();
     let active_provider_metadata_by_id = active_providers
         .into_iter()
-        .map(|provider| (provider.id, (provider.name, provider.provider_type)))
+        .map(|provider| (provider.id, provider.name))
         .collect::<BTreeMap<_, _>>();
     let active_keys = if active_provider_ids.is_empty() {
         Vec::new()
@@ -276,14 +256,14 @@ pub(crate) async fn build_admin_global_model_routing_payload(
         if allowed_models.is_empty() {
             continue;
         }
-        let (provider_name, provider_type) = active_provider_metadata_by_id
+        let provider_name = active_provider_metadata_by_id
             .get(&key.provider_id)
             .cloned()
             .unwrap_or_default();
         all_keys_whitelist.push(json!({
             "key_id": key.id,
             "key_name": key.name,
-            "masked_key": state.masked_catalog_api_key_for_provider(&key, &provider_type),
+            "masked_key": state.masked_catalog_api_key_for_provider(&key),
             "provider_id": key.provider_id,
             "provider_name": provider_name,
             "allowed_models": allowed_models,
@@ -324,7 +304,6 @@ pub(crate) async fn build_admin_global_model_routing_payload(
         "active_providers": active_providers,
         "scheduling_mode": scheduling_mode,
         "priority_mode": priority_mode,
-        "keep_priority_on_conversion": keep_priority_on_conversion,
         "all_keys_whitelist": all_keys_whitelist,
     }))
 }
@@ -334,7 +313,7 @@ fn key_allowed_models_match_global_model_for_routing(
     model_names: &[String],
     global_model_mappings: &[String],
 ) -> bool {
-    // 兼容 Python 预览逻辑：None/[] 视为“不限制”，在链路预览中保留该 Key。
+    // None/[] 视为“不限制”，在链路预览中保留该 Key。
     let allowed_models = json_string_list(raw_allowed_models);
     if raw_allowed_models.is_none() || allowed_models.is_empty() {
         return true;

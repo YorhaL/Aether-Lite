@@ -72,7 +72,6 @@ pub enum RoutingAction {
     SetScheduling {
         priority_mode: Option<RoutingSetPriorityMode>,
         scheduling_mode: Option<RoutingSchedulingMode>,
-        keep_priority_on_conversion: Option<bool>,
     },
     SetProviderPriority {
         provider_id: String,

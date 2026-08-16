@@ -32,11 +32,3 @@ pub(in super::super) fn build_admin_wallet_not_found_response() -> Response<Body
     )
         .into_response()
 }
-
-pub(in super::super) fn build_admin_wallet_refund_not_found_response() -> Response<Body> {
-    (
-        http::StatusCode::NOT_FOUND,
-        Json(json!({ "detail": "Refund request not found" })),
-    )
-        .into_response()
-}

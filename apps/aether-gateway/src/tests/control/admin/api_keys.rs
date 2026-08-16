@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use aether_crypto::{encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
+use aether_crypto::{encrypt_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
 use aether_data::repository::auth::{
     InMemoryAuthApiKeySnapshotRepository, StoredAuthApiKeyExportRecord, StoredAuthApiKeySnapshot,
 };
@@ -22,7 +22,7 @@ use crate::data::GatewayDataState;
 
 fn admin_request(builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
     builder
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -90,7 +90,7 @@ fn sample_standalone_export_record(
         api_key_id.to_string(),
         format!("hash-{api_key_id}"),
         Some(
-            encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, plaintext_key)
+            encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, plaintext_key)
                 .expect("key should encrypt"),
         ),
         Some(format!("key-{api_key_id}")),

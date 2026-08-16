@@ -1,5 +1,3 @@
-use std::collections::{BTreeMap, BTreeSet};
-
 use aether_ai_serving::{
     run_ai_attempt_loop, AiAttemptExecutionOutcome, AiAttemptLoopOutcome, AiAttemptLoopPort,
     AiAttemptRetryScope, AiExecutionAttempt,
@@ -14,7 +12,7 @@ use axum::body::Body;
 use axum::http::Response;
 use futures_util::StreamExt;
 use tokio::sync::OnceCell;
-use tokio::time::{timeout, Duration, Instant};
+use tokio::time::{timeout, Duration};
 use tracing::{debug, info, warn, Instrument};
 
 use crate::ai_serving::LocalExecutionAttemptSource;
@@ -28,13 +26,9 @@ use crate::execution_runtime::{
 use crate::executor::{
     build_local_execution_exhaustion, mark_deferred_upstream_response, LocalExecutionRequestOutcome,
 };
-use crate::handlers::shared::provider_pool::release_admin_provider_pool_key_lease;
-use crate::log_ids::short_request_id;
 use crate::orchestration::{
     local_execution_candidate_metadata_from_report_context,
-    local_failover_policy_from_report_context, resolve_local_failover_policy,
     resolve_local_transport_failover_analysis_for_attempt, LocalFailoverDecision,
-    LocalFailoverPolicy,
 };
 use crate::privacy::RedactionExecutionCandidateId;
 use crate::request_candidate_runtime::{
@@ -42,6 +36,7 @@ use crate::request_candidate_runtime::{
 };
 use crate::stage_metrics::observe_gateway_stage_ms;
 use crate::{AppState, GatewayError};
+use aether_gateway_frontdoor::short_request_id;
 
 const DEFAULT_STREAM_FIRST_BYTE_WATCHDOG_TIMEOUT_MS: u64 = 30_000;
 const UPSTREAM_EXECUTION_GATE_NAME: &str = "gateway_upstream_execution";
@@ -73,27 +68,27 @@ pub(crate) async fn execute_sync_plan_and_reports<T>(
 where
     T: AiExecutionAttempt + Send + Sync + 'static,
 {
-    let transfer_tracker = ProviderTransferTracker::default();
-    execute_sync_plan_and_reports_with_transfer_tracker(
+    let execution_context = CandidateExecutionContext::default();
+    execute_sync_plan_and_reports_with_execution_context(
         state,
         parts,
         trace_id,
         decision,
         plan_kind,
         plan_and_reports,
-        &transfer_tracker,
+        &execution_context,
     )
     .await
 }
 
-pub(crate) async fn execute_sync_plan_and_reports_with_transfer_tracker<T>(
+pub(crate) async fn execute_sync_plan_and_reports_with_execution_context<T>(
     state: &AppState,
     parts: &http::request::Parts,
     trace_id: &str,
     decision: &GatewayControlDecision,
     plan_kind: &str,
     plan_and_reports: Vec<T>,
-    transfer_tracker: &ProviderTransferTracker,
+    execution_context: &CandidateExecutionContext,
 ) -> Result<LocalExecutionRequestOutcome, GatewayError>
 where
     T: AiExecutionAttempt + Send + Sync + 'static,
@@ -128,7 +123,7 @@ where
             trace_id,
             decision,
             plan_kind,
-            transfer_tracker,
+            execution_context,
         };
         match run_ai_attempt_loop(&port, plan_and_reports).await? {
             AiAttemptLoopOutcome::Responded(response) => {
@@ -159,27 +154,27 @@ where
     T: AiExecutionAttempt + Send + Sync + 'static,
     S: LocalExecutionAttemptSource<T>,
 {
-    let transfer_tracker = ProviderTransferTracker::default();
-    execute_sync_attempt_source_with_transfer_tracker(
+    let execution_context = CandidateExecutionContext::default();
+    execute_sync_attempt_source_with_execution_context(
         state,
         parts,
         trace_id,
         decision,
         plan_kind,
         source,
-        &transfer_tracker,
+        &execution_context,
     )
     .await
 }
 
-pub(crate) async fn execute_sync_attempt_source_with_transfer_tracker<T, S>(
+pub(crate) async fn execute_sync_attempt_source_with_execution_context<T, S>(
     state: &AppState,
     parts: &http::request::Parts,
     trace_id: &str,
     decision: &GatewayControlDecision,
     plan_kind: &str,
     mut source: S,
-    transfer_tracker: &ProviderTransferTracker,
+    execution_context: &CandidateExecutionContext,
 ) -> Result<LocalExecutionRequestOutcome, GatewayError>
 where
     T: AiExecutionAttempt + Send + Sync + 'static,
@@ -202,7 +197,7 @@ where
             trace_id,
             decision,
             plan_kind,
-            transfer_tracker,
+            execution_context,
         };
         run_dynamic_attempt_loop(
             &port,
@@ -225,7 +220,7 @@ struct SyncAttemptLoopPort<'a> {
     trace_id: &'a str,
     decision: &'a GatewayControlDecision,
     plan_kind: &'a str,
-    transfer_tracker: &'a ProviderTransferTracker,
+    execution_context: &'a CandidateExecutionContext,
 }
 
 #[async_trait]
@@ -237,33 +232,6 @@ where
     type Exhaustion = crate::executor::LocalExecutionExhaustion;
     type Error = GatewayError;
 
-    async fn should_skip_attempt(&self, attempt: &T) -> Result<bool, Self::Error> {
-        Ok(should_skip_provider_transfer_attempt(
-            self.transfer_tracker,
-            self.trace_id,
-            self.plan_kind,
-            attempt,
-        )
-        .await)
-    }
-
-    async fn record_attempt_started(&self, attempt: &T) -> Result<(), Self::Error> {
-        record_provider_transfer_attempt_started(self.transfer_tracker, attempt).await;
-        Ok(())
-    }
-
-    async fn record_attempt_failed(&self, attempt: &T) -> Result<(), Self::Error> {
-        record_provider_transfer_attempt_failed(
-            self.state,
-            self.transfer_tracker,
-            self.trace_id,
-            self.plan_kind,
-            attempt,
-        )
-        .await;
-        Ok(())
-    }
-
     async fn execute_attempt(
         &self,
         attempt: &T,
@@ -271,7 +239,7 @@ where
         let plan = attempt.execution_plan();
         let report_context = attempt.report_context();
         let daily_usage_outcome = self
-            .transfer_tracker
+            .execution_context
             .daily_usage_outcome
             .get_or_init(|| async {
                 self.state
@@ -366,25 +334,25 @@ pub(crate) async fn execute_stream_plan_and_reports<T>(
 where
     T: AiExecutionAttempt + Send + Sync + 'static,
 {
-    let transfer_tracker = ProviderTransferTracker::default();
-    execute_stream_plan_and_reports_with_transfer_tracker(
+    let execution_context = CandidateExecutionContext::default();
+    execute_stream_plan_and_reports_with_execution_context(
         state,
         trace_id,
         decision,
         plan_kind,
         plan_and_reports,
-        &transfer_tracker,
+        &execution_context,
     )
     .await
 }
 
-pub(crate) async fn execute_stream_plan_and_reports_with_transfer_tracker<T>(
+pub(crate) async fn execute_stream_plan_and_reports_with_execution_context<T>(
     state: &AppState,
     trace_id: &str,
     decision: &GatewayControlDecision,
     plan_kind: &str,
     plan_and_reports: Vec<T>,
-    transfer_tracker: &ProviderTransferTracker,
+    execution_context: &CandidateExecutionContext,
 ) -> Result<LocalExecutionRequestOutcome, GatewayError>
 where
     T: AiExecutionAttempt + Send + Sync + 'static,
@@ -418,7 +386,7 @@ where
             trace_id,
             decision,
             plan_kind,
-            transfer_tracker,
+            execution_context,
         };
         match run_ai_attempt_loop(&port, plan_and_reports).await? {
             AiAttemptLoopOutcome::Responded(response) => {
@@ -448,25 +416,25 @@ where
     T: AiExecutionAttempt + Send + Sync + 'static,
     S: LocalExecutionAttemptSource<T>,
 {
-    let transfer_tracker = ProviderTransferTracker::default();
-    execute_stream_attempt_source_with_transfer_tracker(
+    let execution_context = CandidateExecutionContext::default();
+    execute_stream_attempt_source_with_execution_context(
         state,
         trace_id,
         decision,
         plan_kind,
         source,
-        &transfer_tracker,
+        &execution_context,
     )
     .await
 }
 
-pub(crate) async fn execute_stream_attempt_source_with_transfer_tracker<T, S>(
+pub(crate) async fn execute_stream_attempt_source_with_execution_context<T, S>(
     state: &AppState,
     trace_id: &str,
     decision: &GatewayControlDecision,
     plan_kind: &str,
     mut source: S,
-    transfer_tracker: &ProviderTransferTracker,
+    execution_context: &CandidateExecutionContext,
 ) -> Result<LocalExecutionRequestOutcome, GatewayError>
 where
     T: AiExecutionAttempt + Send + Sync + 'static,
@@ -488,7 +456,7 @@ where
             trace_id,
             decision,
             plan_kind,
-            transfer_tracker,
+            execution_context,
         };
         run_dynamic_attempt_loop(
             &port,
@@ -505,281 +473,10 @@ where
     .await
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-struct ProviderTransferLimits {
-    max_transfer_count: u64,
-    max_transfer_timeout_seconds: u64,
-}
-
-impl From<&LocalFailoverPolicy> for ProviderTransferLimits {
-    fn from(policy: &LocalFailoverPolicy) -> Self {
-        Self {
-            max_transfer_count: policy.max_transfer_count,
-            max_transfer_timeout_seconds: policy.max_transfer_timeout_seconds,
-        }
-    }
-}
-
-#[derive(Debug)]
-struct ProviderTransferState {
-    first_attempt_started_at: Instant,
-    last_key_id: String,
-    transfer_count: u64,
-    limits: Option<ProviderTransferLimits>,
-}
-
-#[derive(Debug, Default)]
-struct ProviderTransferStateTracker {
-    by_provider: BTreeMap<String, ProviderTransferState>,
-    exhausted_provider_ids: BTreeSet<String>,
-}
-
 #[derive(Clone, Debug, Default)]
-pub(crate) struct ProviderTransferTracker {
-    state: std::sync::Arc<tokio::sync::Mutex<ProviderTransferStateTracker>>,
+pub(crate) struct CandidateExecutionContext {
     daily_usage_outcome:
         std::sync::Arc<OnceCell<crate::daily_usage_limit::FrontdoorDailyUsageOutcome>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ProviderTransferLimitReached {
-    provider_id: String,
-    transfer_count: u64,
-    elapsed_ms: u64,
-    limits: ProviderTransferLimits,
-    count_reached: bool,
-    timeout_reached: bool,
-}
-
-impl ProviderTransferStateTracker {
-    fn record_attempt_started(&mut self, plan: &aether_contracts::ExecutionPlan, now: Instant) {
-        match self.by_provider.entry(plan.provider_id.clone()) {
-            std::collections::btree_map::Entry::Vacant(entry) => {
-                entry.insert(ProviderTransferState {
-                    first_attempt_started_at: now,
-                    last_key_id: plan.key_id.clone(),
-                    transfer_count: 0,
-                    limits: None,
-                });
-            }
-            std::collections::btree_map::Entry::Occupied(mut entry) => {
-                let state = entry.get_mut();
-                if state.last_key_id != plan.key_id {
-                    state.transfer_count = state.transfer_count.saturating_add(1);
-                    state.last_key_id.clone_from(&plan.key_id);
-                }
-            }
-        }
-    }
-
-    fn needs_limits(&self, provider_id: &str) -> bool {
-        self.by_provider
-            .get(provider_id)
-            .is_some_and(|state| state.limits.is_none())
-    }
-
-    fn set_limits(&mut self, provider_id: &str, limits: ProviderTransferLimits) {
-        if let Some(state) = self.by_provider.get_mut(provider_id) {
-            state.limits = Some(limits);
-        }
-    }
-
-    fn check_before_attempt(
-        &mut self,
-        plan: &aether_contracts::ExecutionPlan,
-        now: Instant,
-    ) -> Option<ProviderTransferLimitReached> {
-        if self.exhausted_provider_ids.contains(&plan.provider_id) {
-            return self.reached_snapshot(plan.provider_id.as_str(), now, false, false);
-        }
-
-        let state = self.by_provider.get(&plan.provider_id)?;
-        let limits = state.limits?;
-        let elapsed = now.saturating_duration_since(state.first_attempt_started_at);
-        let timeout_reached = limits.max_transfer_timeout_seconds > 0
-            && elapsed >= Duration::from_secs(limits.max_transfer_timeout_seconds);
-        let count_reached = state.last_key_id != plan.key_id
-            && limits.max_transfer_count > 0
-            && state.transfer_count >= limits.max_transfer_count;
-        if !count_reached && !timeout_reached {
-            return None;
-        }
-
-        let reached = self.reached_snapshot(
-            plan.provider_id.as_str(),
-            now,
-            count_reached,
-            timeout_reached,
-        )?;
-        self.exhausted_provider_ids.insert(plan.provider_id.clone());
-        Some(reached)
-    }
-
-    fn check_timeout_after_failure(
-        &mut self,
-        provider_id: &str,
-        now: Instant,
-    ) -> Option<ProviderTransferLimitReached> {
-        if self.exhausted_provider_ids.contains(provider_id) {
-            return None;
-        }
-        let state = self.by_provider.get(provider_id)?;
-        let limits = state.limits?;
-        let elapsed = now.saturating_duration_since(state.first_attempt_started_at);
-        let timeout_reached = limits.max_transfer_timeout_seconds > 0
-            && elapsed >= Duration::from_secs(limits.max_transfer_timeout_seconds);
-        if !timeout_reached {
-            return None;
-        }
-
-        let reached = self.reached_snapshot(provider_id, now, false, true)?;
-        self.exhausted_provider_ids.insert(provider_id.to_string());
-        Some(reached)
-    }
-
-    fn reached_snapshot(
-        &self,
-        provider_id: &str,
-        now: Instant,
-        count_reached: bool,
-        timeout_reached: bool,
-    ) -> Option<ProviderTransferLimitReached> {
-        let state = self.by_provider.get(provider_id)?;
-        let limits = state.limits?;
-        let elapsed = now.saturating_duration_since(state.first_attempt_started_at);
-        Some(ProviderTransferLimitReached {
-            provider_id: provider_id.to_string(),
-            transfer_count: state.transfer_count,
-            elapsed_ms: elapsed.as_millis().min(u128::from(u64::MAX)) as u64,
-            limits,
-            count_reached,
-            timeout_reached,
-        })
-    }
-}
-
-async fn load_provider_transfer_limits<Attempt>(
-    state: &AppState,
-    tracker: &mut ProviderTransferStateTracker,
-    attempt: &Attempt,
-) where
-    Attempt: AiExecutionAttempt + Send + Sync + 'static,
-{
-    let plan = attempt.execution_plan();
-    if !tracker.needs_limits(plan.provider_id.as_str()) {
-        return;
-    }
-    let owned_report_context = if attempt.report_context_ref().is_none() {
-        attempt.report_context()
-    } else {
-        None
-    };
-    let report_context = attempt
-        .report_context_ref()
-        .or(owned_report_context.as_ref());
-    let embedded_policy_has_transfer_limits = report_context
-        .and_then(serde_json::Value::as_object)
-        .and_then(|object| object.get("local_failover_policy"))
-        .and_then(serde_json::Value::as_object)
-        .is_some_and(|policy| {
-            policy.contains_key("max_transfer_count")
-                || policy.contains_key("max_transfer_timeout_seconds")
-        });
-    let policy = if embedded_policy_has_transfer_limits {
-        local_failover_policy_from_report_context(report_context).unwrap_or_default()
-    } else {
-        resolve_local_failover_policy(state, plan, report_context).await
-    };
-    tracker.set_limits(
-        plan.provider_id.as_str(),
-        ProviderTransferLimits::from(&policy),
-    );
-}
-
-async fn provider_transfer_timeout_after_failure<Attempt>(
-    state: &AppState,
-    tracker: &mut ProviderTransferStateTracker,
-    attempt: &Attempt,
-) -> Option<ProviderTransferLimitReached>
-where
-    Attempt: AiExecutionAttempt + Send + Sync + 'static,
-{
-    let plan = attempt.execution_plan();
-    load_provider_transfer_limits(state, tracker, attempt).await;
-    tracker.check_timeout_after_failure(plan.provider_id.as_str(), Instant::now())
-}
-
-fn log_provider_transfer_limit_reached(
-    trace_id: &str,
-    plan_kind: &str,
-    reached: &ProviderTransferLimitReached,
-) {
-    warn!(
-        event_name = "provider_transfer_limit_reached",
-        log_type = "event",
-        trace_id,
-        plan_kind,
-        provider_id = %reached.provider_id,
-        transfer_count = reached.transfer_count,
-        elapsed_ms = reached.elapsed_ms,
-        max_transfer_count = reached.limits.max_transfer_count,
-        max_transfer_timeout_seconds = reached.limits.max_transfer_timeout_seconds,
-        count_reached = reached.count_reached,
-        timeout_reached = reached.timeout_reached,
-        "gateway exhausted the provider transfer budget and will skip its remaining candidates"
-    );
-}
-
-async fn should_skip_provider_transfer_attempt<Attempt>(
-    tracker: &ProviderTransferTracker,
-    trace_id: &str,
-    plan_kind: &str,
-    attempt: &Attempt,
-) -> bool
-where
-    Attempt: AiExecutionAttempt + Send + Sync + 'static,
-{
-    let reached = tracker
-        .state
-        .lock()
-        .await
-        .check_before_attempt(attempt.execution_plan(), Instant::now());
-    let Some(reached) = reached else {
-        return false;
-    };
-    if reached.count_reached || reached.timeout_reached {
-        log_provider_transfer_limit_reached(trace_id, plan_kind, &reached);
-    }
-    true
-}
-
-async fn record_provider_transfer_attempt_started<Attempt>(
-    tracker: &ProviderTransferTracker,
-    attempt: &Attempt,
-) where
-    Attempt: AiExecutionAttempt + Send + Sync + 'static,
-{
-    tracker
-        .state
-        .lock()
-        .await
-        .record_attempt_started(attempt.execution_plan(), Instant::now());
-}
-
-async fn record_provider_transfer_attempt_failed<Attempt>(
-    state: &AppState,
-    tracker: &ProviderTransferTracker,
-    trace_id: &str,
-    plan_kind: &str,
-    attempt: &Attempt,
-) where
-    Attempt: AiExecutionAttempt + Send + Sync + 'static,
-{
-    let mut tracker = tracker.state.lock().await;
-    let reached = provider_transfer_timeout_after_failure(state, &mut tracker, attempt).await;
-    if let Some(reached) = reached {
-        log_provider_transfer_limit_reached(trace_id, plan_kind, &reached);
-    }
 }
 
 async fn run_dynamic_attempt_loop<Port, Source, Attempt>(
@@ -938,7 +635,7 @@ struct StreamAttemptLoopPort<'a> {
     trace_id: &'a str,
     decision: &'a GatewayControlDecision,
     plan_kind: &'a str,
-    transfer_tracker: &'a ProviderTransferTracker,
+    execution_context: &'a CandidateExecutionContext,
 }
 
 #[async_trait]
@@ -950,33 +647,6 @@ where
     type Exhaustion = crate::executor::LocalExecutionExhaustion;
     type Error = GatewayError;
 
-    async fn should_skip_attempt(&self, attempt: &T) -> Result<bool, Self::Error> {
-        Ok(should_skip_provider_transfer_attempt(
-            self.transfer_tracker,
-            self.trace_id,
-            self.plan_kind,
-            attempt,
-        )
-        .await)
-    }
-
-    async fn record_attempt_started(&self, attempt: &T) -> Result<(), Self::Error> {
-        record_provider_transfer_attempt_started(self.transfer_tracker, attempt).await;
-        Ok(())
-    }
-
-    async fn record_attempt_failed(&self, attempt: &T) -> Result<(), Self::Error> {
-        record_provider_transfer_attempt_failed(
-            self.state,
-            self.transfer_tracker,
-            self.trace_id,
-            self.plan_kind,
-            attempt,
-        )
-        .await;
-        Ok(())
-    }
-
     async fn execute_attempt(
         &self,
         attempt: &T,
@@ -984,7 +654,7 @@ where
         let plan = attempt.execution_plan();
         let report_context = attempt.report_context();
         let daily_usage_outcome = self
-            .transfer_tracker
+            .execution_context
             .daily_usage_outcome
             .get_or_init(|| async {
                 self.state
@@ -1228,20 +898,6 @@ async fn mark_unused_local_candidate(
     plan: &aether_contracts::ExecutionPlan,
     report_context: Option<&serde_json::Value>,
 ) {
-    let metadata = local_execution_candidate_metadata_from_report_context(report_context);
-    if let Some(lease) = metadata.pool_key_lease.as_ref() {
-        if let Err(err) =
-            release_admin_provider_pool_key_lease(state.runtime_state.as_ref(), lease).await
-        {
-            warn!(
-                error = ?err,
-                "gateway candidate loop: failed to release unused pool key lease"
-            );
-        }
-    }
-    if should_skip_unused_persistence_from_metadata(&metadata) {
-        return;
-    }
     record_local_request_candidate_status(
         state,
         plan,
@@ -1257,17 +913,6 @@ async fn mark_unused_local_candidate(
         },
     )
     .await;
-}
-
-fn should_skip_unused_persistence(report_context: Option<&serde_json::Value>) -> bool {
-    let metadata = local_execution_candidate_metadata_from_report_context(report_context);
-    should_skip_unused_persistence_from_metadata(&metadata)
-}
-
-fn should_skip_unused_persistence_from_metadata(
-    metadata: &crate::orchestration::LocalExecutionCandidateMetadata,
-) -> bool {
-    metadata.candidate_group_id.is_some() && metadata.pool_key_index.is_some()
 }
 
 fn resolve_stream_candidate_watchdog_timeout(
@@ -1718,9 +1363,6 @@ pub(crate) async fn mark_unused_local_candidate_items<T, FPlan, FContext>(
 {
     for item in remaining {
         let report_context = report_context(&item);
-        if should_skip_unused_persistence(report_context) {
-            continue;
-        }
         record_local_request_candidate_status(
             state,
             plan(&item),
@@ -1736,969 +1378,5 @@ pub(crate) async fn mark_unused_local_candidate_items<T, FPlan, FContext>(
             },
         )
         .await;
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::{Arc, Mutex as StdMutex};
-
-    use aether_contracts::{ExecutionPlan, ExecutionTimeouts, RequestBody};
-    use aether_data_contracts::repository::candidates::{
-        RequestCandidateStatus, UpsertRequestCandidateRecord,
-    };
-    use async_trait::async_trait;
-    use serde_json::json;
-    use tokio::sync::Mutex;
-
-    use super::*;
-
-    struct TestRequestCandidateWriter {
-        records: Mutex<Vec<UpsertRequestCandidateRecord>>,
-        upstream_gate: Option<aether_runtime::ConcurrencyGate>,
-        upstream_queue_budget: Duration,
-    }
-
-    impl Default for TestRequestCandidateWriter {
-        fn default() -> Self {
-            Self {
-                records: Mutex::new(Vec::new()),
-                upstream_gate: None,
-                upstream_queue_budget: Duration::from_millis(250),
-            }
-        }
-    }
-
-    impl TestRequestCandidateWriter {
-        fn with_upstream_gate(limit: usize, queue_budget: Duration) -> Self {
-            Self {
-                records: Mutex::new(Vec::new()),
-                upstream_gate: Some(aether_runtime::ConcurrencyGate::new(
-                    UPSTREAM_EXECUTION_GATE_NAME,
-                    limit,
-                )),
-                upstream_queue_budget: queue_budget,
-            }
-        }
-    }
-
-    #[async_trait]
-    impl RequestCandidateRuntimeWriter for TestRequestCandidateWriter {
-        fn has_request_candidate_data_writer(&self) -> bool {
-            true
-        }
-
-        async fn upsert_request_candidate(
-            &self,
-            candidate: UpsertRequestCandidateRecord,
-        ) -> Result<
-            Option<aether_data_contracts::repository::candidates::StoredRequestCandidate>,
-            GatewayError,
-        > {
-            self.records.lock().await.push(candidate);
-            Ok(None)
-        }
-    }
-
-    impl UpstreamExecutionGateProvider for TestRequestCandidateWriter {
-        fn upstream_execution_gate(&self) -> Option<&aether_runtime::ConcurrencyGate> {
-            self.upstream_gate.as_ref()
-        }
-
-        fn upstream_execution_gate_queue_budget(&self) -> Duration {
-            self.upstream_queue_budget
-        }
-    }
-
-    struct PendingAttemptSource;
-
-    #[async_trait]
-    impl LocalExecutionAttemptSource<()> for PendingAttemptSource {
-        async fn next_execution_attempt(&mut self) -> Result<Option<()>, GatewayError> {
-            std::future::pending::<()>().await;
-            Ok(None)
-        }
-
-        async fn drain_execution_attempts(&mut self) -> Result<Vec<()>, GatewayError> {
-            Ok(Vec::new())
-        }
-
-        async fn skip_credential(&mut self, _key_id: &str) -> Result<(), GatewayError> {
-            Ok(())
-        }
-
-        async fn skip_endpoint(&mut self, _endpoint_id: &str) -> Result<(), GatewayError> {
-            Ok(())
-        }
-
-        async fn skip_provider(&mut self, _provider_id: &str) -> Result<(), GatewayError> {
-            Ok(())
-        }
-    }
-
-    #[derive(Clone)]
-    struct TransferTestAttempt {
-        label: &'static str,
-        plan: ExecutionPlan,
-        report_context: serde_json::Value,
-    }
-
-    impl AiExecutionAttempt for TransferTestAttempt {
-        fn execution_plan(&self) -> &ExecutionPlan {
-            &self.plan
-        }
-
-        fn report_kind(&self) -> Option<String> {
-            None
-        }
-
-        fn report_context(&self) -> Option<serde_json::Value> {
-            Some(self.report_context.clone())
-        }
-
-        fn report_context_ref(&self) -> Option<&serde_json::Value> {
-            Some(&self.report_context)
-        }
-    }
-
-    struct TransferTestPort<'a> {
-        state: &'a AppState,
-        tracker: ProviderTransferTracker,
-        retry_scope: AiAttemptRetryScope,
-        executed: StdMutex<Vec<&'static str>>,
-        unused: StdMutex<Vec<&'static str>>,
-    }
-
-    impl<'a> TransferTestPort<'a> {
-        fn new(state: &'a AppState) -> Self {
-            Self::with_tracker(state, ProviderTransferTracker::default())
-        }
-
-        fn with_tracker(state: &'a AppState, tracker: ProviderTransferTracker) -> Self {
-            Self {
-                state,
-                tracker,
-                retry_scope: AiAttemptRetryScope::Candidate,
-                executed: StdMutex::new(Vec::new()),
-                unused: StdMutex::new(Vec::new()),
-            }
-        }
-
-        fn with_retry_scope(state: &'a AppState, retry_scope: AiAttemptRetryScope) -> Self {
-            Self {
-                state,
-                tracker: ProviderTransferTracker::default(),
-                retry_scope,
-                executed: StdMutex::new(Vec::new()),
-                unused: StdMutex::new(Vec::new()),
-            }
-        }
-    }
-
-    #[async_trait]
-    impl AiAttemptLoopPort<TransferTestAttempt> for TransferTestPort<'_> {
-        type Response = Response<Body>;
-        type Exhaustion = crate::executor::LocalExecutionExhaustion;
-        type Error = GatewayError;
-
-        async fn should_skip_attempt(
-            &self,
-            attempt: &TransferTestAttempt,
-        ) -> Result<bool, Self::Error> {
-            Ok(should_skip_provider_transfer_attempt(
-                &self.tracker,
-                "trace-transfer-test",
-                "transfer_test",
-                attempt,
-            )
-            .await)
-        }
-
-        async fn record_attempt_started(
-            &self,
-            attempt: &TransferTestAttempt,
-        ) -> Result<(), Self::Error> {
-            record_provider_transfer_attempt_started(&self.tracker, attempt).await;
-            Ok(())
-        }
-
-        async fn record_attempt_failed(
-            &self,
-            attempt: &TransferTestAttempt,
-        ) -> Result<(), Self::Error> {
-            record_provider_transfer_attempt_failed(
-                self.state,
-                &self.tracker,
-                "trace-transfer-test",
-                "transfer_test",
-                attempt,
-            )
-            .await;
-            Ok(())
-        }
-
-        async fn execute_attempt(
-            &self,
-            attempt: &TransferTestAttempt,
-        ) -> Result<AiAttemptExecutionOutcome<Self::Response>, Self::Error> {
-            self.executed.lock().unwrap().push(attempt.label);
-            Ok(if attempt.plan.provider_id == "provider-b" {
-                AiAttemptExecutionOutcome::Responded(Response::new(Body::from("ok")))
-            } else {
-                AiAttemptExecutionOutcome::retry(self.retry_scope)
-            })
-        }
-
-        async fn mark_unused_attempts(
-            &self,
-            attempts: Vec<TransferTestAttempt>,
-        ) -> Result<(), Self::Error> {
-            self.unused
-                .lock()
-                .unwrap()
-                .extend(attempts.into_iter().map(|attempt| attempt.label));
-            Ok(())
-        }
-
-        async fn build_exhaustion(
-            &self,
-            last_plan: ExecutionPlan,
-            last_report_context: Option<serde_json::Value>,
-        ) -> Result<Self::Exhaustion, Self::Error> {
-            Ok(build_local_execution_exhaustion(
-                self.state,
-                &last_plan,
-                last_report_context.as_ref(),
-            )
-            .await)
-        }
-    }
-
-    struct TransferTestAttemptSource {
-        attempts: std::collections::VecDeque<TransferTestAttempt>,
-        skipped_providers: Vec<String>,
-    }
-
-    #[async_trait]
-    impl LocalExecutionAttemptSource<TransferTestAttempt> for TransferTestAttemptSource {
-        async fn next_execution_attempt(
-            &mut self,
-        ) -> Result<Option<TransferTestAttempt>, GatewayError> {
-            Ok(self.attempts.pop_front())
-        }
-
-        async fn drain_execution_attempts(
-            &mut self,
-        ) -> Result<Vec<TransferTestAttempt>, GatewayError> {
-            Ok(self.attempts.drain(..).collect())
-        }
-
-        async fn skip_credential(&mut self, key_id: &str) -> Result<(), GatewayError> {
-            self.attempts
-                .retain(|attempt| attempt.plan.key_id != key_id);
-            Ok(())
-        }
-
-        async fn skip_endpoint(&mut self, endpoint_id: &str) -> Result<(), GatewayError> {
-            self.attempts
-                .retain(|attempt| attempt.plan.endpoint_id != endpoint_id);
-            Ok(())
-        }
-
-        async fn skip_provider(&mut self, provider_id: &str) -> Result<(), GatewayError> {
-            self.skipped_providers.push(provider_id.to_string());
-            self.attempts
-                .retain(|attempt| attempt.plan.provider_id != provider_id);
-            Ok(())
-        }
-    }
-
-    fn transfer_test_attempts() -> Vec<TransferTestAttempt> {
-        fn attempt(label: &'static str, provider_id: &str, key_id: &str) -> TransferTestAttempt {
-            let mut plan = test_plan(None);
-            plan.provider_id = provider_id.to_string();
-            plan.key_id = key_id.to_string();
-            TransferTestAttempt {
-                label,
-                plan,
-                report_context: json!({
-                    "local_failover_policy": {
-                        "max_transfer_count": 1,
-                        "max_transfer_timeout_seconds": 0
-                    }
-                }),
-            }
-        }
-
-        vec![
-            attempt("a-key1-retry0", "provider-a", "key-1"),
-            attempt("a-key2-retry0", "provider-a", "key-2"),
-            attempt("a-key2-retry1", "provider-a", "key-2"),
-            attempt("a-key3-retry0", "provider-a", "key-3"),
-            attempt("b-key1-retry0", "provider-b", "key-b"),
-        ]
-    }
-
-    #[tokio::test]
-    async fn static_loop_allows_same_key_retries_then_skips_next_transfer() {
-        let state = AppState::new().expect("state should build");
-        let port = TransferTestPort::new(&state);
-
-        let outcome = run_ai_attempt_loop(&port, transfer_test_attempts())
-            .await
-            .expect("attempt loop should succeed");
-
-        assert!(matches!(outcome, AiAttemptLoopOutcome::Responded(_)));
-        assert_eq!(
-            port.executed.lock().unwrap().as_slice(),
-            [
-                "a-key1-retry0",
-                "a-key2-retry0",
-                "a-key2-retry1",
-                "b-key1-retry0"
-            ]
-        );
-        assert_eq!(port.unused.lock().unwrap().as_slice(), ["a-key3-retry0"]);
-    }
-
-    #[test]
-    fn cloned_tracker_shares_request_daily_usage_cache() {
-        let tracker = ProviderTransferTracker::default();
-        let cloned = tracker.clone();
-        let other_request = ProviderTransferTracker::default();
-
-        assert!(Arc::ptr_eq(
-            &tracker.daily_usage_outcome,
-            &cloned.daily_usage_outcome
-        ));
-        assert!(!Arc::ptr_eq(
-            &tracker.daily_usage_outcome,
-            &other_request.daily_usage_outcome
-        ));
-    }
-
-    #[tokio::test]
-    async fn cloned_tracker_preserves_transfer_budget_across_candidate_loops() {
-        let state = AppState::new().expect("state should build");
-        let tracker = ProviderTransferTracker::default();
-        let mut attempts = transfer_test_attempts();
-        let provider_b = attempts.pop().expect("provider-b attempt should exist");
-        let key_3 = attempts.pop().expect("third provider-a key should exist");
-        let first_port = TransferTestPort::with_tracker(&state, tracker.clone());
-
-        let first_outcome = run_ai_attempt_loop(&first_port, attempts)
-            .await
-            .expect("first candidate loop should exhaust");
-        assert!(matches!(first_outcome, AiAttemptLoopOutcome::Exhausted(_)));
-
-        let second_port = TransferTestPort::with_tracker(&state, tracker);
-        let second_outcome = run_ai_attempt_loop(&second_port, vec![key_3, provider_b])
-            .await
-            .expect("second candidate loop should succeed");
-
-        assert!(matches!(second_outcome, AiAttemptLoopOutcome::Responded(_)));
-        assert_eq!(
-            second_port.executed.lock().unwrap().as_slice(),
-            ["b-key1-retry0"]
-        );
-        assert_eq!(
-            second_port.unused.lock().unwrap().as_slice(),
-            ["a-key3-retry0"]
-        );
-    }
-
-    #[tokio::test]
-    async fn dynamic_loop_skips_exhausted_provider_at_candidate_source() {
-        let state = AppState::new().expect("state should build");
-        let port = TransferTestPort::new(&state);
-        let mut source = TransferTestAttemptSource {
-            attempts: transfer_test_attempts().into(),
-            skipped_providers: Vec::new(),
-        };
-
-        let outcome = run_dynamic_attempt_loop(
-            &port,
-            &mut source,
-            "trace-transfer-test",
-            "transfer_test",
-            Duration::from_secs(1),
-        )
-        .await
-        .expect("dynamic attempt loop should succeed");
-
-        assert!(matches!(
-            outcome,
-            LocalExecutionRequestOutcome::Responded(_)
-        ));
-        assert_eq!(
-            port.executed.lock().unwrap().as_slice(),
-            [
-                "a-key1-retry0",
-                "a-key2-retry0",
-                "a-key2-retry1",
-                "b-key1-retry0"
-            ]
-        );
-        assert_eq!(source.skipped_providers, ["provider-a"]);
-    }
-
-    #[tokio::test]
-    async fn dynamic_loop_applies_provider_scoped_retry_to_candidate_source() {
-        let state = AppState::new().expect("state should build");
-        let port = TransferTestPort::with_retry_scope(&state, AiAttemptRetryScope::Provider);
-        let mut source = TransferTestAttemptSource {
-            attempts: transfer_test_attempts().into(),
-            skipped_providers: Vec::new(),
-        };
-
-        let outcome = run_dynamic_attempt_loop(
-            &port,
-            &mut source,
-            "trace-provider-scope-test",
-            "provider_scope_test",
-            Duration::from_secs(1),
-        )
-        .await
-        .expect("dynamic attempt loop should succeed");
-
-        assert!(matches!(
-            outcome,
-            LocalExecutionRequestOutcome::Responded(_)
-        ));
-        assert_eq!(
-            port.executed.lock().unwrap().as_slice(),
-            ["a-key1-retry0", "b-key1-retry0"]
-        );
-        assert_eq!(source.skipped_providers, ["provider-a"]);
-    }
-
-    #[test]
-    fn transfer_timeout_is_checked_at_candidate_boundary_and_zero_disables_limits() {
-        let started_at = Instant::now();
-        let mut first = test_plan(None);
-        first.provider_id = "provider-a".to_string();
-        first.key_id = "key-1".to_string();
-
-        let mut timeout_tracker = ProviderTransferStateTracker::default();
-        timeout_tracker.record_attempt_started(&first, started_at);
-        timeout_tracker.set_limits(
-            "provider-a",
-            ProviderTransferLimits {
-                max_transfer_count: 0,
-                max_transfer_timeout_seconds: 60,
-            },
-        );
-        assert!(timeout_tracker
-            .check_before_attempt(&first, started_at + Duration::from_secs(59))
-            .is_none());
-        let reached = timeout_tracker
-            .check_before_attempt(&first, started_at + Duration::from_secs(60))
-            .expect("timeout should stop the provider at the next candidate boundary");
-        assert!(reached.timeout_reached);
-        assert!(!reached.count_reached);
-
-        let mut count_tracker = ProviderTransferStateTracker::default();
-        count_tracker.record_attempt_started(&first, started_at);
-        count_tracker.set_limits(
-            "provider-a",
-            ProviderTransferLimits {
-                max_transfer_count: 1,
-                max_transfer_timeout_seconds: 60,
-            },
-        );
-        let mut second_key = first.clone();
-        second_key.key_id = "key-2".to_string();
-        assert!(count_tracker
-            .check_before_attempt(&second_key, started_at + Duration::from_secs(1))
-            .is_none());
-        count_tracker.record_attempt_started(&second_key, started_at + Duration::from_secs(1));
-        let mut third_key = first.clone();
-        third_key.key_id = "key-3".to_string();
-        let reached = count_tracker
-            .check_before_attempt(&third_key, started_at + Duration::from_secs(2))
-            .expect("count should stop the provider before another key transfer");
-        assert!(reached.count_reached);
-        assert!(!reached.timeout_reached);
-
-        let mut unlimited_tracker = ProviderTransferStateTracker::default();
-        unlimited_tracker.record_attempt_started(&first, started_at);
-        unlimited_tracker.set_limits("provider-a", ProviderTransferLimits::default());
-        let mut another_key = first.clone();
-        another_key.key_id = "key-2".to_string();
-        assert!(unlimited_tracker
-            .check_before_attempt(&another_key, started_at + Duration::from_secs(3_600))
-            .is_none());
-    }
-
-    #[test]
-    fn transfer_count_and_timeout_limits_use_or_semantics() {
-        let started_at = Instant::now();
-        let mut first = test_plan(None);
-        first.provider_id = "provider-a".to_string();
-        first.key_id = "key-1".to_string();
-        let limits = ProviderTransferLimits {
-            max_transfer_count: 1,
-            max_transfer_timeout_seconds: 60,
-        };
-
-        let mut count_first = ProviderTransferStateTracker::default();
-        count_first.record_attempt_started(&first, started_at);
-        count_first.set_limits("provider-a", limits);
-        let mut second = first.clone();
-        second.key_id = "key-2".to_string();
-        count_first.record_attempt_started(&second, started_at + Duration::from_secs(1));
-        let mut third = first.clone();
-        third.key_id = "key-3".to_string();
-        let count_reached = count_first
-            .check_before_attempt(&third, started_at + Duration::from_secs(2))
-            .expect("count should independently exhaust a provider before timeout");
-        assert!(count_reached.count_reached);
-        assert!(!count_reached.timeout_reached);
-
-        let mut timeout_first = ProviderTransferStateTracker::default();
-        timeout_first.record_attempt_started(&first, started_at);
-        timeout_first.set_limits("provider-a", limits);
-        let timeout_reached = timeout_first
-            .check_before_attempt(&first, started_at + Duration::from_secs(60))
-            .expect("timeout should independently exhaust a provider before count");
-        assert!(!timeout_reached.count_reached);
-        assert!(timeout_reached.timeout_reached);
-    }
-
-    fn test_plan(timeouts: Option<ExecutionTimeouts>) -> ExecutionPlan {
-        ExecutionPlan {
-            request_id: "req_watchdog".to_string(),
-            candidate_id: Some("cand_watchdog".to_string()),
-            provider_name: Some("provider".to_string()),
-            provider_id: "provider_id".to_string(),
-            endpoint_id: "endpoint_id".to_string(),
-            key_id: "key_id".to_string(),
-            method: "POST".to_string(),
-            url: "https://example.com/v1/messages".to_string(),
-            headers: Default::default(),
-            content_type: Some("application/json".to_string()),
-            content_encoding: None,
-            body: RequestBody::from_json(json!({"model": "gpt-test"})),
-            stream: true,
-            client_api_format: "claude:messages".to_string(),
-            provider_api_format: "openai:chat".to_string(),
-            model_name: Some("gpt-test".to_string()),
-            proxy: None,
-            transport_profile: None,
-            timeouts,
-        }
-    }
-
-    #[tokio::test]
-    async fn next_execution_attempt_times_out_instead_of_waiting_forever() {
-        let mut source = PendingAttemptSource;
-
-        let err = next_execution_attempt_with_timeout(
-            &mut source,
-            "trace-planning-timeout",
-            "openai_responses_sync",
-            Duration::from_millis(5),
-        )
-        .await
-        .expect_err("pending candidate planning should time out");
-
-        match err {
-            GatewayError::LocalExecutionPlanningTimeout {
-                trace_id,
-                phase,
-                timeout_ms,
-            } => {
-                assert_eq!(trace_id, "trace-planning-timeout");
-                assert_eq!(phase, "next_execution_attempt");
-                assert_eq!(timeout_ms, 5);
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
-    }
-
-    fn test_report_context() -> serde_json::Value {
-        json!({
-            "request_id": "req_watchdog",
-            "candidate_id": "cand_watchdog",
-            "candidate_index": 2,
-            "retry_index": 0,
-            "user_id": "user_1",
-            "api_key_id": "api_key_1",
-        })
-    }
-
-    #[test]
-    fn stream_candidate_watchdog_prefers_first_byte_timeout() {
-        let report_context = json!({"upstream_is_stream": true});
-        let timeout = resolve_stream_candidate_watchdog_timeout(
-            &test_plan(Some(ExecutionTimeouts {
-                first_byte_ms: Some(12_345),
-                total_ms: Some(90_000),
-                ..ExecutionTimeouts::default()
-            })),
-            Some(&report_context),
-        );
-
-        assert_eq!(timeout, Duration::from_millis(12_345));
-    }
-
-    #[test]
-    fn stream_candidate_watchdog_uses_default_when_timeouts_missing() {
-        let timeout = resolve_stream_candidate_watchdog_timeout(&test_plan(None), None);
-
-        assert_eq!(
-            timeout,
-            Duration::from_millis(DEFAULT_STREAM_FIRST_BYTE_WATCHDOG_TIMEOUT_MS)
-        );
-    }
-
-    #[test]
-    fn stream_candidate_watchdog_ignores_total_timeout_for_stream_upstream() {
-        let report_context = json!({"upstream_is_stream": true});
-        let timeout = resolve_stream_candidate_watchdog_timeout(
-            &test_plan(Some(ExecutionTimeouts {
-                total_ms: Some(90_000),
-                ..ExecutionTimeouts::default()
-            })),
-            Some(&report_context),
-        );
-
-        assert_eq!(
-            timeout,
-            Duration::from_millis(DEFAULT_STREAM_FIRST_BYTE_WATCHDOG_TIMEOUT_MS)
-        );
-    }
-
-    #[test]
-    fn stream_candidate_watchdog_prefers_first_byte_timeout_when_upstream_non_stream() {
-        let report_context = json!({"upstream_is_stream": false});
-        let timeout = resolve_stream_candidate_watchdog_timeout(
-            &test_plan(Some(ExecutionTimeouts {
-                first_byte_ms: Some(12_345),
-                total_ms: Some(599_000),
-                ..ExecutionTimeouts::default()
-            })),
-            Some(&report_context),
-        );
-
-        assert_eq!(timeout, Duration::from_millis(12_345));
-    }
-
-    #[test]
-    fn stream_candidate_watchdog_ignores_total_timeout_when_upstream_non_stream() {
-        let report_context = json!({"upstream_is_stream": false});
-        let timeout = resolve_stream_candidate_watchdog_timeout(
-            &test_plan(Some(ExecutionTimeouts {
-                total_ms: Some(599_000),
-                ..ExecutionTimeouts::default()
-            })),
-            Some(&report_context),
-        );
-
-        assert_eq!(
-            timeout,
-            Duration::from_millis(DEFAULT_STREAM_FIRST_BYTE_WATCHDOG_TIMEOUT_MS)
-        );
-    }
-
-    #[test]
-    fn stream_candidate_watchdog_defaults_to_streaming_when_flag_missing() {
-        let report_context = json!({});
-        let timeout = resolve_stream_candidate_watchdog_timeout(
-            &test_plan(Some(ExecutionTimeouts {
-                first_byte_ms: Some(12_345),
-                total_ms: Some(90_000),
-                ..ExecutionTimeouts::default()
-            })),
-            Some(&report_context),
-        );
-
-        assert_eq!(timeout, Duration::from_millis(12_345));
-    }
-
-    #[test]
-    fn upstream_execution_stream_hold_mode_defaults_to_first_body() {
-        assert_eq!(
-            parse_upstream_execution_stream_hold_mode(""),
-            UpstreamExecutionStreamHoldMode::FirstBody
-        );
-        assert_eq!(
-            parse_upstream_execution_stream_hold_mode("first_body"),
-            UpstreamExecutionStreamHoldMode::FirstBody
-        );
-        assert_eq!(
-            parse_upstream_execution_stream_hold_mode("off"),
-            UpstreamExecutionStreamHoldMode::Headers
-        );
-        assert_eq!(
-            parse_upstream_execution_stream_hold_mode("response"),
-            UpstreamExecutionStreamHoldMode::Response
-        );
-    }
-
-    #[test]
-    fn unused_persistence_skips_pool_internal_candidates() {
-        assert!(should_skip_unused_persistence(Some(&json!({
-            "candidate_group_id": "pool-group",
-            "pool_key_index": 0,
-        }))));
-        assert!(should_skip_unused_persistence(Some(&json!({
-            "candidate_group_id": "pool-group",
-            "pool_key_index": 1,
-        }))));
-        assert!(!should_skip_unused_persistence(Some(&json!({
-            "candidate_group_id": "pool-group",
-        }))));
-        assert!(!should_skip_unused_persistence(Some(&json!({
-            "candidate_index": 1,
-        }))));
-    }
-
-    #[tokio::test]
-    async fn stream_candidate_watchdog_marks_failed_candidate_and_continues() {
-        let writer = Arc::new(TestRequestCandidateWriter::default());
-        let plan = test_plan(Some(ExecutionTimeouts {
-            first_byte_ms: Some(25),
-            ..ExecutionTimeouts::default()
-        }));
-        let report_context = test_report_context();
-        let writer_for_task = writer.clone();
-
-        let task = tokio::spawn(async move {
-            execute_stream_candidate_with_watchdog(
-                writer_for_task.as_ref(),
-                "trace_watchdog",
-                "claude_cli_stream",
-                &plan,
-                Some(&report_context),
-                false,
-                || {
-                    std::future::pending::<
-                        Result<AiAttemptExecutionOutcome<Response<Body>>, GatewayError>,
-                    >()
-                },
-            )
-            .await
-        });
-
-        tokio::time::sleep(Duration::from_millis(40)).await;
-        let result = task.await.expect("watchdog task should join");
-        assert!(matches!(
-            result,
-            Ok(StreamCandidateWatchdogOutcome::Executed(
-                AiAttemptExecutionOutcome::Retry {
-                    scope: AiAttemptRetryScope::Candidate,
-                    fallback_response: None,
-                }
-            ))
-        ));
-
-        let records = writer.records.lock().await;
-        assert_eq!(records.len(), 1);
-        let record = &records[0];
-        assert_eq!(record.status, RequestCandidateStatus::Failed);
-        assert_eq!(record.status_code, None);
-        assert_eq!(
-            record.error_type.as_deref(),
-            Some("local_stream_candidate_watchdog_timeout")
-        );
-        assert!(record
-            .error_message
-            .as_deref()
-            .is_some_and(|message| message == "Stream first byte timeout"));
-        assert_eq!(record.candidate_index, 2);
-    }
-
-    #[tokio::test]
-    async fn stream_candidate_watchdog_can_stop_on_transport_error() {
-        let writer = Arc::new(TestRequestCandidateWriter::default());
-        let plan = test_plan(Some(ExecutionTimeouts {
-            first_byte_ms: Some(5),
-            ..ExecutionTimeouts::default()
-        }));
-        let report_context = test_report_context();
-
-        let result = execute_stream_candidate_with_watchdog(
-            writer.as_ref(),
-            "trace_watchdog_stop",
-            "claude_cli_stream",
-            &plan,
-            Some(&report_context),
-            true,
-            || {
-                std::future::pending::<
-                    Result<AiAttemptExecutionOutcome<Response<Body>>, GatewayError>,
-                >()
-            },
-        )
-        .await;
-
-        assert!(matches!(
-            result,
-            Ok(StreamCandidateWatchdogOutcome::TransportTimeout)
-        ));
-        let records = writer.records.lock().await;
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0].status_code, None);
-        assert_eq!(
-            records[0].error_type.as_deref(),
-            Some("local_stream_candidate_watchdog_timeout")
-        );
-    }
-
-    #[tokio::test]
-    async fn stream_candidate_watchdog_does_not_cancel_started_terminalization() {
-        let writer = Arc::new(TestRequestCandidateWriter::default());
-        let plan = test_plan(Some(ExecutionTimeouts {
-            first_byte_ms: Some(5),
-            ..ExecutionTimeouts::default()
-        }));
-        let report_context = test_report_context();
-
-        let result = execute_stream_candidate_with_watchdog(
-            writer.as_ref(),
-            "trace_terminalization",
-            "claude_cli_stream",
-            &plan,
-            Some(&report_context),
-            true,
-            || async {
-                mark_stream_candidate_watchdog_terminal_started();
-                tokio::time::sleep(Duration::from_millis(20)).await;
-                Ok(AiAttemptExecutionOutcome::Responded(Response::new(
-                    Body::from("terminal response"),
-                )))
-            },
-        )
-        .await;
-
-        assert!(matches!(
-            result,
-            Ok(StreamCandidateWatchdogOutcome::Executed(
-                AiAttemptExecutionOutcome::Responded(_)
-            ))
-        ));
-        assert!(writer.records.lock().await.is_empty());
-    }
-
-    #[tokio::test]
-    async fn stream_candidate_watchdog_does_not_relabel_execution_error_as_timeout() {
-        let writer = Arc::new(TestRequestCandidateWriter::default());
-        let plan = test_plan(None);
-        let report_context = test_report_context();
-
-        let result = execute_stream_candidate_with_watchdog(
-            writer.as_ref(),
-            "trace_execution_error",
-            "claude_cli_stream",
-            &plan,
-            Some(&report_context),
-            true,
-            || async {
-                Err(GatewayError::UpstreamUnavailable {
-                    trace_id: "trace_execution_error".to_string(),
-                    message: "upstream connect failed".to_string(),
-                })
-            },
-        )
-        .await;
-
-        assert!(matches!(
-            result,
-            Err(GatewayError::UpstreamUnavailable { message, .. })
-                if message == "upstream connect failed"
-        ));
-        assert!(writer.records.lock().await.is_empty());
-    }
-
-    #[tokio::test]
-    async fn stream_candidate_upstream_execution_admission_timeout_marks_failed_and_continues() {
-        let writer = Arc::new(TestRequestCandidateWriter::with_upstream_gate(
-            1,
-            Duration::from_millis(1),
-        ));
-        let _held_permit = writer
-            .upstream_gate
-            .as_ref()
-            .expect("test gate should exist")
-            .try_acquire()
-            .expect("test gate permit should acquire");
-        let plan = test_plan(None);
-        let report_context = test_report_context();
-
-        let result = execute_stream_candidate_with_watchdog(
-            writer.as_ref(),
-            "trace_admission",
-            "claude_cli_stream",
-            &plan,
-            Some(&report_context),
-            false,
-            || async {
-                panic!("execute future should not run while upstream execution gate is saturated")
-            },
-        )
-        .await;
-
-        assert!(matches!(
-            result,
-            Ok(StreamCandidateWatchdogOutcome::Executed(
-                AiAttemptExecutionOutcome::Retry {
-                    scope: AiAttemptRetryScope::Candidate,
-                    fallback_response: None,
-                }
-            ))
-        ));
-        let records = writer.records.lock().await;
-        assert_eq!(records.len(), 1);
-        let record = &records[0];
-        assert_eq!(record.status, RequestCandidateStatus::Failed);
-        assert_eq!(
-            record.status_code,
-            Some(http::StatusCode::TOO_MANY_REQUESTS.as_u16())
-        );
-        assert_eq!(
-            record.error_type.as_deref(),
-            Some("gateway_admission_timeout")
-        );
-        assert!(record
-            .error_message
-            .as_deref()
-            .is_some_and(|message| message.contains(UPSTREAM_EXECUTION_GATE_NAME)));
-        assert_eq!(record.candidate_index, 2);
-    }
-
-    #[tokio::test]
-    async fn stream_candidate_target_admission_timeout_continues_without_duplicate_record() {
-        let writer = Arc::new(TestRequestCandidateWriter::default());
-        let plan = test_plan(None);
-        let report_context = test_report_context();
-
-        let result = execute_stream_candidate_with_watchdog(
-            writer.as_ref(),
-            "trace_target_admission",
-            "claude_cli_stream",
-            &plan,
-            Some(&report_context),
-            false,
-            || async {
-                Err(GatewayError::AdmissionTimeout {
-                    trace_id: "trace_target_admission".to_string(),
-                    gate: UPSTREAM_TARGET_GATE_NAME,
-                    queue_budget_ms: 5,
-                })
-            },
-        )
-        .await;
-
-        assert!(matches!(
-            result,
-            Ok(StreamCandidateWatchdogOutcome::Executed(
-                AiAttemptExecutionOutcome::Retry {
-                    scope: AiAttemptRetryScope::Candidate,
-                    fallback_response: None,
-                }
-            ))
-        ));
-        assert!(writer.records.lock().await.is_empty());
     }
 }

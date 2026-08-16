@@ -12,8 +12,6 @@ pub(crate) const CYBER_CONTINUE_FAILOVER_CONFIG_KEY: &str = "cyber_continue_fail
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LocalFailoverPolicy {
     pub(crate) max_retries: Option<u64>,
-    pub(crate) max_transfer_count: u64,
-    pub(crate) max_transfer_timeout_seconds: u64,
     pub(crate) stop_status_codes: BTreeSet<u16>,
     pub(crate) continue_status_codes: BTreeSet<u16>,
     pub(crate) stop_on_transport_errors: bool,
@@ -27,8 +25,6 @@ impl Default for LocalFailoverPolicy {
     fn default() -> Self {
         Self {
             max_retries: None,
-            max_transfer_count: 0,
-            max_transfer_timeout_seconds: 0,
             stop_status_codes: BTreeSet::new(),
             continue_status_codes: BTreeSet::new(),
             stop_on_transport_errors: false,
@@ -69,8 +65,6 @@ pub(crate) async fn resolve_local_failover_policy(
         key_id = %plan.key_id,
         source = "transport_snapshot",
         max_retries = ?policy.max_retries,
-        max_transfer_count = policy.max_transfer_count,
-        max_transfer_timeout_seconds = policy.max_transfer_timeout_seconds,
         stop_status_code_count = policy.stop_status_codes.len(),
         continue_status_code_count = policy.continue_status_codes.len(),
         stop_on_transport_errors = policy.stop_on_transport_errors,
@@ -96,7 +90,6 @@ pub(crate) async fn cyber_continue_failover_enabled(state: &AppState) -> bool {
 pub(crate) fn local_failover_policy_from_transport(
     transport: &GatewayProviderTransportSnapshot,
 ) -> LocalFailoverPolicy {
-    let provider_config = transport.provider.config.as_ref();
     let rules = transport
         .provider
         .config
@@ -121,14 +114,6 @@ pub(crate) fn local_failover_policy_from_transport(
 
     LocalFailoverPolicy {
         max_retries,
-        max_transfer_count: provider_config
-            .and_then(|value| value.get("max_transfer_count"))
-            .and_then(parse_u64_value)
-            .unwrap_or(0),
-        max_transfer_timeout_seconds: provider_config
-            .and_then(|value| value.get("max_transfer_timeout_seconds"))
-            .and_then(parse_u64_value)
-            .unwrap_or(0),
         retry_client_errors_by_default:
             crate::ai_serving::api_format_defaults_to_client_error_failover(
                 &transport.endpoint.api_format,
@@ -183,14 +168,6 @@ pub(crate) fn local_failover_policy_from_report_context(
 
     Some(LocalFailoverPolicy {
         max_retries: object.get("max_retries").and_then(parse_u64_value),
-        max_transfer_count: object
-            .get("max_transfer_count")
-            .and_then(parse_u64_value)
-            .unwrap_or(0),
-        max_transfer_timeout_seconds: object
-            .get("max_transfer_timeout_seconds")
-            .and_then(parse_u64_value)
-            .unwrap_or(0),
         stop_status_codes: object
             .get("stop_status_codes")
             .map(parse_status_code_list)
@@ -227,30 +204,6 @@ pub(crate) fn append_local_failover_policy_to_value(
         "local_failover_policy".to_string(),
         local_failover_policy_to_value(&local_failover_policy_from_transport(transport)),
     );
-    if transport
-        .provider
-        .provider_type
-        .trim()
-        .eq_ignore_ascii_case("codex")
-    {
-        let codex = transport
-            .key
-            .upstream_metadata
-            .as_ref()
-            .and_then(Value::as_object)
-            .and_then(|metadata| metadata.get("codex"));
-        object.insert(
-            "codex_quota_reset_generation".to_string(),
-            Value::from(aether_admin::provider::quota::codex_quota_account_reset_generation(codex)),
-        );
-        if let Some(generation) = aether_admin::provider::quota::codex_credential_generation(codex)
-        {
-            object.insert(
-                "codex_credential_generation".to_string(),
-                Value::String(generation.to_string()),
-            );
-        }
-    }
     Value::Object(object)
 }
 
@@ -266,8 +219,6 @@ fn parse_status_code_list(value: &Value) -> BTreeSet<u16> {
 fn local_failover_policy_to_value(policy: &LocalFailoverPolicy) -> Value {
     json!({
         "max_retries": policy.max_retries,
-        "max_transfer_count": policy.max_transfer_count,
-        "max_transfer_timeout_seconds": policy.max_transfer_timeout_seconds,
         "stop_status_codes": policy.stop_status_codes.iter().copied().collect::<Vec<_>>(),
         "continue_status_codes": policy.continue_status_codes.iter().copied().collect::<Vec<_>>(),
         "stop_on_transport_errors": policy.stop_on_transport_errors,
@@ -276,25 +227,6 @@ fn local_failover_policy_to_value(policy: &LocalFailoverPolicy) -> Value {
         "stop_cyber_policy_errors": policy.stop_cyber_policy_errors,
         "retry_client_errors_by_default": policy.retry_client_errors_by_default,
     })
-}
-
-pub(crate) fn codex_cyber_flag_passthrough_enabled(
-    provider_type: &str,
-    provider_config: Option<&Value>,
-) -> bool {
-    if !provider_type.trim().eq_ignore_ascii_case("codex") {
-        return false;
-    }
-    provider_config
-        .and_then(|config| config.get("codex"))
-        .and_then(Value::as_object)
-        .and_then(|codex| {
-            codex
-                .get("pass_through_cyber_flag_interrupt")
-                .or_else(|| codex.get("passthrough_cyber_flag_interrupt"))
-                .and_then(Value::as_bool)
-        })
-        .unwrap_or(true)
 }
 
 fn local_failover_regex_rule_to_value(rule: &LocalFailoverRegexRule) -> Value {
@@ -360,237 +292,4 @@ fn parse_u64_value(value: &serde_json::Value) -> Option<u64> {
     value
         .as_u64()
         .or_else(|| value.as_i64().and_then(|value| u64::try_from(value).ok()))
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::{
-        append_local_failover_policy_to_value, local_failover_policy_from_report_context,
-        local_failover_policy_from_transport, LocalFailoverPolicy, LocalFailoverRegexRule,
-    };
-    use crate::provider_transport::snapshot::{
-        GatewayProviderTransportEndpoint, GatewayProviderTransportKey,
-        GatewayProviderTransportProvider, GatewayProviderTransportSnapshot,
-    };
-
-    fn sample_transport(
-        provider_max_retries: Option<i32>,
-        endpoint_max_retries: Option<i32>,
-        provider_config: Option<serde_json::Value>,
-    ) -> GatewayProviderTransportSnapshot {
-        GatewayProviderTransportSnapshot {
-            provider: GatewayProviderTransportProvider {
-                id: "provider-1".to_string(),
-                name: "OpenAI".to_string(),
-                provider_type: "llm".to_string(),
-                website: None,
-                is_active: true,
-                keep_priority_on_conversion: false,
-                enable_format_conversion: true,
-                concurrent_limit: None,
-                max_retries: provider_max_retries,
-                proxy: None,
-                request_timeout_secs: None,
-                stream_first_byte_timeout_secs: None,
-                config: provider_config,
-            },
-            endpoint: GatewayProviderTransportEndpoint {
-                id: "endpoint-1".to_string(),
-                provider_id: "provider-1".to_string(),
-                api_format: "openai:chat".to_string(),
-                api_family: Some("openai".to_string()),
-                endpoint_kind: Some("chat".to_string()),
-                is_active: true,
-                base_url: "https://example.com".to_string(),
-                header_rules: None,
-                body_rules: None,
-                max_retries: endpoint_max_retries,
-                custom_path: None,
-                config: None,
-                format_acceptance_config: None,
-                proxy: None,
-            },
-            key: GatewayProviderTransportKey {
-                id: "key-1".to_string(),
-                provider_id: "provider-1".to_string(),
-                name: "primary".to_string(),
-                auth_type: "bearer".to_string(),
-                is_active: true,
-                api_formats: None,
-                auth_type_by_format: None,
-                allow_auth_channel_mismatch_formats: None,
-
-                allowed_models: None,
-                capabilities: None,
-                rate_multipliers: None,
-                global_priority_by_format: None,
-                expires_at_unix_secs: None,
-                proxy: None,
-                fingerprint: None,
-                upstream_metadata: None,
-                decrypted_api_key: "secret".to_string(),
-                decrypted_auth_config: None,
-            },
-        }
-    }
-
-    #[test]
-    fn append_local_failover_policy_to_value_round_trips_policy_shape() {
-        let report_context = append_local_failover_policy_to_value(
-            json!({
-                "request_id": "req-1",
-            }),
-            &sample_transport(
-                Some(5),
-                Some(4),
-                Some(json!({
-                    "max_transfer_count": 10,
-                    "max_transfer_timeout_seconds": 60,
-                    "failover_rules": {
-                        "max_retries": 2,
-                        "continue_status_codes": [429],
-                        "stop_status_codes": [400],
-                        "stop_on_transport_errors": true,
-                        "success_failover_patterns": [{"pattern": "quota", "status_codes": [200]}],
-                        "error_stop_patterns": [{"pattern": "validation", "status_codes": [422]}]
-                    }
-                })),
-            ),
-        );
-
-        assert_eq!(
-            local_failover_policy_from_report_context(Some(&report_context)),
-            Some(LocalFailoverPolicy {
-                max_retries: Some(2),
-                max_transfer_count: 10,
-                max_transfer_timeout_seconds: 60,
-                stop_status_codes: [400].into_iter().collect(),
-                continue_status_codes: [429].into_iter().collect(),
-                stop_on_transport_errors: true,
-                success_failover_patterns: vec![LocalFailoverRegexRule {
-                    pattern: "quota".to_string(),
-                    status_codes: [200].into_iter().collect(),
-                }],
-                error_stop_patterns: vec![LocalFailoverRegexRule {
-                    pattern: "validation".to_string(),
-                    status_codes: [422].into_iter().collect(),
-                }],
-                stop_cyber_policy_errors: true,
-                retry_client_errors_by_default: true,
-            })
-        );
-    }
-
-    #[test]
-    fn codex_report_context_captures_quota_and_credential_generations() {
-        let mut transport = sample_transport(None, None, None);
-        transport.provider.provider_type = "codex".to_string();
-        transport.key.upstream_metadata = Some(json!({
-            "codex": {
-                "account_quota_reset_generation": 7,
-                "credential_generation": "credential-generation-7"
-            }
-        }));
-
-        let report_context = append_local_failover_policy_to_value(json!({}), &transport);
-
-        assert_eq!(report_context["codex_quota_reset_generation"], json!(7u64));
-        assert_eq!(
-            report_context["codex_credential_generation"],
-            json!("credential-generation-7")
-        );
-    }
-
-    #[test]
-    fn transport_error_failover_defaults_to_continue_and_accepts_explicit_stop() {
-        let default_policy =
-            local_failover_policy_from_transport(&sample_transport(None, None, None));
-        assert!(!default_policy.stop_on_transport_errors);
-
-        let stop_policy = local_failover_policy_from_transport(&sample_transport(
-            None,
-            None,
-            Some(json!({
-                "failover_rules": {
-                    "stop_on_transport_errors": true,
-                }
-            })),
-        ));
-        assert!(stop_policy.stop_on_transport_errors);
-
-        let invalid_policy = local_failover_policy_from_transport(&sample_transport(
-            None,
-            None,
-            Some(json!({
-                "failover_rules": {
-                    "stop_on_transport_errors": "true",
-                }
-            })),
-        ));
-        assert!(!invalid_policy.stop_on_transport_errors);
-    }
-
-    #[test]
-    fn transfer_limits_are_read_only_from_top_level_provider_config() {
-        let top_level = local_failover_policy_from_transport(&sample_transport(
-            None,
-            None,
-            Some(json!({
-                "max_transfer_count": 3,
-                "max_transfer_timeout_seconds": 45,
-            })),
-        ));
-        assert_eq!(top_level.max_transfer_count, 3);
-        assert_eq!(top_level.max_transfer_timeout_seconds, 45);
-
-        let nested = local_failover_policy_from_transport(&sample_transport(
-            None,
-            None,
-            Some(json!({
-                "failover_rules": {
-                    "max_transfer_count": 8,
-                    "max_transfer_timeout_seconds": 90,
-                }
-            })),
-        ));
-        assert_eq!(nested.max_transfer_count, 0);
-        assert_eq!(nested.max_transfer_timeout_seconds, 0);
-    }
-
-    #[test]
-    fn search_transport_disables_default_client_error_failover() {
-        let mut transport = sample_transport(None, None, None);
-        transport.endpoint.api_format = "openai:search".to_string();
-        let policy = local_failover_policy_from_transport(&transport);
-
-        assert!(!policy.retry_client_errors_by_default);
-        let report_context = append_local_failover_policy_to_value(json!({}), &transport);
-        assert_eq!(
-            local_failover_policy_from_report_context(Some(&report_context))
-                .map(|policy| policy.retry_client_errors_by_default),
-            Some(false)
-        );
-    }
-
-    #[test]
-    fn transport_policy_defaults_to_stopping_cyber_policy() {
-        let mut transport = sample_transport(None, None, None);
-        transport.provider.provider_type = "codex".to_string();
-        assert!(local_failover_policy_from_transport(&transport).stop_cyber_policy_errors);
-
-        transport.provider.config = Some(json!({
-            "codex": {"pass_through_cyber_flag_interrupt": false}
-        }));
-        assert!(local_failover_policy_from_transport(&transport).stop_cyber_policy_errors);
-
-        transport.provider.config = Some(json!({
-            "codex": {"passthrough_cyber_flag_interrupt": true}
-        }));
-        assert!(local_failover_policy_from_transport(&transport).stop_cyber_policy_errors);
-
-        transport.provider.provider_type = "llm".to_string();
-        assert!(local_failover_policy_from_transport(&transport).stop_cyber_policy_errors);
-    }
 }

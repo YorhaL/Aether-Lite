@@ -5,15 +5,6 @@ impl<'a> AdminAppState<'a> {
         &self.app.client
     }
 
-    pub(crate) fn provider_oauth_token_url(
-        &self,
-        provider_type: &str,
-        default_url: &str,
-    ) -> String {
-        self.app
-            .provider_oauth_token_url(provider_type, default_url)
-    }
-
     pub(crate) fn encryption_key(&self) -> Option<&str> {
         self.app.encryption_key()
     }
@@ -27,13 +18,6 @@ impl<'a> AdminAppState<'a> {
             self.app.encryption_key(),
             ciphertext,
         )
-    }
-
-    pub(crate) fn parse_catalog_auth_config_json(
-        &self,
-        key: &aether_data_contracts::repository::provider_catalog::StoredProviderCatalogKey,
-    ) -> Option<serde_json::Map<String, serde_json::Value>> {
-        crate::handlers::admin::shared::parse_catalog_auth_config_json(self.app, key)
     }
 
     pub(crate) fn has_provider_catalog_data_reader(&self) -> bool {
@@ -102,14 +86,6 @@ impl<'a> AdminAppState<'a> {
 
     pub(crate) fn has_auth_user_data_reader(&self) -> bool {
         self.app.has_auth_user_data_reader()
-    }
-
-    pub(crate) fn has_proxy_node_reader(&self) -> bool {
-        self.app.has_proxy_node_reader()
-    }
-
-    pub(crate) fn has_proxy_node_writer(&self) -> bool {
-        self.app.has_proxy_node_writer()
     }
 
     pub(crate) fn has_auth_api_key_writer(&self) -> bool {

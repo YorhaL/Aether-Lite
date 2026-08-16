@@ -11,7 +11,7 @@ use axum::{extract::Request, Json, Router};
 use serde_json::json;
 
 use super::{
-    build_state_with_execution_runtime_override, start_server, AppState, VideoTaskTruthSourceMode,
+    build_state_with_execution_runtime_override, start_server, AppState,
 };
 
 fn sample_due_openai_task(upstream_base_url: &str) -> UpsertVideoTask {
@@ -29,7 +29,6 @@ fn sample_due_openai_task(upstream_base_url: &str) -> UpsertVideoTask {
         key_id: Some("key-openai-video-local-1".to_string()),
         client_api_format: Some("openai:video".to_string()),
         provider_api_format: Some("openai:video".to_string()),
-        format_converted: false,
         model: Some("sora-2".to_string()),
         prompt: Some("hello".to_string()),
         original_request_body: Some(json!({"prompt": "hello"})),
@@ -81,7 +80,6 @@ fn sample_due_openai_task(upstream_base_url: &str) -> UpsertVideoTask {
                         "original_request_body": {
                             "prompt": "hello"
                         },
-                        "format_converted": false
                     },
                     "transport": {
                         "upstream_base_url": upstream_base_url,
@@ -171,7 +169,6 @@ async fn gateway_background_video_task_poller_refreshes_due_openai_task_from_rep
 
     let gateway_state = build_state_with_execution_runtime_override(execution_runtime_url)
         .with_video_task_data_repository_for_tests(Arc::clone(&repository))
-        .with_video_task_truth_source_mode(VideoTaskTruthSourceMode::RustAuthoritative)
         .with_video_task_poller_config(std::time::Duration::from_millis(25), 8);
     let background_tasks = gateway_state.spawn_background_tasks();
     assert!(!background_tasks.is_empty(), "poller task should spawn");
@@ -278,7 +275,6 @@ async fn gateway_background_video_task_poller_refreshes_due_openai_task_from_rep
     let gateway_state = AppState::new()
         .expect("gateway state should build")
         .with_video_task_data_repository_for_tests(Arc::clone(&repository))
-        .with_video_task_truth_source_mode(VideoTaskTruthSourceMode::RustAuthoritative)
         .with_video_task_poller_config(std::time::Duration::from_millis(25), 8);
     let background_tasks = gateway_state.spawn_background_tasks();
     assert!(!background_tasks.is_empty(), "poller task should spawn");

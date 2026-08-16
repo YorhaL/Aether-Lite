@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>一站式 AI 基础设施平台</strong><br>
-  支持 Claude / OpenAI / Gemini 及其 CLI 客户端的统一接入、格式转换、正/反向代理, 致力于成为用户驱动AI服务的底座
+  面向团队内部 API 分发，支持 Claude / OpenAI / Gemini 等同格式接口的统一接入、额度控制与健康监控
 </p>
 <p align="center">
   <a href="#简介">简介</a> •
@@ -21,7 +21,7 @@
 
 ## 简介
 
-Aether 是一个自托管的 AI API 网关，为团队和个人提供多租户管理、智能负载均衡、成本配额控制和健康监控能力。通过统一的 API 入口，可以无缝对接 Claude、OpenAI、Gemini 等主流 AI 服务及其 CLI 工具。
+Aether Lite 是一个自托管的内部 AI API 分发网关，提供多租户管理、负载均衡、基础额度控制和健康监控能力。Provider 统一使用自定义类型，请求只在客户端与上游 API 格式一致时透传。
 
 <p align="center">
   <picture>
@@ -30,6 +30,8 @@ Aether 是一个自托管的 AI API 网关，为团队和个人提供多租户�
     <img src="docs/architecture/architecture-light.svg" width="680" alt="Aether Architecture">
   </picture>
 </p>
+
+版本定位、功能边界及同步主版本的规则见 [Aether Lite 定位与主版本差异处理策略](docs/architecture/lite-edition-strategy.md)。数据库演进约束见 [Aether Lite 数据库演进策略](docs/architecture/lite-database-strategy.md)：Lite 与主版本共用 PostgreSQL/SQLite 核心迁移，Lite 独有功能使用独立迁移链和扩展表；MySQL/MariaDB 不在支持范围内。
 
 页面预览: https://fawney19.github.io/Aether/
 
@@ -75,7 +77,7 @@ Docker Compose 部署后，可在部署目录直接执行：
 
 源码或本地构建版本不会启用后台在线更新，请继续使用源码更新流程。Docker Compose 用户如果希望“容器重建后也保持镜像层面的新版本”，仍建议定期运行 `./update.sh` 拉取并重建 app 镜像。服务器访问 GitHub 需要代理时，可设置 `AETHER_UPDATE_PROXY_URL`，也兼容 `UPDATE_PROXY_URL`、`HTTPS_PROXY`、`ALL_PROXY`、`HTTP_PROXY` 以及 `NO_PROXY`。共享出口触发 GitHub API 限流时，可设置只读 `AETHER_UPDATE_GITHUB_TOKEN`，也兼容 `GITHUB_TOKEN` / `GH_TOKEN`。下载总超时默认 600 秒，连续无响应/无数据默认 30 秒，可通过 `AETHER_UPDATE_DOWNLOAD_TIMEOUT_SECS` 和 `AETHER_UPDATE_DOWNLOAD_IDLE_TIMEOUT_SECS` 调整。
 
-标准 Docker Compose 使用 Docker named volumes 存放 Postgres/Redis/MySQL 数据；Single Node 使用部署目录下的 `./data` 存放 SQLite 数据。
+标准 Docker Compose 使用 Docker named volumes 存放 PostgreSQL/Redis 数据；Single Node 使用部署目录下的 `./data` 存放 SQLite 数据。
 
 如果是本地源码构建镜像的部署，继续使用：
 
@@ -124,15 +126,6 @@ make dev
 `make dev` 会同时启动后端 `aether-gateway` 和前端 `frontend` 的 Vite dev server。需要单独启动时可使用 `make dev-backend` 或 `make dev-frontend`。
 Postgres / Redis 本地依赖未就绪时，`make dev` 会自动执行 `docker compose up -d postgres redis`。
 
-## Aether Tunnel (可选)
-
-Aether Tunnel 是配套的正向代理节点，部署在海外 VPS 上，为墙内的 Aether 实例中转 API 流量。
-
-- Docker Compose 部署或下载预编译二进制直接运行
-- 提供 macOS/Linux 与 Windows 一键脚本，自动下载最新 `tunnel-v*` 制品并向现有 `aether-tunnel.toml` 追加 `[[servers]]`
-- 通过 `aether-tunnel setup` 完成交互式配置，自动注册为系统服务
-- 详细文档见 [apps/aether-tunnel/README.md](apps/aether-tunnel/README.md)
-
 ## API 文档
 
 - Embeddings: [OpenAI compatible `POST /v1/embeddings`](docs/api/embeddings.md)
@@ -142,13 +135,12 @@ Aether Tunnel 是配套的正向代理节点，部署在海外 VPS 上，为墙�
 
 - `APP_PORT`：`aether-gateway` 唯一监听端口，固定绑定 `0.0.0.0:${APP_PORT}`
 - `DATABASE_URL`：数据库连接串；SQLite 例如 `sqlite:///opt/aether/data/aether.db`，Postgres 例如 `postgresql://postgres:aether@postgres:5432/aether`
-- `AETHER_GATEWAY_DATA_POSTGRES_MIN_CONNECTIONS` / `AETHER_GATEWAY_DATA_POSTGRES_MAX_CONNECTIONS`：数据库连接池手动覆盖值；未配置时 SQLite 固定 `1/1`，Postgres/MySQL 按每核 `4` 条自动推导，总池范围为 `32-100`。该预算按进程计算，多实例部署应按数据库连接上限显式分配
+- `AETHER_GATEWAY_DATA_POSTGRES_MIN_CONNECTIONS` / `AETHER_GATEWAY_DATA_POSTGRES_MAX_CONNECTIONS`：数据库连接池手动覆盖值；未配置时 SQLite 固定 `1/1`，PostgreSQL 按每核 `4` 条自动推导，总池范围为 `32-100`。该预算按进程计算，多实例部署应按数据库连接上限显式分配
 - `AETHER_GATEWAY_MAX_IN_FLIGHT_REQUESTS`：单实例请求并发上限；未配置时按 CPU 自动推导（基础范围 `512-65536`），低文件描述符预算时会进一步下调
 - `AETHER_GATEWAY_REQUEST_BODY_BUFFER_BUDGET_MB`：单实例同时读取和解压请求体的加权内存预算，默认 `256MB`
 - `AETHER_GATEWAY_REQUEST_BODY_READ_TIMEOUT_MS`：请求体完整读取超时，默认 `120000ms`
 - `AETHER_MAX_REQUEST_BODY_MB`：可选的单请求解压后请求体上限；未配置或设为 `0` 时不限制
 - `AETHER_MAX_INTERNAL_BUFFERED_BODY_MB`：可选的 heartbeat、管理探测等内部整包响应体上限；未配置或设为 `0` 时不限制
-- `AETHER_TUNNEL_NODE_STATUS_QUEUE_CAPACITY`：隧道节点状态上报队列容量，默认 `1024`；满载时拒绝新事件，避免控制面故障导致无界内存增长
 - `AETHER_GATEWAY_SECURITY_CACHE_TTL_MS`：IP 黑白名单本地缓存时间，默认 `1000ms`，写操作会主动失效相关缓存
 - `AETHER_MAX_REDACTED_SYNC_RESPONSE_BODY_MB`：可选的 PII 恢复同步响应缓冲上限；未配置或设为 `0` 时不限制
 - `REDIS_URL`：Redis 连接串；仅 Postgres + Redis 的 Docker Compose 部署需要配置

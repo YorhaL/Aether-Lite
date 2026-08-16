@@ -14,8 +14,7 @@ pub use actions::{
 pub use conditions::{RoutingCondition, RoutingConditionContext, RoutingConditionOp};
 pub use model::{
     RoutingGroupBinding, RoutingGroupBindingSubject, RoutingGroupConfig, RoutingGroupRecord,
-    RoutingGroupVersionRecord, RoutingModelPolicy, RoutingPoolPolicyOverride, RoutingRule,
-    RoutingSchedulingPreset,
+    RoutingGroupVersionRecord, RoutingModelPolicy, RoutingRule,
 };
 pub use mutations::{
     apply_json_patch_operations, validate_header_patch, validate_json_patch_operations,
@@ -30,8 +29,7 @@ pub use ranking::{
     RoutingCandidateRankVector, ROUTING_PRIORITY_UNSPECIFIED,
 };
 pub use trace::{
-    RoutingCandidateTrace, RoutingDecisionTrace, RoutingPatchSummary, RoutingPoolExpansionTrace,
-    RoutingRuntimeFacts,
+    RoutingCandidateTrace, RoutingDecisionTrace, RoutingPatchSummary, RoutingRuntimeFacts,
 };
 pub use validation::{
     validate_routing_group_config, RoutingValidationError, MAX_ROUTING_ALLOWED_KEYS,

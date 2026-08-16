@@ -33,21 +33,6 @@ export const adminRoutes: RouteRecordRaw[] = [
         component: view(() => import('@/views/admin/WalletsManagement.vue'))
       },
       {
-        path: 'payment-gateways',
-        name: 'PaymentGatewaySettings',
-        component: view(() => import('@/views/admin/PaymentGatewaySettings.vue'))
-      },
-      {
-        path: 'billing-plans',
-        name: 'BillingPlansManagement',
-        component: view(() => import('@/views/admin/BillingPlansManagement.vue'))
-      },
-      {
-        path: 'referrals',
-        name: 'ReferralManagement',
-        component: view(() => import('@/views/admin/ReferralManagement.vue'))
-      },
-      {
         path: 'management-tokens',
         name: 'AdminManagementTokens',
         component: view(() => import('@/views/user/ManagementTokens.vue')),
@@ -57,11 +42,6 @@ export const adminRoutes: RouteRecordRaw[] = [
         path: 'providers',
         name: 'ProviderManagement',
         component: view(() => import('@/views/admin/ProviderManagement.vue'))
-      },
-      {
-        path: 'pool',
-        name: 'PoolManagement',
-        component: view(() => import('@/views/admin/PoolManagement.vue'))
       },
       {
         path: 'models',
@@ -147,26 +127,6 @@ export const adminRoutes: RouteRecordRaw[] = [
         meta: { module: 'important_notification' }
       },
       {
-        path: 'server-chan',
-        redirect: '/admin/modules/server-chan'
-      },
-      {
-        path: 'modules/server-chan',
-        name: 'ServerChanSettings',
-        component: view(() => import('@/views/admin/modules/ServerChanSettings.vue')),
-        meta: { module: 'server_chan_push' }
-      },
-      {
-        path: 'bark',
-        redirect: '/admin/modules/bark'
-      },
-      {
-        path: 'modules/bark',
-        name: 'BarkSettings',
-        component: view(() => import('@/views/admin/modules/BarkSettings.vue')),
-        meta: { module: 'bark_push' }
-      },
-      {
         path: 'email',
         name: 'EmailSettings',
         component: view(() => import('@/views/admin/EmailSettings.vue'))
@@ -207,12 +167,6 @@ export const adminRoutes: RouteRecordRaw[] = [
         path: 'async-tasks',
         name: 'AsyncTasks',
         component: view(() => import('@/views/admin/AsyncTasks.vue'))
-      },
-      {
-        path: 'proxy-nodes',
-        name: 'ProxyNodes',
-        component: view(() => import('@/views/admin/ProxyNodes.vue')),
-        meta: { module: 'proxy_nodes' }
       },
       {
         path: 'gemini-files',

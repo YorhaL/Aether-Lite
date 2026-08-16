@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use aether_crypto::{encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
+use aether_crypto::{encrypt_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
 use aether_data::repository::auth::{
     InMemoryAuthApiKeySnapshotRepository, StoredAuthApiKeySnapshot,
 };
@@ -133,10 +133,9 @@ fn openai_chat_pressure_provider() -> StoredProviderCatalogProvider {
         "provider-openai-chat-pressure".to_string(),
         "openai".to_string(),
         Some("https://example.com".to_string()),
-        "custom".to_string(),
     )
     .expect("pressure provider should build")
-    .with_transport_fields(true, false, false, None, None, None, Some(20.0), None, None)
+    .with_transport_fields(true, None, None, Some(20.0), None, None)
 }
 
 fn openai_chat_pressure_endpoints(
@@ -163,8 +162,6 @@ fn openai_chat_pressure_endpoints(
                 None,
                 None,
                 None,
-                None,
-                None,
             )
             .expect("pressure endpoint transport should build")
         })
@@ -179,7 +176,7 @@ fn openai_chat_pressure_keys(
         .iter()
         .enumerate()
         .map(|(index, _)| {
-            let encrypted = encrypt_python_fernet_plaintext(
+            let encrypted = encrypt_fernet_plaintext(
                 DEVELOPMENT_ENCRYPTION_KEY,
                 &format!("sk-upstream-openai-chat-pressure-{index}"),
             )
@@ -197,9 +194,7 @@ fn openai_chat_pressure_keys(
                 Some(serde_json::json!(["openai:chat"])),
                 encrypted,
                 None,
-                None,
                 Some(serde_json::json!({"openai:chat": 1})),
-                None,
                 None,
                 None,
                 None,
@@ -219,7 +214,6 @@ fn openai_chat_pressure_candidates(
         .map(|(index, _)| StoredMinimalCandidateSelectionRow {
             provider_id: "provider-openai-chat-pressure".to_string(),
             provider_name: "openai".to_string(),
-            provider_type: "custom".to_string(),
             provider_priority: 10,
             provider_is_active: true,
             endpoint_id: pressure_endpoint_id(index),

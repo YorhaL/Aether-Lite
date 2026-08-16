@@ -1,6 +1,5 @@
 use crate::ai_serving::planner::plan_builders::{
-    build_gemini_stream_plan_from_decision, build_gemini_sync_plan_from_decision,
-    build_standard_stream_plan_from_decision, build_standard_sync_plan_from_decision,
+    build_passthrough_stream_plan_from_decision, build_passthrough_sync_plan_from_decision,
     AiStreamAttempt, AiSyncAttempt,
 };
 use crate::ai_serving::AiExecutionDecision;
@@ -21,33 +20,19 @@ pub(crate) use aether_ai_serving::{
 };
 
 pub(crate) fn build_sync_plan_from_requested_model_family(
-    family: RequestedModelFamily,
+    _family: RequestedModelFamily,
     parts: &http::request::Parts,
-    body_json: &serde_json::Value,
+    _body_json: &serde_json::Value,
     payload: AiExecutionDecision,
 ) -> Result<Option<AiSyncAttempt>, GatewayError> {
-    match family {
-        RequestedModelFamily::Standard => {
-            build_standard_sync_plan_from_decision(parts, body_json, payload)
-        }
-        RequestedModelFamily::Gemini => {
-            build_gemini_sync_plan_from_decision(parts, body_json, payload)
-        }
-    }
+    build_passthrough_sync_plan_from_decision(parts, payload)
 }
 
 pub(crate) fn build_stream_plan_from_requested_model_family(
-    family: RequestedModelFamily,
+    _family: RequestedModelFamily,
     parts: &http::request::Parts,
-    body_json: &serde_json::Value,
+    _body_json: &serde_json::Value,
     payload: AiExecutionDecision,
 ) -> Result<Option<AiStreamAttempt>, GatewayError> {
-    match family {
-        RequestedModelFamily::Standard => {
-            build_standard_stream_plan_from_decision(parts, body_json, payload, false)
-        }
-        RequestedModelFamily::Gemini => {
-            build_gemini_stream_plan_from_decision(parts, body_json, payload)
-        }
-    }
+    build_passthrough_stream_plan_from_decision(parts, payload)
 }

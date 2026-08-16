@@ -1,25 +1,25 @@
 use aether_data_contracts::repository::usage::{
     parse_usage_body_ref, usage_body_ref, ApiKeyLastUsedDelta, ManagementTokenCounterDelta,
-    ProxyNodeCounterDelta, StoredUsageAuditAggregation, StoredUsageAuditSummary,
-    StoredUsageBreakdownSummaryRow, StoredUsageCacheAffinityHitSummary,
-    StoredUsageCacheAffinityIntervalRow, StoredUsageCacheHitSummary, StoredUsageCostSavingsSummary,
-    StoredUsageDailyActualCostRollup, StoredUsageDashboardDailyBreakdownRow,
-    StoredUsageDashboardProviderCount, StoredUsageDashboardStatsSummary,
-    StoredUsageDashboardSummary, StoredUsageErrorDistributionRow, StoredUsageLeaderboardSummary,
-    StoredUsagePerformancePercentilesRow, StoredUsageProviderPerformance,
-    StoredUsageProviderPerformanceProviderRow, StoredUsageProviderPerformanceSummary,
-    StoredUsageProviderPerformanceTimelineRow, StoredUsageSettledCostSummary,
-    StoredUsageTimeSeriesBucket, StoredUsageUserTotals, UsageAuditAggregationGroupBy,
-    UsageAuditAggregationQuery, UsageAuditKeywordSearchQuery, UsageAuditSummaryQuery,
-    UsageBodyCaptureState, UsageBodyField, UsageBreakdownGroupBy, UsageBreakdownSummaryQuery,
-    UsageCacheAffinityHitSummaryQuery, UsageCacheAffinityIntervalGroupBy,
-    UsageCacheAffinityIntervalQuery, UsageCacheHitSummaryQuery, UsageCleanupExecutionMode,
-    UsageCleanupSummary, UsageCleanupTargets, UsageCleanupWindow, UsageCostSavingsSummaryQuery,
-    UsageDailyActualCostRollupQuery, UsageDashboardDailyBreakdownQuery,
-    UsageDashboardProviderCountsQuery, UsageDashboardSummaryQuery, UsageErrorDistributionQuery,
-    UsageLeaderboardGroupBy, UsageLeaderboardQuery, UsageMonitoringErrorCountQuery,
-    UsageMonitoringErrorListQuery, UsagePerformancePercentilesQuery, UsageProviderPerformanceQuery,
-    UsageSettledCostSummaryQuery, UsageTimeSeriesGranularity, UsageTimeSeriesQuery,
+    StoredUsageAuditAggregation, StoredUsageAuditSummary, StoredUsageBreakdownSummaryRow,
+    StoredUsageCacheAffinityHitSummary, StoredUsageCacheAffinityIntervalRow,
+    StoredUsageCacheHitSummary, StoredUsageCostSavingsSummary, StoredUsageDailyActualCostRollup,
+    StoredUsageDashboardDailyBreakdownRow, StoredUsageDashboardProviderCount,
+    StoredUsageDashboardStatsSummary, StoredUsageDashboardSummary, StoredUsageErrorDistributionRow,
+    StoredUsageLeaderboardSummary, StoredUsagePerformancePercentilesRow,
+    StoredUsageProviderPerformance, StoredUsageProviderPerformanceProviderRow,
+    StoredUsageProviderPerformanceSummary, StoredUsageProviderPerformanceTimelineRow,
+    StoredUsageSettledCostSummary, StoredUsageTimeSeriesBucket, StoredUsageUserTotals,
+    UsageAuditAggregationGroupBy, UsageAuditAggregationQuery, UsageAuditKeywordSearchQuery,
+    UsageAuditSummaryQuery, UsageBodyCaptureState, UsageBodyField, UsageBreakdownGroupBy,
+    UsageBreakdownSummaryQuery, UsageCacheAffinityHitSummaryQuery,
+    UsageCacheAffinityIntervalGroupBy, UsageCacheAffinityIntervalQuery, UsageCacheHitSummaryQuery,
+    UsageCleanupExecutionMode, UsageCleanupSummary, UsageCleanupTargets, UsageCleanupWindow,
+    UsageCostSavingsSummaryQuery, UsageDailyActualCostRollupQuery,
+    UsageDashboardDailyBreakdownQuery, UsageDashboardProviderCountsQuery,
+    UsageDashboardSummaryQuery, UsageErrorDistributionQuery, UsageLeaderboardGroupBy,
+    UsageLeaderboardQuery, UsageMonitoringErrorCountQuery, UsageMonitoringErrorListQuery,
+    UsagePerformancePercentilesQuery, UsageProviderPerformanceQuery, UsageSettledCostSummaryQuery,
+    UsageTimeSeriesGranularity, UsageTimeSeriesQuery,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -1225,11 +1225,6 @@ fn push_usage_provider_performance_filters(
             .push(r#" AND "usage".is_stream = "#)
             .push_bind(is_stream);
     }
-    if let Some(has_format_conversion) = query.has_format_conversion {
-        builder
-            .push(r#" AND "usage".has_format_conversion = "#)
-            .push_bind(has_format_conversion);
-    }
 }
 
 fn decode_usage_time_series_bucket_row(
@@ -1423,8 +1418,6 @@ INSERT INTO usage_counter_deltas (
   total_requests_delta,
   success_count_delta,
   error_count_delta,
-  dns_failures_delta,
-  stream_errors_delta,
   total_tokens_delta,
   total_cost_usd_delta,
   total_response_time_ms_delta,
@@ -1434,7 +1427,7 @@ INSERT INTO usage_counter_deltas (
   removed_last_used_at_unix_secs,
   usage_created_at_unix_secs
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
 )
 "#;
 const INSERT_USAGE_COUNTER_DELTAS_PREFIX_SQL: &str = r#"
@@ -1447,8 +1440,6 @@ INSERT INTO usage_counter_deltas (
   total_requests_delta,
   success_count_delta,
   error_count_delta,
-  dns_failures_delta,
-  stream_errors_delta,
   total_tokens_delta,
   total_cost_usd_delta,
   total_response_time_ms_delta,
@@ -1458,7 +1449,7 @@ INSERT INTO usage_counter_deltas (
   removed_last_used_at_unix_secs,
   usage_created_at_unix_secs
 ) "#;
-const USAGE_COUNTER_DELTA_INSERT_BINDS_PER_ROW: usize = 18;
+const USAGE_COUNTER_DELTA_INSERT_BINDS_PER_ROW: usize = 16;
 const USAGE_COUNTER_DELTA_INSERT_BATCH_SIZE: usize =
     u16::MAX as usize / USAGE_COUNTER_DELTA_INSERT_BINDS_PER_ROW;
 
@@ -1479,8 +1470,6 @@ SELECT
   delta.total_requests_delta,
   delta.success_count_delta,
   delta.error_count_delta,
-  delta.dns_failures_delta,
-  delta.stream_errors_delta,
   delta.total_tokens_delta,
   delta.total_cost_usd_delta,
   delta.total_response_time_ms_delta,
@@ -1566,7 +1555,6 @@ const USAGE_COUNTER_KIND_API_KEY: &str = "api_key";
 const USAGE_COUNTER_KIND_PROVIDER_API_KEY: &str = "provider_api_key";
 const USAGE_COUNTER_KIND_MODEL: &str = "model";
 const USAGE_COUNTER_KIND_PROVIDER_MONTHLY: &str = "provider_monthly";
-const USAGE_COUNTER_KIND_PROXY_NODE: &str = "proxy_node";
 const USAGE_COUNTER_KIND_MANAGEMENT_TOKEN: &str = "management_token";
 const USAGE_COUNTER_KIND_API_KEY_LAST_USED: &str = "api_key_last_used";
 
@@ -1574,17 +1562,6 @@ const APPLY_PROVIDER_MONTHLY_USAGE_DELTA_SQL: &str = r#"
 UPDATE providers
 SET
   monthly_used_usd = COALESCE(monthly_used_usd, 0) + $2,
-  updated_at = NOW()
-WHERE id = $1
-"#;
-
-const APPLY_PROXY_NODE_COUNTER_DELTA_SQL: &str = r#"
-UPDATE proxy_nodes
-SET
-  total_requests = total_requests + GREATEST($2::bigint, 0),
-  failed_requests = failed_requests + GREATEST($3::bigint, 0),
-  dns_failures = dns_failures + GREATEST($4::bigint, 0),
-  stream_errors = stream_errors + GREATEST($5::bigint, 0),
   updated_at = NOW()
 WHERE id = $1
 "#;
@@ -1613,9 +1590,6 @@ const RESET_PROVIDER_API_KEY_USAGE_STATS_SQL: &str =
 
 const REBUILD_PROVIDER_API_KEY_USAGE_STATS_SQL: &str =
     include_str!("queries/rebuild_provider_api_key_usage_stats_sql.sql");
-
-const REBUILD_PROVIDER_API_KEY_CODEX_WINDOW_USAGE_STATS_SQL: &str =
-    include_str!("queries/rebuild_provider_api_key_codex_window_usage_stats_sql.sql");
 
 const LIST_USAGE_AUDITS_PREFIX: &str = include_str!("queries/list_usage_audits_prefix.sql");
 fn push_postgres_usage_where(builder: &mut QueryBuilder<'_, Postgres>, has_where: &mut bool) {
@@ -1845,7 +1819,6 @@ INSERT INTO "usage" (
   endpoint_api_format,
   provider_api_family,
   provider_endpoint_kind,
-  has_format_conversion,
   is_stream,
   upstream_is_stream,
   input_tokens,
@@ -1906,7 +1879,6 @@ INSERT INTO "usage" (
   endpoint_api_format,
   provider_api_family,
   provider_endpoint_kind,
-  has_format_conversion,
   is_stream,
   upstream_is_stream,
   status_code,
@@ -8448,7 +8420,6 @@ ORDER BY "usage".user_id ASC
                         .bind(&usage.endpoint_api_format)
                         .bind(&usage.provider_api_family)
                         .bind(&usage.provider_endpoint_kind)
-                        .bind(usage.has_format_conversion)
                         .bind(usage.is_stream)
                         .bind(usage.input_tokens.map(to_i32).transpose()?)
                         .bind(usage.output_tokens.map(to_i32).transpose()?)
@@ -8912,7 +8883,6 @@ ORDER BY "usage".user_id ASC
                 .push_bind(row.usage.endpoint_api_format.clone())
                 .push_bind(row.usage.provider_api_family.clone())
                 .push_bind(row.usage.provider_endpoint_kind.clone())
-                .push_bind(row.usage.has_format_conversion.unwrap_or(false))
                 .push_bind(row.usage.is_stream.unwrap_or(false))
                 .push("COALESCE(CASE WHEN (CAST(")
                 .push_bind_unseparated(row.prepared.request_metadata_json.clone())
@@ -9206,8 +9176,7 @@ ON CONFLICT (request_id) DO UPDATE SET
             r#"INSERT INTO usage_routing_snapshots (
 request_id, candidate_id, candidate_index, key_name, planner_kind, route_family,
 route_kind, execution_path, local_execution_runtime_miss_reason,
-selected_provider_id, selected_endpoint_id, selected_provider_api_key_id,
-has_format_conversion
+selected_provider_id, selected_endpoint_id, selected_provider_api_key_id
 ) "#,
         );
         builder.push_values(&rows, |mut values, row| {
@@ -9224,8 +9193,7 @@ has_format_conversion
                 .push_bind(snapshot.local_execution_runtime_miss_reason.clone())
                 .push_bind(snapshot.selected_provider_id.clone())
                 .push_bind(snapshot.selected_endpoint_id.clone())
-                .push_bind(snapshot.selected_provider_api_key_id.clone())
-                .push_bind(snapshot.has_format_conversion);
+                .push_bind(snapshot.selected_provider_api_key_id.clone());
         });
         builder.push(
             r#"
@@ -9241,7 +9209,6 @@ ON CONFLICT (request_id) DO UPDATE SET
   selected_provider_id = COALESCE(EXCLUDED.selected_provider_id, usage_routing_snapshots.selected_provider_id),
   selected_endpoint_id = COALESCE(EXCLUDED.selected_endpoint_id, usage_routing_snapshots.selected_endpoint_id),
   selected_provider_api_key_id = COALESCE(EXCLUDED.selected_provider_api_key_id, usage_routing_snapshots.selected_provider_api_key_id),
-  has_format_conversion = COALESCE(EXCLUDED.has_format_conversion, usage_routing_snapshots.has_format_conversion),
   updated_at = NOW()
 "#,
         );
@@ -9276,7 +9243,7 @@ billing_cache_creation_1h_tokens, billing_cache_read_tokens,
 billing_total_input_context, billing_cache_creation_cost_usd,
 billing_cache_read_cost_usd, billing_total_cost_usd, billing_actual_total_cost_usd,
 billing_pricing_source, billing_rule_id, billing_rule_version, rate_multiplier,
-is_free_tier, input_price_per_1m, output_price_per_1m,
+input_price_per_1m, output_price_per_1m,
 cache_creation_price_per_1m, cache_read_price_per_1m, price_per_request
 ) "#,
         );
@@ -9311,7 +9278,6 @@ cache_creation_price_per_1m, cache_read_price_per_1m, price_per_request
                 .push_bind(snapshot.billing_rule_id.clone())
                 .push_bind(snapshot.billing_rule_version.clone())
                 .push_bind(snapshot.rate_multiplier)
-                .push_bind(snapshot.is_free_tier)
                 .push_bind(snapshot.input_price_per_1m)
                 .push_bind(snapshot.output_price_per_1m)
                 .push_bind(snapshot.cache_creation_price_per_1m)
@@ -9343,7 +9309,6 @@ ON CONFLICT (request_id) DO UPDATE SET
   billing_rule_id = COALESCE(EXCLUDED.billing_rule_id, usage_settlement_snapshots.billing_rule_id),
   billing_rule_version = COALESCE(EXCLUDED.billing_rule_version, usage_settlement_snapshots.billing_rule_version),
   rate_multiplier = COALESCE(EXCLUDED.rate_multiplier, usage_settlement_snapshots.rate_multiplier),
-  is_free_tier = COALESCE(EXCLUDED.is_free_tier, usage_settlement_snapshots.is_free_tier),
   input_price_per_1m = COALESCE(EXCLUDED.input_price_per_1m, usage_settlement_snapshots.input_price_per_1m),
   output_price_per_1m = COALESCE(EXCLUDED.output_price_per_1m, usage_settlement_snapshots.output_price_per_1m),
   cache_creation_price_per_1m = COALESCE(EXCLUDED.cache_creation_price_per_1m, usage_settlement_snapshots.cache_creation_price_per_1m),
@@ -9379,7 +9344,7 @@ ON CONFLICT (request_id) DO UPDATE SET
         let mut builder = QueryBuilder::<Postgres>::new(
             r#"INSERT INTO usage_counter_deltas (
 id, request_id, kind, target_id, request_count_delta, total_requests_delta,
-success_count_delta, error_count_delta, dns_failures_delta, stream_errors_delta,
+success_count_delta, error_count_delta,
 total_tokens_delta, total_cost_usd_delta, total_response_time_ms_delta,
 last_used_at_unix_secs, last_used_ip, candidate_last_used_at_unix_secs,
 removed_last_used_at_unix_secs, usage_created_at_unix_secs
@@ -9399,8 +9364,6 @@ removed_last_used_at_unix_secs, usage_created_at_unix_secs
                         .to_string(),
                 )
                 .push_bind(1_i64)
-                .push_bind(0_i64)
-                .push_bind(0_i64)
                 .push_bind(0_i64)
                 .push_bind(0_i64)
                 .push_bind(0_i64)
@@ -9464,7 +9427,6 @@ removed_last_used_at_unix_secs, usage_created_at_unix_secs
             .bind(&usage.endpoint_api_format)
             .bind(&usage.provider_api_family)
             .bind(&usage.provider_endpoint_kind)
-            .bind(usage.has_format_conversion)
             .bind(usage.status_code.map(i32::from))
             .bind(response_time_ms)
             .bind(first_byte_time_ms)
@@ -9511,19 +9473,8 @@ removed_last_used_at_unix_secs, usage_created_at_unix_secs
             let before =
                 lock_and_find_usage_provider_contributions_in_tx(&mut tx, &request_ids).await?;
             let mut updated = Vec::new();
-            for has_format_conversion in [false, true] {
-                let matching = batch_rows
-                    .iter()
-                    .filter(|row| {
-                        row.usage.has_format_conversion.is_some() == has_format_conversion
-                    })
-                    .collect::<Vec<_>>();
-                for chunk in matching.chunks(128) {
-                    updated.extend(
-                        Self::execute_first_byte_batch(&mut tx, chunk, !has_format_conversion)
-                            .await?,
-                    );
-                }
+            for chunk in batch_rows.iter().collect::<Vec<_>>().chunks(128) {
+                updated.extend(Self::execute_first_byte_batch(&mut tx, chunk).await?);
             }
             let counter_deltas =
                 prepare_first_byte_provider_contribution_transitions(&before, &updated)?;
@@ -9541,7 +9492,6 @@ removed_last_used_at_unix_secs, usage_created_at_unix_secs
     async fn execute_first_byte_batch(
         tx: &mut sqlx::Transaction<'_, Postgres>,
         rows: &[&PreparedFirstByteUsage],
-        preserve_existing_format_conversion: bool,
     ) -> Result<Vec<InsertedPendingUsage>, DataLayerError> {
         if rows.is_empty() {
             return Ok(Vec::new());
@@ -9567,9 +9517,6 @@ removed_last_used_at_unix_secs, usage_created_at_unix_secs
                 .push_bind(row.usage.endpoint_api_format.clone())
                 .push_bind(row.usage.provider_api_family.clone())
                 .push_bind(row.usage.provider_endpoint_kind.clone())
-                .push("COALESCE(")
-                .push_bind_unseparated(row.usage.has_format_conversion)
-                .push_unseparated(", FALSE)")
                 .push("TRUE")
                 .push("COALESCE(CASE WHEN (CAST(")
                 .push_bind_unseparated(row.request_metadata_json.clone())
@@ -9613,17 +9560,9 @@ DO UPDATE SET
   endpoint_kind = COALESCE(EXCLUDED.endpoint_kind, "usage".endpoint_kind),
   endpoint_api_format = COALESCE(EXCLUDED.endpoint_api_format, "usage".endpoint_api_format),
   provider_api_family = COALESCE(EXCLUDED.provider_api_family, "usage".provider_api_family),
-  provider_endpoint_kind = COALESCE(EXCLUDED.provider_endpoint_kind, "usage".provider_endpoint_kind),
-  has_format_conversion =
+  provider_endpoint_kind = COALESCE(EXCLUDED.provider_endpoint_kind, "usage".provider_endpoint_kind)
 "#,
         );
-        if preserve_existing_format_conversion {
-            builder.push("COALESCE(\"usage\".has_format_conversion, FALSE)");
-        } else {
-            builder.push(
-                "COALESCE(EXCLUDED.has_format_conversion, \"usage\".has_format_conversion, FALSE)",
-            );
-        }
         builder.push(
             r#",
   is_stream = TRUE,
@@ -9718,9 +9657,6 @@ RETURNING
                         apply_provider_monthly_usage_delta_in_tx(tx, provider_id.as_str(), *delta)
                             .await?;
                     }
-                    for (node_id, delta) in &aggregates.proxy_nodes {
-                        apply_proxy_node_counter_delta_in_tx(tx, node_id.as_str(), delta).await?;
-                    }
                     for (token_id, delta) in &aggregates.management_tokens {
                         apply_management_token_counter_delta_in_tx(tx, token_id.as_str(), delta)
                             .await?;
@@ -9737,53 +9673,11 @@ RETURNING
                         provider_api_key_targets: aggregates.provider_api_keys.len(),
                         model_targets: aggregates.models.len(),
                         provider_monthly_targets: aggregates.provider_monthly.len(),
-                        proxy_node_targets: aggregates.proxy_nodes.len(),
                         management_token_targets: aggregates.management_tokens.len(),
                         api_key_last_used_targets: aggregates.api_key_last_used.len(),
                     })
                 })
                     as BoxFuture<'_, Result<UsageCounterFlushSummary, DataLayerError>>
-            })
-            .await
-    }
-
-    pub async fn enqueue_proxy_node_counter_delta(
-        &self,
-        delta: ProxyNodeCounterDelta,
-    ) -> Result<bool, DataLayerError> {
-        if delta.is_noop() {
-            return Ok(false);
-        }
-        let node_id = delta.node_id.trim().to_string();
-        let request_id = format!("proxy_node:{node_id}:{}", Uuid::new_v4());
-        self.tx_runner
-            .run_read_write(|tx| {
-                Box::pin(async move {
-                    insert_usage_counter_delta_in_tx(
-                        tx,
-                        UsageCounterDeltaInsert {
-                            request_id: &request_id,
-                            kind: USAGE_COUNTER_KIND_PROXY_NODE,
-                            target_id: &node_id,
-                            request_count_delta: 0,
-                            total_requests_delta: delta.total_requests_delta,
-                            success_count_delta: 0,
-                            error_count_delta: delta.failed_requests_delta,
-                            dns_failures_delta: delta.dns_failures_delta,
-                            stream_errors_delta: delta.stream_errors_delta,
-                            total_tokens_delta: 0,
-                            total_cost_usd_delta: 0.0,
-                            total_response_time_ms_delta: 0,
-                            last_used_at_unix_secs: None,
-                            last_used_ip: None,
-                            candidate_last_used_at_unix_secs: None,
-                            removed_last_used_at_unix_secs: None,
-                            usage_created_at_unix_secs: None,
-                        },
-                    )
-                    .await?;
-                    Ok(true)
-                }) as BoxFuture<'_, Result<bool, DataLayerError>>
             })
             .await
     }
@@ -9819,8 +9713,6 @@ RETURNING
                             total_requests_delta: 0,
                             success_count_delta: 0,
                             error_count_delta: 0,
-                            dns_failures_delta: 0,
-                            stream_errors_delta: 0,
                             total_tokens_delta: 0,
                             total_cost_usd_delta: 0.0,
                             total_response_time_ms_delta: 0,
@@ -9860,8 +9752,6 @@ RETURNING
                             total_requests_delta: 0,
                             success_count_delta: 0,
                             error_count_delta: 0,
-                            dns_failures_delta: 0,
-                            stream_errors_delta: 0,
                             total_tokens_delta: 0,
                             total_cost_usd_delta: 0.0,
                             total_response_time_ms_delta: 0,
@@ -10154,10 +10044,6 @@ RETURNING
                         .await
                         .map_postgres_err()?
                         .rows_affected();
-                    sqlx::query(REBUILD_PROVIDER_API_KEY_CODEX_WINDOW_USAGE_STATS_SQL)
-                        .execute(&mut **tx)
-                        .await
-                        .map_postgres_err()?;
                     Ok(rows_affected)
                 }) as BoxFuture<'_, Result<u64, DataLayerError>>
             })
@@ -10541,13 +10427,6 @@ impl UsageWriteRepository for SqlxUsageReadRepository {
         Self::flush_usage_counter_deltas(self, batch_size).await
     }
 
-    async fn enqueue_proxy_node_counter_delta(
-        &self,
-        delta: ProxyNodeCounterDelta,
-    ) -> Result<bool, DataLayerError> {
-        Self::enqueue_proxy_node_counter_delta(self, delta).await
-    }
-
     async fn enqueue_management_token_counter_delta(
         &self,
         delta: ManagementTokenCounterDelta,
@@ -10802,8 +10681,6 @@ fn prepare_first_byte_provider_contribution_transitions(
                 total_requests_delta: 0,
                 success_count_delta: transition.delta.success_count,
                 error_count_delta: transition.delta.error_count,
-                dns_failures_delta: 0,
-                stream_errors_delta: 0,
                 total_tokens_delta: transition.delta.total_tokens,
                 total_cost_usd_delta: transition.delta.total_cost_usd,
                 total_response_time_ms_delta: transition.delta.total_response_time_ms,
@@ -10864,8 +10741,6 @@ struct UsageCounterDeltaRow {
     total_requests_delta: i64,
     success_count_delta: i64,
     error_count_delta: i64,
-    dns_failures_delta: i64,
-    stream_errors_delta: i64,
     total_tokens_delta: i64,
     total_cost_usd_delta: f64,
     total_response_time_ms_delta: i64,
@@ -10882,7 +10757,6 @@ struct UsageCounterDeltaAggregates {
     provider_api_keys: BTreeMap<String, ProviderApiKeyUsageDelta>,
     models: BTreeMap<String, ModelUsageDelta>,
     provider_monthly: BTreeMap<String, f64>,
-    proxy_nodes: BTreeMap<String, ProxyNodeCounterDelta>,
     management_tokens: BTreeMap<String, ManagementTokenCounterDelta>,
     api_key_last_used: BTreeMap<String, ApiKeyLastUsedDelta>,
 }
@@ -10949,22 +10823,6 @@ impl UsageCounterDeltaAggregates {
                         .entry(row.target_id.clone())
                         .or_default();
                     *entry += row.total_cost_usd_delta;
-                }
-                USAGE_COUNTER_KIND_PROXY_NODE => {
-                    let entry = aggregates
-                        .proxy_nodes
-                        .entry(row.target_id.clone())
-                        .or_insert(ProxyNodeCounterDelta {
-                            node_id: row.target_id.clone(),
-                            total_requests_delta: 0,
-                            failed_requests_delta: 0,
-                            dns_failures_delta: 0,
-                            stream_errors_delta: 0,
-                        });
-                    entry.total_requests_delta += row.total_requests_delta;
-                    entry.failed_requests_delta += row.error_count_delta;
-                    entry.dns_failures_delta += row.dns_failures_delta;
-                    entry.stream_errors_delta += row.stream_errors_delta;
                 }
                 USAGE_COUNTER_KIND_MANAGEMENT_TOKEN => {
                     let entry = aggregates
@@ -11089,8 +10947,6 @@ async fn enqueue_api_key_usage_delta_in_tx(
             total_requests_delta: delta.total_requests,
             success_count_delta: 0,
             error_count_delta: 0,
-            dns_failures_delta: 0,
-            stream_errors_delta: 0,
             total_tokens_delta: delta.total_tokens,
             total_cost_usd_delta,
             total_response_time_ms_delta: 0,
@@ -11123,8 +10979,6 @@ async fn enqueue_model_usage_delta_in_tx(
             total_requests_delta: 0,
             success_count_delta: 0,
             error_count_delta: 0,
-            dns_failures_delta: 0,
-            stream_errors_delta: 0,
             total_tokens_delta: 0,
             total_cost_usd_delta: 0.0,
             total_response_time_ms_delta: 0,
@@ -11162,8 +11016,6 @@ async fn enqueue_provider_api_key_usage_delta_in_tx(
             total_requests_delta: 0,
             success_count_delta: delta.success_count,
             error_count_delta: delta.error_count,
-            dns_failures_delta: 0,
-            stream_errors_delta: 0,
             total_tokens_delta: delta.total_tokens,
             total_cost_usd_delta,
             total_response_time_ms_delta: delta.total_response_time_ms,
@@ -11185,8 +11037,6 @@ struct UsageCounterDeltaInsert<'a> {
     total_requests_delta: i64,
     success_count_delta: i64,
     error_count_delta: i64,
-    dns_failures_delta: i64,
-    stream_errors_delta: i64,
     total_tokens_delta: i64,
     total_cost_usd_delta: f64,
     total_response_time_ms_delta: i64,
@@ -11207,8 +11057,6 @@ struct PreparedUsageCounterDeltaInsert {
     total_requests_delta: i64,
     success_count_delta: i64,
     error_count_delta: i64,
-    dns_failures_delta: i64,
-    stream_errors_delta: i64,
     total_tokens_delta: i64,
     total_cost_usd_delta: f64,
     total_response_time_ms_delta: i64,
@@ -11258,8 +11106,6 @@ fn prepare_usage_counter_delta_insert(
         total_requests_delta: input.total_requests_delta,
         success_count_delta: input.success_count_delta,
         error_count_delta: input.error_count_delta,
-        dns_failures_delta: input.dns_failures_delta,
-        stream_errors_delta: input.stream_errors_delta,
         total_tokens_delta: input.total_tokens_delta,
         total_cost_usd_delta,
         total_response_time_ms_delta: input.total_response_time_ms_delta,
@@ -11292,8 +11138,6 @@ async fn insert_usage_counter_delta_in_tx(
         .bind(input.total_requests_delta)
         .bind(input.success_count_delta)
         .bind(input.error_count_delta)
-        .bind(input.dns_failures_delta)
-        .bind(input.stream_errors_delta)
         .bind(input.total_tokens_delta)
         .bind(input.total_cost_usd_delta)
         .bind(input.total_response_time_ms_delta)
@@ -11324,8 +11168,6 @@ async fn insert_usage_counter_deltas_batch_in_tx(
                 .push_bind(input.total_requests_delta)
                 .push_bind(input.success_count_delta)
                 .push_bind(input.error_count_delta)
-                .push_bind(input.dns_failures_delta)
-                .push_bind(input.stream_errors_delta)
                 .push_bind(input.total_tokens_delta)
                 .push_bind(input.total_cost_usd_delta)
                 .push_bind(input.total_response_time_ms_delta)
@@ -11381,12 +11223,6 @@ fn map_usage_counter_delta_row(row: &PgRow) -> Result<UsageCounterDeltaRow, Data
             .map_postgres_err()?,
         error_count_delta: row
             .try_get::<i64, _>("error_count_delta")
-            .map_postgres_err()?,
-        dns_failures_delta: row
-            .try_get::<i64, _>("dns_failures_delta")
-            .map_postgres_err()?,
-        stream_errors_delta: row
-            .try_get::<i64, _>("stream_errors_delta")
             .map_postgres_err()?,
         total_tokens_delta: row
             .try_get::<i64, _>("total_tokens_delta")
@@ -11592,27 +11428,6 @@ async fn apply_provider_monthly_usage_delta_in_tx(
     Ok(())
 }
 
-async fn apply_proxy_node_counter_delta_in_tx(
-    tx: &mut sqlx::Transaction<'_, Postgres>,
-    node_id: &str,
-    delta: &ProxyNodeCounterDelta,
-) -> Result<(), DataLayerError> {
-    if delta.is_noop() || node_id.trim().is_empty() {
-        return Ok(());
-    }
-
-    sqlx::query(APPLY_PROXY_NODE_COUNTER_DELTA_SQL)
-        .bind(node_id)
-        .bind(delta.total_requests_delta)
-        .bind(delta.failed_requests_delta)
-        .bind(delta.dns_failures_delta)
-        .bind(delta.stream_errors_delta)
-        .execute(&mut **tx)
-        .await
-        .map_postgres_err()?;
-    Ok(())
-}
-
 async fn apply_management_token_counter_delta_in_tx(
     tx: &mut sqlx::Transaction<'_, Postgres>,
     token_id: &str,
@@ -11698,7 +11513,6 @@ fn map_usage_row(
         row.try_get("endpoint_api_format").map_postgres_err()?,
         row.try_get("provider_api_family").map_postgres_err()?,
         row.try_get("provider_endpoint_kind").map_postgres_err()?,
-        row.try_get("has_format_conversion").map_postgres_err()?,
         row.try_get("is_stream").map_postgres_err()?,
         row.try_get("input_tokens").map_postgres_err()?,
         row.try_get("output_tokens").map_postgres_err()?,
@@ -11994,7 +11808,6 @@ struct UsageRoutingSnapshot {
     selected_provider_id: Option<String>,
     selected_endpoint_id: Option<String>,
     selected_provider_api_key_id: Option<String>,
-    has_format_conversion: Option<bool>,
 }
 
 impl UsageRoutingSnapshot {
@@ -12014,7 +11827,6 @@ impl UsageRoutingSnapshot {
             || self.selected_provider_id.is_some()
             || self.selected_endpoint_id.is_some()
             || self.selected_provider_api_key_id.is_some()
-            || self.has_format_conversion.is_some()
     }
 }
 
@@ -12042,7 +11854,6 @@ struct UsageSettlementPricingSnapshot {
     billing_rule_id: Option<String>,
     billing_rule_version: Option<String>,
     rate_multiplier: Option<f64>,
-    is_free_tier: Option<bool>,
     input_price_per_1m: Option<f64>,
     output_price_per_1m: Option<f64>,
     cache_creation_price_per_1m: Option<f64>,
@@ -12074,7 +11885,6 @@ impl UsageSettlementPricingSnapshot {
             || self.billing_rule_id.is_some()
             || self.billing_rule_version.is_some()
             || self.rate_multiplier.is_some()
-            || self.is_free_tier.is_some()
             || self.input_price_per_1m.is_some()
             || self.output_price_per_1m.is_some()
             || self.cache_creation_price_per_1m.is_some()
@@ -12568,15 +12378,6 @@ fn metadata_u64_value(metadata: Option<&serde_json::Map<String, Value>>, key: &s
     })
 }
 
-fn metadata_bool_value(
-    metadata: Option<&serde_json::Map<String, Value>>,
-    key: &str,
-) -> Option<bool> {
-    metadata
-        .and_then(|object| object.get(key))
-        .and_then(Value::as_bool)
-}
-
 fn billing_snapshot_object(
     metadata: Option<&serde_json::Map<String, Value>>,
 ) -> Option<&serde_json::Map<String, Value>> {
@@ -12813,7 +12614,6 @@ fn usage_routing_snapshot_from_usage(
         selected_provider_id: None,
         selected_endpoint_id: None,
         selected_provider_api_key_id: None,
-        has_format_conversion: None,
     };
     if !snapshot.has_metadata_fields() {
         return snapshot;
@@ -12822,7 +12622,6 @@ fn usage_routing_snapshot_from_usage(
     snapshot.selected_provider_id = usage.provider_id.clone();
     snapshot.selected_endpoint_id = usage.provider_endpoint_id.clone();
     snapshot.selected_provider_api_key_id = usage.provider_api_key_id.clone();
-    snapshot.has_format_conversion = usage.has_format_conversion;
     snapshot
 }
 
@@ -13039,17 +12838,16 @@ fn usage_settlement_pricing_snapshot_from_usage(
         ),
         billing_rule_id: settlement_snapshot_nested_string(
             object,
-            "billing_plan_snapshot",
+            "billing_rule_snapshot",
             "rule_id",
         )
         .or_else(|| billing_snapshot_string_field(object, "rule_id")),
         billing_rule_version: settlement_snapshot_nested_string(
             object,
-            "billing_plan_snapshot",
+            "billing_rule_snapshot",
             "rule_version",
         ),
         rate_multiplier: metadata_number_value(object, "rate_multiplier"),
-        is_free_tier: metadata_bool_value(object, "is_free_tier"),
         input_price_per_1m: metadata_number_value(object, "input_price_per_1m")
             .or_else(|| billing_snapshot_resolved_number(object, "input_price_per_1m")),
         output_price_per_1m: metadata_number_value(object, "output_price_per_1m")
@@ -13396,7 +13194,6 @@ where
         .bind(snapshot.selected_provider_id.as_deref())
         .bind(snapshot.selected_endpoint_id.as_deref())
         .bind(snapshot.selected_provider_api_key_id.as_deref())
-        .bind(snapshot.has_format_conversion)
         .bind(replace_existing)
         .execute(executor)
         .await
@@ -13442,7 +13239,6 @@ where
         .bind(snapshot.billing_rule_id.as_deref())
         .bind(snapshot.billing_rule_version.as_deref())
         .bind(snapshot.rate_multiplier)
-        .bind(snapshot.is_free_tier)
         .bind(snapshot.input_price_per_1m)
         .bind(snapshot.output_price_per_1m)
         .bind(snapshot.cache_creation_price_per_1m)
@@ -13499,16 +13295,6 @@ fn maybe_insert_number_value(metadata: &mut Map<String, Value>, key: &str, value
     metadata.insert(key.to_string(), Value::Number(number));
 }
 
-fn maybe_insert_bool_value(metadata: &mut Map<String, Value>, key: &str, value: Option<bool>) {
-    let Some(value) = value else {
-        return;
-    };
-    if metadata.contains_key(key) {
-        return;
-    }
-    metadata.insert(key.to_string(), Value::Bool(value));
-}
-
 fn usage_routing_snapshot_from_row(
     row: &sqlx::postgres::PgRow,
 ) -> Result<UsageRoutingSnapshot, DataLayerError> {
@@ -13529,7 +13315,6 @@ fn usage_routing_snapshot_from_row(
         selected_provider_id: None,
         selected_endpoint_id: None,
         selected_provider_api_key_id: None,
-        has_format_conversion: None,
     })
 }
 
@@ -13592,7 +13377,6 @@ fn usage_settlement_pricing_snapshot_from_row(
         billing_rule_id: row_try_get_optional(row, "settlement_billing_rule_id")?,
         billing_rule_version: row_try_get_optional(row, "settlement_billing_rule_version")?,
         rate_multiplier: row_try_get_optional(row, "settlement_rate_multiplier")?,
-        is_free_tier: row_try_get_optional(row, "settlement_is_free_tier")?,
         input_price_per_1m: row_try_get_optional(row, "settlement_input_price_per_1m")?,
         output_price_per_1m: row_try_get_optional(row, "settlement_output_price_per_1m")?,
         cache_creation_price_per_1m: row_try_get_optional(
@@ -13643,7 +13427,6 @@ fn attach_usage_settlement_pricing_snapshot_metadata(
         }
     }
     maybe_insert_number_value(&mut metadata, "rate_multiplier", snapshot.rate_multiplier);
-    maybe_insert_bool_value(&mut metadata, "is_free_tier", snapshot.is_free_tier);
     maybe_insert_number_value(
         &mut metadata,
         "input_price_per_1m",
@@ -13684,6 +13467,3 @@ fn usage_body_sql_columns(field: UsageBodyField) -> (&'static str, &'static str)
         }
     }
 }
-
-#[cfg(test)]
-mod tests;

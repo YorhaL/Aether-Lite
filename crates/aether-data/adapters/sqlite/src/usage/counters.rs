@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use aether_data_contracts::repository::usage::{
     api_key_usage_contribution, model_usage_contribution, provider_api_key_usage_contribution,
     ApiKeyLastUsedDelta, ApiKeyUsageDelta, ManagementTokenCounterDelta, ModelUsageDelta,
-    ProviderApiKeyUsageDelta, ProxyNodeCounterDelta, StoredRequestUsageAudit,
-    UsageCounterFlushSummary, UsageCounterHealthSnapshot, UsageCounterPendingHealthSnapshot,
+    ProviderApiKeyUsageDelta, StoredRequestUsageAudit, UsageCounterFlushSummary,
+    UsageCounterHealthSnapshot, UsageCounterPendingHealthSnapshot,
 };
 use aether_data_contracts::DataLayerError;
 use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
@@ -16,7 +16,6 @@ const KIND_API_KEY: &str = "api_key";
 const KIND_PROVIDER_API_KEY: &str = "provider_api_key";
 const KIND_MODEL: &str = "model";
 const KIND_PROVIDER_MONTHLY: &str = "provider_monthly";
-const KIND_PROXY_NODE: &str = "proxy_node";
 const KIND_MANAGEMENT_TOKEN: &str = "management_token";
 const KIND_API_KEY_LAST_USED: &str = "api_key_last_used";
 
@@ -29,8 +28,6 @@ SELECT
   total_requests_delta,
   success_count_delta,
   error_count_delta,
-  dns_failures_delta,
-  stream_errors_delta,
   total_tokens_delta,
   total_cost_usd_delta,
   total_response_time_ms_delta,
@@ -53,8 +50,6 @@ struct DeltaRow {
     total_requests_delta: i64,
     success_count_delta: i64,
     error_count_delta: i64,
-    dns_failures_delta: i64,
-    stream_errors_delta: i64,
     total_tokens_delta: i64,
     total_cost_usd_delta: f64,
     total_response_time_ms_delta: i64,
@@ -71,7 +66,6 @@ struct Aggregates {
     provider_api_keys: BTreeMap<String, ProviderApiKeyUsageDelta>,
     models: BTreeMap<String, ModelUsageDelta>,
     provider_monthly: BTreeMap<String, f64>,
-    proxy_nodes: BTreeMap<String, ProxyNodeCounterDelta>,
     management_tokens: BTreeMap<String, ManagementTokenCounterDelta>,
     api_key_last_used: BTreeMap<String, ApiKeyLastUsedDelta>,
 }
@@ -140,22 +134,6 @@ impl Aggregates {
                         .provider_monthly
                         .entry(row.target_id.clone())
                         .or_default() += row.total_cost_usd_delta;
-                }
-                KIND_PROXY_NODE => {
-                    let entry = aggregates
-                        .proxy_nodes
-                        .entry(row.target_id.clone())
-                        .or_insert(ProxyNodeCounterDelta {
-                            node_id: row.target_id.clone(),
-                            total_requests_delta: 0,
-                            failed_requests_delta: 0,
-                            dns_failures_delta: 0,
-                            stream_errors_delta: 0,
-                        });
-                    entry.total_requests_delta += row.total_requests_delta;
-                    entry.failed_requests_delta += row.error_count_delta;
-                    entry.dns_failures_delta += row.dns_failures_delta;
-                    entry.stream_errors_delta += row.stream_errors_delta;
                 }
                 KIND_MANAGEMENT_TOKEN => {
                     let entry = aggregates
@@ -247,9 +225,6 @@ pub(super) async fn flush(
     for (target_id, delta) in &aggregates.provider_monthly {
         apply_provider_monthly(&mut tx, target_id, *delta).await?;
     }
-    for (target_id, delta) in &aggregates.proxy_nodes {
-        apply_proxy_node(&mut tx, target_id, delta).await?;
-    }
     for (target_id, delta) in &aggregates.management_tokens {
         apply_management_token(&mut tx, target_id, delta).await?;
     }
@@ -276,38 +251,9 @@ pub(super) async fn flush(
         provider_api_key_targets: aggregates.provider_api_keys.len(),
         model_targets: aggregates.models.len(),
         provider_monthly_targets: aggregates.provider_monthly.len(),
-        proxy_node_targets: aggregates.proxy_nodes.len(),
         management_token_targets: aggregates.management_tokens.len(),
         api_key_last_used_targets: aggregates.api_key_last_used.len(),
     })
-}
-
-pub(super) async fn enqueue_proxy_node(
-    pool: &SqlitePool,
-    delta: ProxyNodeCounterDelta,
-) -> Result<bool, DataLayerError> {
-    if delta.is_noop() {
-        return Ok(false);
-    }
-    let node_id = delta.node_id.trim().to_string();
-    let request_id = format!("proxy_node:{node_id}:{}", uuid::Uuid::new_v4());
-    let mut tx = pool.begin().await.map_sql_err()?;
-    insert_delta(
-        &mut tx,
-        DeltaInsert {
-            request_id: &request_id,
-            kind: KIND_PROXY_NODE,
-            target_id: &node_id,
-            total_requests_delta: delta.total_requests_delta,
-            error_count_delta: delta.failed_requests_delta,
-            dns_failures_delta: delta.dns_failures_delta,
-            stream_errors_delta: delta.stream_errors_delta,
-            ..DeltaInsert::default()
-        },
-    )
-    .await?;
-    tx.commit().await.map_sql_err()?;
-    Ok(true)
 }
 
 pub(super) async fn enqueue_management_token(
@@ -738,8 +684,6 @@ struct DeltaInsert<'a> {
     total_requests_delta: i64,
     success_count_delta: i64,
     error_count_delta: i64,
-    dns_failures_delta: i64,
-    stream_errors_delta: i64,
     total_tokens_delta: i64,
     total_cost_usd_delta: f64,
     total_response_time_ms_delta: i64,
@@ -763,11 +707,11 @@ async fn insert_delta(
         r#"
 INSERT INTO usage_counter_deltas (
   id, request_id, kind, target_id, request_count_delta, total_requests_delta,
-  success_count_delta, error_count_delta, dns_failures_delta, stream_errors_delta,
+  success_count_delta, error_count_delta,
   total_tokens_delta, total_cost_usd_delta, total_response_time_ms_delta,
   last_used_at_unix_secs, last_used_ip, candidate_last_used_at_unix_secs,
   removed_last_used_at_unix_secs, usage_created_at_unix_secs, created_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 "#,
     )
     .bind(uuid::Uuid::new_v4().to_string())
@@ -778,8 +722,6 @@ INSERT INTO usage_counter_deltas (
     .bind(input.total_requests_delta)
     .bind(input.success_count_delta)
     .bind(input.error_count_delta)
-    .bind(input.dns_failures_delta)
-    .bind(input.stream_errors_delta)
     .bind(input.total_tokens_delta)
     .bind(finite_or_zero(input.total_cost_usd_delta))
     .bind(input.total_response_time_ms_delta)
@@ -821,8 +763,6 @@ fn map_row(row: &sqlx::sqlite::SqliteRow) -> Result<DeltaRow, DataLayerError> {
         total_requests_delta: row.try_get("total_requests_delta").map_sql_err()?,
         success_count_delta: row.try_get("success_count_delta").map_sql_err()?,
         error_count_delta: row.try_get("error_count_delta").map_sql_err()?,
-        dns_failures_delta: row.try_get("dns_failures_delta").map_sql_err()?,
-        stream_errors_delta: row.try_get("stream_errors_delta").map_sql_err()?,
         total_tokens_delta: row.try_get("total_tokens_delta").map_sql_err()?,
         total_cost_usd_delta: sqlite_real(row, "total_cost_usd_delta")?,
         total_response_time_ms_delta: row.try_get("total_response_time_ms_delta").map_sql_err()?,
@@ -997,37 +937,6 @@ async fn apply_provider_monthly(
     Ok(())
 }
 
-async fn apply_proxy_node(
-    tx: &mut sqlx::Transaction<'_, Sqlite>,
-    target_id: &str,
-    delta: &ProxyNodeCounterDelta,
-) -> Result<(), DataLayerError> {
-    if target_id.trim().is_empty() || delta.is_noop() {
-        return Ok(());
-    }
-    sqlx::query(
-        r#"
-UPDATE proxy_nodes
-SET total_requests = total_requests + MAX(?, 0),
-    failed_requests = failed_requests + MAX(?, 0),
-    dns_failures = dns_failures + MAX(?, 0),
-    stream_errors = stream_errors + MAX(?, 0),
-    updated_at = ?
-WHERE id = ?
-"#,
-    )
-    .bind(delta.total_requests_delta)
-    .bind(delta.failed_requests_delta)
-    .bind(delta.dns_failures_delta)
-    .bind(delta.stream_errors_delta)
-    .bind(current_unix_secs())
-    .bind(target_id)
-    .execute(&mut **tx)
-    .await
-    .map_sql_err()?;
-    Ok(())
-}
-
 async fn apply_management_token(
     tx: &mut sqlx::Transaction<'_, Sqlite>,
     target_id: &str,
@@ -1158,11 +1067,11 @@ fn optional_nonnegative_u64(value: Option<i64>) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::{
-        cleanup_processed, enqueue_api_key_last_used, enqueue_management_token, enqueue_proxy_node,
-        flush, read_health, read_pending_health,
+        cleanup_processed, enqueue_api_key_last_used, enqueue_management_token, flush, read_health,
+        read_pending_health,
     };
     use aether_data_contracts::repository::usage::{
-        ApiKeyLastUsedDelta, ManagementTokenCounterDelta, ProxyNodeCounterDelta,
+        ApiKeyLastUsedDelta, ManagementTokenCounterDelta,
     };
 
     #[tokio::test]
@@ -1186,26 +1095,12 @@ INSERT INTO management_tokens (
 ) VALUES (
   'counter-token', 'counter-user', 'counter token', 'counter-token-hash', 1, 1
 );
-INSERT INTO proxy_nodes (id, name, ip, port, created_at, updated_at)
-VALUES ('counter-node', 'counter node', '127.0.0.1', 8080, 1, 1);
 "#,
         )
         .execute(&pool)
         .await
         .expect("counter targets should seed");
 
-        assert!(enqueue_proxy_node(
-            &pool,
-            ProxyNodeCounterDelta {
-                node_id: "counter-node".to_string(),
-                total_requests_delta: 3,
-                failed_requests_delta: 1,
-                dns_failures_delta: 2,
-                stream_errors_delta: 1,
-            },
-        )
-        .await
-        .expect("proxy counter should enqueue"));
         assert!(enqueue_management_token(
             &pool,
             ManagementTokenCounterDelta {
@@ -1230,24 +1125,15 @@ VALUES ('counter-node', 'counter node', '127.0.0.1', 8080, 1, 1);
         let pending = read_pending_health(&pool)
             .await
             .expect("pending health should load");
-        assert_eq!(pending.pending_rows, 3);
-        assert_eq!(pending.pending_by_kind.get("proxy_node"), Some(&1));
+        assert_eq!(pending.pending_rows, 2);
         assert_eq!(pending.pending_by_kind.get("management_token"), Some(&1));
         assert_eq!(pending.pending_by_kind.get("api_key_last_used"), Some(&1));
 
         let summary = flush(&pool, 100).await.expect("counters should flush");
-        assert_eq!(summary.rows_claimed, 3);
-        assert_eq!(summary.proxy_node_targets, 1);
+        assert_eq!(summary.rows_claimed, 2);
         assert_eq!(summary.management_token_targets, 1);
         assert_eq!(summary.api_key_last_used_targets, 1);
 
-        let proxy = sqlx::query_as::<_, (i64, i64, i64, i64)>(
-            "SELECT total_requests, failed_requests, dns_failures, stream_errors FROM proxy_nodes WHERE id = 'counter-node'",
-        )
-        .fetch_one(&pool)
-        .await
-        .expect("proxy counters should load");
-        assert_eq!(proxy, (3, 1, 2, 1));
         let token = sqlx::query_as::<_, (i64, Option<i64>, Option<String>)>(
             "SELECT usage_count, last_used_at, last_used_ip FROM management_tokens WHERE id = 'counter-token'",
         )
@@ -1264,14 +1150,14 @@ VALUES ('counter-node', 'counter node', '127.0.0.1', 8080, 1, 1);
 
         let health = read_health(&pool).await.expect("full health should load");
         assert_eq!(health.pending_rows, 0);
-        assert_eq!(health.processed_rows, 3);
+        assert_eq!(health.processed_rows, 2);
         assert!(health.latest_processed_at_unix_secs.is_some());
 
         let deleted =
             cleanup_processed(&pool, chrono::Utc::now().timestamp().max(0) as u64 + 1, 100)
                 .await
                 .expect("processed counters should clean up");
-        assert_eq!(deleted, 3);
+        assert_eq!(deleted, 2);
         assert_eq!(
             read_health(&pool)
                 .await

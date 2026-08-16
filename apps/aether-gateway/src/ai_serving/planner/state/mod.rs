@@ -7,7 +7,7 @@ mod scheduler;
 mod transport;
 
 pub(crate) use self::auth::GatewayAuthApiKeySnapshot;
-pub(crate) use self::transport::{GatewayProviderTransportSnapshot, LocalResolvedOAuthRequestAuth};
+pub(crate) use self::transport::GatewayProviderTransportSnapshot;
 
 #[derive(Clone, Copy)]
 pub(crate) struct PlannerAppState<'a> {

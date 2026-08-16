@@ -301,7 +301,7 @@ fn historical_stats_day() -> chrono::DateTime<chrono::Utc> {
 }
 
 fn postgres_backend(database_url: &str) -> crate::PostgresBackend {
-    crate::PostgresBackend::from_config(crate::driver::postgres::PostgresPoolConfig {
+    crate::PostgresBackend::from_config(aether_data_postgres::PostgresPoolConfig {
         database_url: database_url.to_string(),
         min_connections: 1,
         max_connections: 4,
@@ -411,7 +411,6 @@ fn empty_database_snapshot_covers_current_cutoff_versions() {
             20260720000000,
             20260727000000,
             20260731000000,
-            20260803000000,
         ]
     );
 }
@@ -472,7 +471,7 @@ fn create_table_names(sql: &str) -> BTreeSet<String> {
 }
 
 #[test]
-fn portable_driver_migrations_create_the_postgres_table_set() {
+fn sqlite_migrations_create_the_postgres_table_set() {
     let mut postgres_tables = POSTGRES_MIGRATOR
         .iter()
         .filter(|migration| migration.migration_type.is_up_migration())
@@ -480,18 +479,12 @@ fn portable_driver_migrations_create_the_postgres_table_set() {
         .collect::<BTreeSet<_>>();
     postgres_tables.remove("schema_backfills");
 
-    let mysql_tables = super::mysql::MIGRATOR
-        .iter()
-        .filter(|migration| migration.migration_type.is_up_migration())
-        .flat_map(|migration| create_table_names(migration.sql.as_ref()))
-        .collect::<BTreeSet<_>>();
-    let sqlite_tables = super::sqlite::MIGRATOR
+    let sqlite_tables = aether_data_sqlite::MIGRATOR
         .iter()
         .filter(|migration| migration.migration_type.is_up_migration())
         .flat_map(|migration| create_table_names(migration.sql.as_ref()))
         .collect::<BTreeSet<_>>();
 
-    assert_eq!(mysql_tables, postgres_tables, "MySQL table set drifted");
     assert_eq!(sqlite_tables, postgres_tables, "SQLite table set drifted");
 }
 
@@ -957,30 +950,22 @@ fn split_baseline_sources_match_executable_migrations() {
         compose_manifest("bootstrap/postgres/manifest.txt")
     );
     assert_eq!(
-        include_str!("../../../../adapters/mysql/migrations/20260403000000_baseline.sql"),
-        compose_manifest("drivers/mysql/baseline/manifest.txt")
-    );
-    assert_eq!(
         include_str!("../../../../adapters/sqlite/migrations/20260403000000_baseline.sql"),
         compose_manifest("drivers/sqlite/baseline/manifest.txt")
     );
 }
 
 #[test]
-fn mysql_and_sqlite_migrations_do_not_use_postgres_jsonb() {
-    let mysql_sources = super::mysql::MIGRATOR
-        .iter()
-        .filter(|migration| migration.migration_type.is_up_migration())
-        .map(|migration| migration.sql.as_ref());
-    let sqlite_sources = super::sqlite::MIGRATOR
+fn sqlite_migrations_do_not_use_postgres_jsonb() {
+    let sqlite_sources = aether_data_sqlite::MIGRATOR
         .iter()
         .filter(|migration| migration.migration_type.is_up_migration())
         .map(|migration| migration.sql.as_ref());
 
-    for source in mysql_sources.chain(sqlite_sources) {
+    for source in sqlite_sources {
         assert!(
             !source.to_ascii_lowercase().contains("jsonb"),
-            "Postgres jsonb must stay out of MySQL/SQLite migrations"
+            "Postgres jsonb must stay out of SQLite migrations"
         );
     }
 }
@@ -991,8 +976,7 @@ fn worker_boot_cleanup_migration_is_enabled_for_every_driver() {
 
     for (driver, migrator) in [
         ("postgres", &POSTGRES_MIGRATOR),
-        ("mysql", &super::mysql::MIGRATOR),
-        ("sqlite", &super::sqlite::MIGRATOR),
+        ("sqlite", &aether_data_sqlite::MIGRATOR),
     ] {
         let migration = migrator
             .iter()
@@ -1023,51 +1007,13 @@ fn worker_boot_cleanup_migration_is_enabled_for_every_driver() {
 }
 
 #[test]
-fn mysql_and_sqlite_migrations_include_enabled_incrementals() {
-    let mysql_versions = super::mysql::MIGRATOR
-        .iter()
-        .filter(|migration| migration.migration_type.is_up_migration())
-        .map(|migration| migration.version)
-        .collect::<Vec<_>>();
-    let sqlite_versions = super::sqlite::MIGRATOR
+fn sqlite_migrations_include_enabled_incrementals() {
+    let sqlite_versions = aether_data_sqlite::MIGRATOR
         .iter()
         .filter(|migration| migration.migration_type.is_up_migration())
         .map(|migration| migration.version)
         .collect::<Vec<_>>();
 
-    assert_eq!(
-        mysql_versions,
-        vec![
-            20260403000000,
-            20260507120000,
-            20260508000000,
-            20260509000000,
-            20260509120000,
-            20260510120000,
-            20260511120000,
-            20260511130000,
-            20260512000000,
-            20260512090000,
-            20260512110000,
-            20260516000000,
-            20260518000000,
-            20260519000000,
-            20260519120000,
-            20260519130000,
-            20260520000000,
-            20260520010000,
-            20260524000000,
-            20260527000000,
-            20260528000000,
-            20260528020000,
-            20260725010000,
-            20260725020000,
-            20260725030000,
-            20260727000000,
-            20260731000000,
-            20260803000000,
-        ]
-    );
     assert_eq!(
         sqlite_versions,
         vec![
@@ -1100,7 +1046,6 @@ fn mysql_and_sqlite_migrations_include_enabled_incrementals() {
             20260725040000,
             20260727000000,
             20260731000000,
-            20260803000000,
         ]
     );
 }
@@ -1136,7 +1081,7 @@ VALUES ('timestamp-usage', '1970-01-01T00:00:01.234900Z', '1970-01-01T00:00:02Z'
     .await
     .expect("usage timestamp fixture should insert");
 
-    let migration = super::sqlite::MIGRATOR
+    let migration = aether_data_sqlite::MIGRATOR
         .iter()
         .find(|migration| migration.version == 20260725000000)
         .expect("timestamp normalization migration should be embedded");
@@ -1219,7 +1164,7 @@ VALUES ('timestamp-invalid', 'timestamp-invalid', 1.5, 1);
     .await
     .expect("non-integer timestamp fixture should insert");
 
-    let migration = super::sqlite::MIGRATOR
+    let migration = aether_data_sqlite::MIGRATOR
         .iter()
         .find(|migration| migration.version == 20260725000000)
         .expect("timestamp normalization migration should be embedded");
@@ -1276,7 +1221,7 @@ INSERT INTO user_sessions (
     .await
     .expect("remaining timestamp fixtures should insert");
 
-    let migration = super::sqlite::MIGRATOR
+    let migration = aether_data_sqlite::MIGRATOR
         .iter()
         .find(|migration| migration.version == 20260725040000)
         .expect("remaining timestamp migration should be embedded");
@@ -1383,7 +1328,7 @@ VALUES ('timestamp-invalid-audit', 'test', 'test', 1.5);
     .await
     .expect("invalid timestamp fixture should insert");
 
-    let migration = super::sqlite::MIGRATOR
+    let migration = aether_data_sqlite::MIGRATOR
         .iter()
         .find(|migration| migration.version == 20260725040000)
         .expect("remaining timestamp migration should be embedded");
@@ -1427,9 +1372,7 @@ CREATE TABLE provider_endpoints (
     query(
         r#"
 INSERT INTO providers (id, provider_type) VALUES
-  ('provider-custom', 'custom'),
-  ('provider-fixed-vertex', 'vertex_ai'),
-  ('provider-fixed-grok', 'grok');
+  ('provider-custom', 'custom');
 "#,
     )
     .execute(&pool)
@@ -1466,17 +1409,15 @@ INSERT INTO provider_endpoints (id, provider_id, api_format, base_url, custom_pa
   ('gemini-embedding-old-default', 'provider-custom', 'gemini:embedding', 'https://generativelanguage.googleapis.com', '/v1beta/models/{model}:embedContent'),
   ('gemini-video-root', 'provider-custom', 'gemini:video', 'https://generativelanguage.googleapis.com', NULL),
   ('gemini-video-versioned-old-default', 'provider-custom', 'gemini:video', 'https://generativelanguage.googleapis.com/v1beta', '/v1beta/models/{model}:predictLongRunning'),
-  ('fixed-vertex-gemini-root', 'provider-fixed-vertex', 'gemini:embedding', 'https://aiplatform.googleapis.com', NULL),
   ('claude-path-root', 'provider-custom', 'claude:messages', 'https://proxy.example.com/anthropic', NULL),
-  ('claude-old-default-path', 'provider-custom', 'claude:messages', 'https://proxy.example.com/anthropic', '/v1/messages'),
-  ('fixed-grok-root', 'provider-fixed-grok', 'openai:chat', 'https://grok.com', NULL);
+  ('claude-old-default-path', 'provider-custom', 'claude:messages', 'https://proxy.example.com/anthropic', '/v1/messages');
 "#,
     )
     .execute(&pool)
     .await
     .expect("endpoint fixture should insert");
 
-    let migration = super::sqlite::MIGRATOR
+    let migration = aether_data_sqlite::MIGRATOR
         .iter()
         .find(|migration| migration.version == 20260528000000)
         .expect("endpoint API root migration should be embedded");
@@ -1653,10 +1594,6 @@ INSERT INTO provider_endpoints (id, provider_id, api_format, base_url, custom_pa
         ))
     );
     assert_eq!(
-        rows.get("fixed-vertex-gemini-root"),
-        Some(&("https://aiplatform.googleapis.com".to_string(), None))
-    );
-    assert_eq!(
         rows.get("claude-path-root"),
         Some(&("https://proxy.example.com/anthropic/v1".to_string(), None))
     );
@@ -1664,21 +1601,14 @@ INSERT INTO provider_endpoints (id, provider_id, api_format, base_url, custom_pa
         rows.get("claude-old-default-path"),
         Some(&("https://proxy.example.com/anthropic/v1".to_string(), None))
     );
-    assert_eq!(
-        rows.get("fixed-grok-root"),
-        Some(&("https://grok.com".to_string(), None))
-    );
 }
 
 #[test]
 fn fresh_usage_schema_projects_upstream_stream_mode_for_all_drivers() {
-    let mysql_baseline =
-        include_str!("../../../../adapters/mysql/migrations/20260403000000_baseline.sql");
     let sqlite_baseline =
         include_str!("../../../../adapters/sqlite/migrations/20260403000000_baseline.sql");
 
     assert!(EMPTY_DATABASE_SNAPSHOT_SQL.contains("upstream_is_stream boolean"));
-    assert!(mysql_baseline.contains("upstream_is_stream TINYINT(1)"));
     assert!(sqlite_baseline.contains("upstream_is_stream INTEGER"));
 }
 
@@ -2207,7 +2137,6 @@ fn pending_migrations_from_applied_skips_versions_already_applied() {
             20260720000000,
             20260727000000,
             20260731000000,
-            20260803000000,
         ]
     );
 }
@@ -2589,112 +2518,6 @@ WHERE id = 'metadata-migration-key'
         .execute(&pool)
         .await
         .expect("provider migration fixture should clean up");
-}
-
-#[tokio::test]
-async fn mysql_migrations_create_core_config_tables_when_url_is_set() {
-    let Some(database_url) = std::env::var("AETHER_TEST_MYSQL_URL")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-    else {
-        eprintln!("skipping mysql migration smoke test because AETHER_TEST_MYSQL_URL is unset");
-        return;
-    };
-
-    let pool = sqlx::mysql::MySqlPoolOptions::new()
-        .max_connections(1)
-        .connect(&database_url)
-        .await
-        .expect("mysql test pool should connect");
-
-    super::run_mysql_migrations(&pool)
-        .await
-        .expect("mysql migrations should run");
-
-    let pending = super::prepare_mysql_database_for_startup(&pool)
-        .await
-        .expect("mysql startup preparation should inspect applied migrations");
-    assert!(
-        pending.is_empty(),
-        "mysql startup preparation should report no pending migrations after migration"
-    );
-
-    for table_name in [
-        "users",
-        "user_preferences",
-        "user_sessions",
-        "api_keys",
-        "management_tokens",
-        "billing_rules",
-        "dimension_collectors",
-        "providers",
-        "provider_api_keys",
-        "provider_endpoints",
-        "models",
-        "global_models",
-        "system_configs",
-        "auth_modules",
-        "oauth_providers",
-        "proxy_nodes",
-        "usage",
-        "usage_settlement_snapshots",
-        "wallets",
-        "wallet_transactions",
-        "wallet_daily_usage_ledgers",
-        "payment_orders",
-        "payment_callbacks",
-        "refund_requests",
-        "redeem_code_batches",
-        "redeem_codes",
-    ] {
-        let exists: i64 = sqlx::query_scalar(
-            r#"
-SELECT COUNT(*)
-FROM information_schema.tables
-WHERE table_schema = DATABASE()
-  AND table_name = ?
-"#,
-        )
-        .bind(table_name)
-        .fetch_one(&pool)
-        .await
-        .expect("mysql information_schema query should succeed");
-        assert_eq!(exists, 1, "missing mysql table {table_name}");
-    }
-
-    let total_adjusted_exists: i64 = sqlx::query_scalar(
-        r#"
-SELECT COUNT(*)
-FROM information_schema.columns
-WHERE table_schema = DATABASE()
-  AND table_name = 'wallets'
-  AND column_name = 'total_adjusted'
-"#,
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("mysql information_schema column query should succeed");
-    assert_eq!(
-        total_adjusted_exists, 1,
-        "missing mysql wallets.total_adjusted"
-    );
-
-    let upstream_is_stream_exists: i64 = sqlx::query_scalar(
-        r#"
-SELECT COUNT(*)
-FROM information_schema.columns
-WHERE table_schema = DATABASE()
-  AND table_name = 'usage'
-  AND column_name = 'upstream_is_stream'
-"#,
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("mysql usage column query should succeed");
-    assert_eq!(
-        upstream_is_stream_exists, 1,
-        "missing mysql usage.upstream_is_stream"
-    );
 }
 
 #[tokio::test]

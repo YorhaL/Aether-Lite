@@ -249,7 +249,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reports_missing_python_required_fields() {
+    fn reports_missing_required_fields() {
         let config = ResolvedSmtpConfig {
             host: None,
             port: 587,

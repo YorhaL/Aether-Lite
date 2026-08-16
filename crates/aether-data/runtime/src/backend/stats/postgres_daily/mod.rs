@@ -33,7 +33,7 @@ impl PostgresBackend {
 }
 
 async fn next_stats_aggregation_day(
-    pool: &crate::driver::postgres::PostgresPool,
+    pool: &aether_data_postgres::PostgresPool,
     target_day_utc: DateTime<Utc>,
 ) -> Result<Option<DateTime<Utc>>, sqlx::Error> {
     let latest_row = sqlx::query(SELECT_LATEST_STATS_DAILY_DATE_SQL)
@@ -60,7 +60,7 @@ async fn next_stats_aggregation_day(
 }
 
 async fn perform_stats_aggregation_for_day(
-    pool: &crate::driver::postgres::PostgresPool,
+    pool: &aether_data_postgres::PostgresPool,
     day_start_utc: DateTime<Utc>,
     now_utc: DateTime<Utc>,
 ) -> Result<StatsDailyAggregationSummary, sqlx::Error> {

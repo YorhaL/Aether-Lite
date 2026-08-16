@@ -591,7 +591,6 @@ mod tests {
                 latency_ms: None,
                 concurrent_requests: None,
                 extra_data: Some(json!({
-                    "execution_strategy": "local_cross_format",
                     "provider_name": "primary",
                 })),
                 required_capabilities: None,
@@ -640,13 +639,6 @@ mod tests {
         assert_eq!(updated.status, RequestCandidateStatus::Success);
         assert_eq!(updated.status_code, Some(200));
         assert_eq!(updated.latency_ms, Some(25));
-        assert_eq!(
-            updated
-                .extra_data
-                .as_ref()
-                .and_then(|value| value.get("execution_strategy")),
-            Some(&json!("local_cross_format"))
-        );
         assert_eq!(
             updated
                 .extra_data

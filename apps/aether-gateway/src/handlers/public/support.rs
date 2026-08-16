@@ -28,8 +28,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 mod support_announcements;
 #[path = "support/auth.rs"]
 mod support_auth;
-#[path = "support/billing.rs"]
-mod support_billing;
 #[path = "support/ccswitch.rs"]
 mod support_ccswitch;
 #[path = "support/dashboard.rs"]
@@ -42,8 +40,6 @@ mod support_models;
 mod support_monitoring;
 #[path = "support/oauth.rs"]
 mod support_oauth;
-#[path = "support/payment.rs"]
-mod support_payment;
 #[path = "support/test_connection.rs"]
 mod support_test_connection;
 #[path = "support/user_me.rs"]
@@ -68,12 +64,11 @@ use self::support_auth::{
     build_auth_error_response, build_auth_json_response, build_auth_registration_settings_payload,
     build_auth_settings_payload, extract_client_device_id, maybe_build_local_auth_response,
 };
-use self::support_billing::maybe_build_local_billing_response;
 use self::support_ccswitch::maybe_build_local_ccswitch_response;
 use self::support_dashboard::maybe_build_local_dashboard_response;
 pub(crate) use self::support_install::{
     base_url_from_request, build_api_key_install_session_response,
-    build_proxy_node_install_session_response, CreateApiKeyInstallSessionRequest,
+    CreateApiKeyInstallSessionRequest,
 };
 use self::support_install::{
     handle_users_me_api_key_install_session_create, maybe_build_local_install_response,
@@ -84,18 +79,15 @@ use self::support_models::{
 };
 use self::support_monitoring::maybe_build_local_user_monitoring_response;
 use self::support_oauth::maybe_build_local_oauth_response;
-use self::support_payment::maybe_build_local_payment_callback_response;
 use self::support_test_connection::maybe_build_local_test_connection_response;
 use self::support_user_me::maybe_build_local_users_me_response;
 use self::support_wallet::{
     build_wallet_balance_payload_for_auth_scope, build_wallet_balance_payload_for_user,
     build_wallet_live_today_usage_payload_for_api_key,
-    build_wallet_live_today_usage_payload_for_user, direct_gateway_channels,
-    maybe_build_local_wallet_response, sanitize_wallet_gateway_response,
-    wallet_normalize_optional_string_field,
+    build_wallet_live_today_usage_payload_for_user, maybe_build_local_wallet_response,
 };
 
-pub(crate) fn build_unhandled_public_support_response(
+pub(crate) fn build_public_support_route_not_found_response(
     request_context: &GatewayPublicRequestContext,
 ) -> Response<Body> {
     let decision = request_context
@@ -103,9 +95,9 @@ pub(crate) fn build_unhandled_public_support_response(
         .as_ref()
         .expect("public support response requires control decision");
     (
-        http::StatusCode::NOT_IMPLEMENTED,
+        http::StatusCode::NOT_FOUND,
         Json(json!({
-            "detail": "public support route not implemented in rust frontdoor",
+            "detail": "Route not found",
             "route_family": decision.route_family,
             "route_kind": decision.route_kind,
             "request_path": request_context.request_path,
@@ -162,27 +154,22 @@ pub(crate) async fn maybe_build_local_public_support_response(
 
     if decision.route_family.as_deref() == Some("wallet") {
         if let Some(response) =
-            maybe_build_local_wallet_response(state, request_context, headers, request_body).await
+            maybe_build_local_wallet_response(state, request_context, headers).await
         {
             return Some(response);
         }
-        return Some(build_unhandled_public_support_response(request_context));
-    }
-
-    if decision.route_family.as_deref() == Some("billing") {
-        if let Some(response) =
-            maybe_build_local_billing_response(state, request_context, headers, request_body).await
-        {
-            return Some(response);
-        }
-        return Some(build_unhandled_public_support_response(request_context));
+        return Some(build_public_support_route_not_found_response(
+            request_context,
+        ));
     }
 
     if decision.route_family.as_deref() == Some("ccswitch") {
         if let Some(response) = maybe_build_local_ccswitch_response(state, request_context).await {
             return Some(response);
         }
-        return Some(build_unhandled_public_support_response(request_context));
+        return Some(build_public_support_route_not_found_response(
+            request_context,
+        ));
     }
 
     if decision.route_family.as_deref() == Some("users_me") {
@@ -192,16 +179,6 @@ pub(crate) async fn maybe_build_local_public_support_response(
 
     if decision.route_family.as_deref() == Some("install") {
         return maybe_build_local_install_response(state, request_context).await;
-    }
-
-    if decision.route_family.as_deref() == Some("payment_callback") {
-        return maybe_build_local_payment_callback_response(
-            state,
-            request_context,
-            headers,
-            request_body,
-        )
-        .await;
     }
 
     if decision.route_family.as_deref() == Some("models") {

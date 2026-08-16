@@ -192,14 +192,14 @@
             <div class="flex-1 min-w-0">
               <Input
                 v-if="!isEditMode && !form.unlimited"
-                id="form-initial-gift"
-                :model-value="form.initial_gift_usd ?? ''"
+                id="form-initial-balance"
+                :model-value="form.initial_balance_usd ?? ''"
                 type="number"
                 step="0.01"
                 min="0.01"
                 :placeholder="legacyT('初始额度 (USD)')"
                 class="h-10"
-                @update:model-value="(v) => form.initial_gift_usd = parseNumberInput(v, { allowFloat: true, min: 0.01 })"
+                @update:model-value="(v) => form.initial_balance_usd = parseNumberInput(v, { allowFloat: true, min: 0.01 })"
               />
               <span
                 v-else
@@ -301,7 +301,7 @@ export interface UserFormData {
   id?: string
   username: string
   email: string
-  initial_gift_usd?: number | null
+  initial_balance_usd?: number | null
   unlimited?: boolean
   role: 'admin' | 'user'
   is_active?: boolean
@@ -331,7 +331,7 @@ const form = ref({
   password: '',
   confirmPassword: '',
   email: '',
-  initial_gift_usd: 10 as number | undefined,
+  initial_balance_usd: 10 as number | undefined,
   role: 'user' as 'admin' | 'user',
   unlimited: false,
   is_active: true,
@@ -358,7 +358,7 @@ function resetForm() {
     password: '',
     confirmPassword: '',
     email: '',
-    initial_gift_usd: 10,
+    initial_balance_usd: 10,
     role: 'user',
     unlimited: false,
     is_active: true,
@@ -380,7 +380,7 @@ function loadUserData() {
     password: '',
     confirmPassword: '',
     email: props.user.email || '',
-    initial_gift_usd: undefined,
+    initial_balance_usd: undefined,
     role: props.user.role,
     unlimited: props.user.unlimited ?? false,
     is_active: props.user.is_active ?? true,
@@ -433,10 +433,10 @@ const isFormValid = computed(() => {
   const passwordConfirmed = isEditMode.value
     ? !passwordFilled || form.value.password === form.value.confirmPassword
     : true
-  const initialGiftValid = isEditMode.value ||
+  const initialBalanceValid = isEditMode.value ||
     form.value.unlimited ||
-    (typeof form.value.initial_gift_usd === 'number' && form.value.initial_gift_usd >= 0.01)
-  return hasUsername && usernameValid && passwordValid && passwordConfirmed && initialGiftValid
+    (typeof form.value.initial_balance_usd === 'number' && form.value.initial_balance_usd >= 0.01)
+  return hasUsername && usernameValid && passwordValid && passwordConfirmed && initialBalanceValid
 })
 
 
@@ -471,8 +471,8 @@ async function handleSubmit() {
 
     if (!isEditMode.value) {
       data.is_active = form.value.is_active
-      if (!form.value.unlimited && form.value.initial_gift_usd != null) {
-        data.initial_gift_usd = form.value.initial_gift_usd
+      if (!form.value.unlimited && form.value.initial_balance_usd != null) {
+        data.initial_balance_usd = form.value.initial_balance_usd
       }
     }
 
@@ -518,9 +518,9 @@ watch(
       return
     }
     if (unlimited) {
-      form.value.initial_gift_usd = undefined
-    } else if (form.value.initial_gift_usd == null) {
-      form.value.initial_gift_usd = 10
+      form.value.initial_balance_usd = undefined
+    } else if (form.value.initial_balance_usd == null) {
+      form.value.initial_balance_usd = 10
     }
   }
 )

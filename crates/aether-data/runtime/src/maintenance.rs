@@ -13,7 +13,7 @@ pub struct DatabaseMaintenanceSummary {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DatabasePoolSummary {
-    pub driver: crate::database::DatabaseDriver,
+    pub driver: crate::DatabaseDriver,
     pub checked_out: usize,
     pub pool_size: usize,
     pub idle: usize,
@@ -76,21 +76,6 @@ pub struct DatabasePostgresActivityGroup {
     pub connections: u64,
     pub max_query_age_ms: u64,
     pub max_transaction_age_ms: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WalletDailyUsageAggregationInput {
-    pub billing_date: String,
-    pub billing_timezone: String,
-    pub window_start_unix_secs: u64,
-    pub window_end_unix_secs: u64,
-    pub aggregated_at_unix_secs: u64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct WalletDailyUsageAggregationResult {
-    pub aggregated_wallets: usize,
-    pub deleted_stale_ledgers: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

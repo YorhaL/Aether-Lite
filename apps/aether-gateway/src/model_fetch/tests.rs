@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use aether_contracts::ExecutionPlan;
-use aether_crypto::{encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
+use aether_crypto::{encrypt_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
 use aether_data::repository::global_models::InMemoryGlobalModelReadRepository;
 use aether_data::repository::provider_catalog::InMemoryProviderCatalogReadRepository;
 use aether_data_contracts::repository::global_models::{
@@ -94,7 +94,7 @@ fn sample_key(provider_id: &str, key_id: &str) -> StoredProviderCatalogKey {
     .expect("key should build")
     .with_transport_fields(
         Some(json!(["openai:chat"])),
-        encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "live-secret-api-key")
+        encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "live-secret-api-key")
             .expect("api key should encrypt"),
         None,
         None,

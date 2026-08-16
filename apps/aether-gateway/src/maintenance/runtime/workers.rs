@@ -11,19 +11,12 @@ use super::{
     cleanup_processed_usage_counter_deltas_once, duration_until_next_daily_run,
     duration_until_next_db_maintenance_run, duration_until_next_stats_aggregation_run,
     duration_until_next_stats_hourly_aggregation_run, maintenance_timezone, parse_hhmm_time,
-    perform_oauth_token_refresh_once, perform_provider_quota_alert_once, provider_checkin_schedule,
     run_audit_cleanup_once, run_db_maintenance_once, run_gemini_file_mapping_cleanup_once,
-    run_pending_cleanup_once, run_pool_monitor_once, run_provider_checkin_once,
-    run_proxy_node_metrics_cleanup_once, run_proxy_node_stale_cleanup_once,
-    run_proxy_upgrade_rollout_once, run_request_candidate_cleanup_once, run_stats_aggregation_once,
-    run_stats_hourly_aggregation_once, run_usage_cleanup_once, run_usage_counter_flush_once,
-    run_wallet_daily_usage_aggregation_once, AUDIT_LOG_CLEANUP_INTERVAL,
-    GEMINI_FILE_MAPPING_CLEANUP_INTERVAL, OAUTH_TOKEN_REFRESH_INTERVAL, PENDING_CLEANUP_INTERVAL,
-    POOL_MONITOR_INTERVAL, PROVIDER_CHECKIN_DEFAULT_TIME, PROVIDER_QUOTA_ALERT_INTERVAL,
-    PROXY_NODE_METRICS_CLEANUP_HOUR, PROXY_NODE_METRICS_CLEANUP_MINUTE,
-    PROXY_NODE_STALE_SWEEP_INTERVAL, PROXY_UPGRADE_ROLLOUT_INTERVAL,
-    REQUEST_CANDIDATE_CLEANUP_INTERVAL, USAGE_CLEANUP_HOUR, USAGE_CLEANUP_MINUTE,
-    WALLET_DAILY_USAGE_AGGREGATION_HOUR, WALLET_DAILY_USAGE_AGGREGATION_MINUTE,
+    run_pending_cleanup_once, run_pool_monitor_once, run_request_candidate_cleanup_once,
+    run_stats_aggregation_once, run_stats_hourly_aggregation_once, run_usage_cleanup_once,
+    run_usage_counter_flush_once, AUDIT_LOG_CLEANUP_INTERVAL, GEMINI_FILE_MAPPING_CLEANUP_INTERVAL,
+    PENDING_CLEANUP_INTERVAL, POOL_MONITOR_INTERVAL, REQUEST_CANDIDATE_CLEANUP_INTERVAL,
+    USAGE_CLEANUP_HOUR, USAGE_CLEANUP_MINUTE,
 };
 use super::{UsageCounterFlushRuntimeMetrics, UsageCounterFlushWorkerConfig};
 
@@ -170,47 +163,6 @@ pub(crate) fn spawn_db_maintenance_worker(app: AppState) -> Option<tokio::task::
                 }
                 if let Err(err) = run_db_maintenance_once(&data).await {
                     log_maintenance_worker_failure("db_maintenance", "tick", &err);
-                }
-            }
-        },
-    ))
-}
-
-pub(crate) fn spawn_wallet_daily_usage_aggregation_worker(
-    app: AppState,
-) -> Option<tokio::task::JoinHandle<()>> {
-    if !app.data.has_wallet_daily_usage_aggregation_backend() {
-        return None;
-    }
-
-    let timezone = maintenance_timezone();
-    Some(crate::task_runtime::spawn_singleton_worker(
-        app,
-        crate::task_runtime::TASK_KEY_WALLET_DAILY_USAGE_AGG,
-        move |app| async move {
-            let data = app.data;
-            let mut deferred_since = None;
-            loop {
-                tokio::time::sleep(duration_until_next_daily_run(
-                    Utc::now(),
-                    timezone,
-                    WALLET_DAILY_USAGE_AGGREGATION_HOUR,
-                    WALLET_DAILY_USAGE_AGGREGATION_MINUTE,
-                ))
-                .await;
-                loop {
-                    if should_defer_for_database_pressure(
-                        &data,
-                        "wallet_daily_usage_aggregation",
-                        &mut deferred_since,
-                    ) {
-                        tokio::time::sleep(MAINTENANCE_PRESSURE_RETRY_INTERVAL).await;
-                        continue;
-                    }
-                    break;
-                }
-                if let Err(err) = run_wallet_daily_usage_aggregation_once(&data).await {
-                    log_maintenance_worker_failure("wallet_daily_usage_aggregation", "tick", &err);
                 }
             }
         },
@@ -435,129 +387,6 @@ async fn run_usage_counter_flush_worker_loop(
     }
 }
 
-pub(crate) fn spawn_provider_checkin_worker(
-    state: AppState,
-) -> Option<tokio::task::JoinHandle<()>> {
-    if !state.has_provider_catalog_data_reader() {
-        return None;
-    }
-
-    let timezone = maintenance_timezone();
-    Some(crate::task_runtime::spawn_singleton_worker(
-        state,
-        crate::task_runtime::TASK_KEY_PROVIDER_CHECKIN,
-        move |state| async move {
-            let mut deferred_since = None;
-            loop {
-                let (hour, minute) = match provider_checkin_schedule(&state.data).await {
-                    Ok(schedule) => schedule,
-                    Err(err) => {
-                        warn!(
-                            event_name = "maintenance_schedule_lookup_failed",
-                            log_type = "ops",
-                            worker = "provider_checkin",
-                            phase = "schedule_lookup",
-                            error = %err,
-                            fallback = PROVIDER_CHECKIN_DEFAULT_TIME,
-                            "gateway provider checkin schedule lookup failed; falling back"
-                        );
-                        parse_hhmm_time(PROVIDER_CHECKIN_DEFAULT_TIME)
-                            .expect("default provider checkin time should parse")
-                    }
-                };
-                tokio::time::sleep(duration_until_next_daily_run(
-                    Utc::now(),
-                    timezone,
-                    hour,
-                    minute,
-                ))
-                .await;
-                loop {
-                    if should_defer_for_database_pressure(
-                        &state.data,
-                        "provider_checkin",
-                        &mut deferred_since,
-                    ) {
-                        tokio::time::sleep(MAINTENANCE_PRESSURE_RETRY_INTERVAL).await;
-                        continue;
-                    }
-                    break;
-                }
-                if let Err(err) = run_provider_checkin_once(&state).await {
-                    log_maintenance_worker_failure("provider_checkin", "tick", &err);
-                }
-            }
-        },
-    ))
-}
-
-pub(crate) fn spawn_provider_quota_alert_worker(
-    state: AppState,
-) -> Option<tokio::task::JoinHandle<()>> {
-    if !state.has_provider_catalog_data_reader() {
-        return None;
-    }
-
-    Some(crate::task_runtime::spawn_singleton_worker(
-        state,
-        crate::task_runtime::TASK_KEY_PROVIDER_QUOTA_ALERT,
-        |state| async move {
-            let mut interval = tokio::time::interval(PROVIDER_QUOTA_ALERT_INTERVAL);
-            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-            interval.tick().await;
-            let mut deferred_since = None;
-            loop {
-                interval.tick().await;
-                if should_defer_for_database_pressure(
-                    &state.data,
-                    "provider_quota_alert",
-                    &mut deferred_since,
-                ) {
-                    continue;
-                }
-                if let Err(err) = perform_provider_quota_alert_once(&state).await {
-                    log_maintenance_worker_failure("provider_quota_alert", "tick", &err);
-                }
-            }
-        },
-    ))
-}
-
-pub(crate) fn spawn_oauth_token_refresh_worker(
-    state: AppState,
-) -> Option<tokio::task::JoinHandle<()>> {
-    if !state.has_provider_catalog_data_reader() || !state.has_provider_catalog_data_writer() {
-        return None;
-    }
-
-    Some(crate::task_runtime::spawn_singleton_worker(
-        state,
-        crate::task_runtime::TASK_KEY_OAUTH_TOKEN_REFRESH,
-        |state| async move {
-            if let Err(err) = perform_oauth_token_refresh_once(&state).await {
-                log_maintenance_worker_failure("oauth_token_refresh", "startup", &err);
-            }
-            let mut interval = tokio::time::interval(OAUTH_TOKEN_REFRESH_INTERVAL);
-            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-            interval.tick().await;
-            let mut deferred_since = None;
-            loop {
-                interval.tick().await;
-                if should_defer_for_database_pressure(
-                    &state.data,
-                    "oauth_token_refresh",
-                    &mut deferred_since,
-                ) {
-                    continue;
-                }
-                if let Err(err) = perform_oauth_token_refresh_once(&state).await {
-                    log_maintenance_worker_failure("oauth_token_refresh", "tick", &err);
-                }
-            }
-        },
-    ))
-}
-
 pub(crate) fn spawn_gemini_file_mapping_cleanup_worker(
     app: AppState,
 ) -> Option<tokio::task::JoinHandle<()>> {
@@ -619,121 +448,6 @@ pub(crate) fn spawn_pending_cleanup_worker(app: AppState) -> Option<tokio::task:
                 }
                 if let Err(err) = run_pending_cleanup_once(&data).await {
                     log_maintenance_worker_failure("pending_cleanup", "tick", &err);
-                }
-            }
-        },
-    ))
-}
-
-pub(crate) fn spawn_proxy_node_stale_cleanup_worker(
-    app: AppState,
-) -> Option<tokio::task::JoinHandle<()>> {
-    if !app.data.has_proxy_node_reader() || !app.data.has_proxy_node_writer() {
-        return None;
-    }
-
-    Some(crate::task_runtime::spawn_singleton_worker(
-        app,
-        crate::task_runtime::TASK_KEY_PROXY_NODE_STALE_CLEANUP,
-        |app| async move {
-            let data = app.data;
-            if let Err(err) = run_proxy_node_stale_cleanup_once(&data).await {
-                log_maintenance_worker_failure("proxy_node_stale_cleanup", "startup", &err);
-            }
-            let mut interval = tokio::time::interval(PROXY_NODE_STALE_SWEEP_INTERVAL);
-            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-            interval.tick().await;
-            let mut deferred_since = None;
-            loop {
-                interval.tick().await;
-                if should_defer_for_database_pressure(
-                    &data,
-                    "proxy_node_stale_cleanup",
-                    &mut deferred_since,
-                ) {
-                    continue;
-                }
-                if let Err(err) = run_proxy_node_stale_cleanup_once(&data).await {
-                    log_maintenance_worker_failure("proxy_node_stale_cleanup", "tick", &err);
-                }
-            }
-        },
-    ))
-}
-
-pub(crate) fn spawn_proxy_node_metrics_cleanup_worker(
-    app: AppState,
-) -> Option<tokio::task::JoinHandle<()>> {
-    if !app.data.has_proxy_node_writer() {
-        return None;
-    }
-
-    let timezone = maintenance_timezone();
-    Some(crate::task_runtime::spawn_singleton_worker(
-        app,
-        crate::task_runtime::TASK_KEY_PROXY_NODE_METRICS_CLEANUP,
-        move |app| async move {
-            let data = app.data;
-            let mut deferred_since = None;
-            loop {
-                tokio::time::sleep(duration_until_next_daily_run(
-                    Utc::now(),
-                    timezone,
-                    PROXY_NODE_METRICS_CLEANUP_HOUR,
-                    PROXY_NODE_METRICS_CLEANUP_MINUTE,
-                ))
-                .await;
-                loop {
-                    if should_defer_for_database_pressure(
-                        &data,
-                        "proxy_node_metrics_cleanup",
-                        &mut deferred_since,
-                    ) {
-                        tokio::time::sleep(MAINTENANCE_PRESSURE_RETRY_INTERVAL).await;
-                        continue;
-                    }
-                    break;
-                }
-                if let Err(err) = run_proxy_node_metrics_cleanup_once(&data).await {
-                    log_maintenance_worker_failure("proxy_node_metrics_cleanup", "tick", &err);
-                }
-            }
-        },
-    ))
-}
-
-pub(crate) fn spawn_proxy_upgrade_rollout_worker(
-    state: AppState,
-) -> Option<tokio::task::JoinHandle<()>> {
-    if !state.data.has_proxy_node_reader()
-        || !state.data.has_proxy_node_writer()
-        || !state.data.has_system_config_store()
-    {
-        return None;
-    }
-
-    Some(crate::task_runtime::spawn_singleton_worker(
-        state,
-        crate::task_runtime::TASK_KEY_PROXY_UPGRADE_ROLLOUT,
-        |state| async move {
-            if let Err(err) = run_proxy_upgrade_rollout_once(&state).await {
-                log_maintenance_worker_failure("proxy_upgrade_rollout", "startup", &err);
-            }
-            let mut interval = tokio::time::interval(PROXY_UPGRADE_ROLLOUT_INTERVAL);
-            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-            interval.tick().await;
-            let mut deferred_since = None;
-            loop {
-                interval.tick().await;
-                if should_defer_for_database_pressure(
-                    &state.data,
-                    "proxy_upgrade_rollout",
-                    &mut deferred_since,
-                ) {
-                    continue;
-                }
-                if let Err(err) = run_proxy_upgrade_rollout_once(&state).await {
-                    log_maintenance_worker_failure("proxy_upgrade_rollout", "tick", &err);
                 }
             }
         },

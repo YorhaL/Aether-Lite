@@ -1,9 +1,5 @@
 use aether_data::repository::{
     auth_modules::{StoredLdapModuleConfig, StoredOAuthProviderModuleConfig},
-    proxy_nodes::{
-        ProxyNodeMetricsStep, StoredProxyFleetMetricsBucket, StoredProxyNode, StoredProxyNodeEvent,
-        StoredProxyNodeMetricsBucket,
-    },
     system::StoredSystemConfigEntry,
     wallet::StoredWalletSnapshot,
 };
@@ -49,18 +45,6 @@ pub const ADMIN_SYSTEM_CONFIG_SUPPORTED_VERSIONS: &[&str] =
 pub const ADMIN_SYSTEM_USERS_EXPORT_VERSION: &str = "1.5";
 pub const ADMIN_SYSTEM_USERS_SUPPORTED_VERSIONS: &[&str] =
     &["1.3", "1.4", ADMIN_SYSTEM_USERS_EXPORT_VERSION];
-pub const ADMIN_SYSTEM_PROVIDER_OPS_SENSITIVE_CREDENTIAL_FIELDS: &[&str] = &[
-    "api_key",
-    "password",
-    "refresh_token",
-    "session_token",
-    "session_cookie",
-    "token_cookie",
-    "auth_cookie",
-    "cookie_string",
-    "cookie",
-];
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AdminSystemUpdateRelease {
     pub version: String,
@@ -178,28 +162,6 @@ fn chat_pii_redaction_default_rules() -> serde_json::Value {
 
 fn notification_service_default_items() -> serde_json::Value {
     json!([
-        {
-            "key": "provider_quota_alert",
-            "name": "号池额度不足",
-            "enabled": true,
-            "channel": "global",
-            "title_template": "",
-            "markdown_template": "",
-            "text_template": "",
-            "user_email_enabled": false,
-            "system": true
-        },
-        {
-            "key": "provider_pool_abnormal",
-            "name": "号池异常",
-            "enabled": true,
-            "channel": "global",
-            "title_template": "号池异常：{provider_name}",
-            "markdown_template": "号池 `{provider_name}` 出现异常，请检查服务状态。",
-            "text_template": "号池 {provider_name} 出现异常，请检查服务状态。",
-            "user_email_enabled": false,
-            "system": true
-        },
         {
             "key": "user_balance_low",
             "name": "用户余额不足",
@@ -354,7 +316,6 @@ pub struct AdminSystemConfigImportCounter {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct AdminSystemConfigImportStats {
     pub global_models: AdminSystemConfigImportCounter,
-    pub proxy_nodes: AdminSystemConfigImportCounter,
     pub providers: AdminSystemConfigImportCounter,
     pub endpoints: AdminSystemConfigImportCounter,
     pub keys: AdminSystemConfigImportCounter,
@@ -399,10 +360,6 @@ pub struct AdminSystemConfigEndpoint {
     pub custom_path: Option<String>,
     #[serde(default)]
     pub config: Option<Value>,
-    #[serde(default)]
-    pub format_acceptance_config: Option<Value>,
-    #[serde(default)]
-    pub proxy: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -411,8 +368,6 @@ pub struct AdminSystemConfigProviderKey {
     pub api_key: Option<String>,
     #[serde(default)]
     pub auth_type: Option<String>,
-    #[serde(default)]
-    pub auth_config: Option<Value>,
     #[serde(default)]
     pub name: Option<String>,
     #[serde(default)]
@@ -427,10 +382,6 @@ pub struct AdminSystemConfigProviderKey {
     pub internal_priority: Option<i32>,
     #[serde(default)]
     pub global_priority_by_format: Option<Value>,
-    #[serde(default)]
-    pub auth_type_by_format: Option<Value>,
-    #[serde(default)]
-    pub allow_auth_channel_mismatch_formats: Option<Vec<String>>,
     #[serde(default)]
     pub rpm_limit: Option<u32>,
     #[serde(default)]
@@ -451,8 +402,6 @@ pub struct AdminSystemConfigProviderKey {
     pub model_exclude_patterns: Option<Vec<String>>,
     #[serde(default = "default_true")]
     pub is_active: bool,
-    #[serde(default)]
-    pub proxy: Option<Value>,
     #[serde(default)]
     pub fingerprint: Option<Value>,
 }
@@ -492,19 +441,7 @@ pub struct AdminSystemConfigProvider {
     #[serde(default)]
     pub website: Option<String>,
     #[serde(default)]
-    pub provider_type: Option<String>,
-    #[serde(default)]
-    pub billing_type: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_optional_f64_from_number")]
-    pub monthly_quota_usd: Option<f64>,
-    #[serde(default)]
-    pub quota_reset_day: Option<u64>,
-    #[serde(default)]
     pub provider_priority: Option<i32>,
-    #[serde(default)]
-    pub keep_priority_on_conversion: Option<bool>,
-    #[serde(default)]
-    pub enable_format_conversion: Option<bool>,
     #[serde(default = "default_true")]
     pub is_active: bool,
     #[serde(default)]
@@ -516,8 +453,6 @@ pub struct AdminSystemConfigProvider {
     #[serde(default, deserialize_with = "deserialize_optional_f64_from_number")]
     pub request_timeout: Option<f64>,
     #[serde(default)]
-    pub proxy: Option<Value>,
-    #[serde(default)]
     pub config: Option<Value>,
     #[serde(default)]
     pub endpoints: Vec<AdminSystemConfigEndpoint>,
@@ -525,36 +460,6 @@ pub struct AdminSystemConfigProvider {
     pub api_keys: Vec<AdminSystemConfigProviderKey>,
     #[serde(default)]
     pub models: Vec<AdminSystemConfigProviderModel>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AdminSystemConfigProxyNode {
-    #[serde(default)]
-    pub id: Option<String>,
-    #[serde(default)]
-    pub name: Option<String>,
-    #[serde(default)]
-    pub ip: Option<String>,
-    #[serde(default)]
-    pub port: Option<i32>,
-    #[serde(default)]
-    pub region: Option<String>,
-    #[serde(default)]
-    pub is_manual: Option<bool>,
-    #[serde(default)]
-    pub proxy_url: Option<String>,
-    #[serde(default)]
-    pub proxy_username: Option<String>,
-    #[serde(default)]
-    pub proxy_password: Option<String>,
-    #[serde(default)]
-    pub tunnel_mode: Option<bool>,
-    #[serde(default)]
-    pub heartbeat_interval: Option<i32>,
-    #[serde(default)]
-    pub remote_config: Option<Value>,
-    #[serde(default)]
-    pub config_version: Option<i32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -625,8 +530,6 @@ pub struct AdminSystemConfigDocument {
     pub global_models: Vec<AdminSystemConfigGlobalModel>,
     #[serde(default)]
     pub providers: Vec<AdminSystemConfigProvider>,
-    #[serde(default)]
-    pub proxy_nodes: Vec<AdminSystemConfigProxyNode>,
     #[serde(default)]
     pub ldap_config: Option<AdminSystemConfigLdap>,
     #[serde(default)]
@@ -731,31 +634,17 @@ struct AdminApiFormatDefinition {
 
 const REQUEST_RECORD_LEVEL_KEY: &str = "request_record_level";
 const LEGACY_REQUEST_LOG_LEVEL_KEY: &str = "request_log_level";
-const DEFAULT_BARK_API_BASE: &str = "https://api.day.app";
 const SENSITIVE_SYSTEM_CONFIG_KEYS: &[&str] = &[
     "smtp_password",
     "turnstile_secret_key",
     "backup_s3_secret_access_key",
-    "module.server_chan_push.send_key",
-    "module.important_notification.server_chan_send_key",
-    "module.bark_push.device_key",
 ];
 const ADMIN_API_FORMAT_DEFINITIONS: &[AdminApiFormatDefinition] = &[
     AdminApiFormatDefinition {
         value: "openai:chat",
         label: "OpenAI Chat",
         default_path: "/v1/chat/completions",
-        aliases: &[
-            "openai",
-            "openai_compatible",
-            "deepseek",
-            "grok",
-            "moonshot",
-            "zhipu",
-            "qwen",
-            "baichuan",
-            "minimax",
-        ],
+        aliases: &["openai", "openai_compatible"],
     },
     AdminApiFormatDefinition {
         value: "openai:responses",
@@ -1314,8 +1203,6 @@ pub struct AdminModuleValidationInput<'a> {
     pub ldap_config: Option<&'a StoredLdapModuleConfig>,
     pub gemini_files_has_capable_key: bool,
     pub important_notification_configured: bool,
-    pub server_chan_push_configured: bool,
-    pub bark_push_configured: bool,
     pub s3_backup_configured: bool,
 }
 
@@ -1328,8 +1215,6 @@ pub fn build_admin_module_validation_result(
         ldap_config,
         gemini_files_has_capable_key,
         important_notification_configured,
-        server_chan_push_configured,
-        bark_push_configured,
         s3_backup_configured,
     } = input;
 
@@ -1409,20 +1294,6 @@ pub fn build_admin_module_validation_result(
                 (false, Some("请先完成通知服务推送渠道配置".to_string()))
             }
         }
-        "server_chan_push" => {
-            if server_chan_push_configured {
-                (true, None)
-            } else {
-                (false, Some("请先配置 Server 酱 SendKey".to_string()))
-            }
-        }
-        "bark_push" => {
-            if bark_push_configured {
-                (true, None)
-            } else {
-                (false, Some("请先配置 Bark Device Key".to_string()))
-            }
-        }
         "s3_backup" => {
             if s3_backup_configured {
                 (true, None)
@@ -1440,7 +1311,7 @@ pub fn build_admin_module_validation_result(
                 )
             }
         }
-        "management_tokens" | "model_directives" | "proxy_nodes" => (true, None),
+        "management_tokens" | "model_directives" => (true, None),
         _ => (true, None),
     }
 }
@@ -1450,13 +1321,9 @@ pub fn build_admin_module_health(
     gemini_files_has_capable_key: bool,
 ) -> &'static str {
     match module_name {
-        "management_tokens"
-        | "model_directives"
-        | "proxy_nodes"
-        | "important_notification"
-        | "bark_push"
-        | "server_chan_push"
-        | "s3_backup" => "healthy",
+        "management_tokens" | "model_directives" | "important_notification" | "s3_backup" => {
+            "healthy"
+        }
         "gemini_files" => {
             if gemini_files_has_capable_key {
                 "healthy"
@@ -1561,25 +1428,16 @@ pub fn serialize_admin_system_users_export_wallet(
     wallet: Option<&StoredWalletSnapshot>,
 ) -> Option<serde_json::Value> {
     let wallet = wallet?;
-    let recharge_balance = wallet.balance;
-    let gift_balance = wallet.gift_balance;
-    let spendable_balance = recharge_balance + gift_balance;
     let unlimited = wallet.limit_mode.eq_ignore_ascii_case("unlimited");
 
     Some(json!({
         "id": wallet.id.clone(),
-        "balance": spendable_balance,
-        "recharge_balance": recharge_balance,
-        "gift_balance": gift_balance,
-        "refundable_balance": recharge_balance,
+        "balance": wallet.balance,
         "currency": wallet.currency.clone(),
         "status": wallet.status.clone(),
         "limit_mode": wallet.limit_mode.clone(),
         "unlimited": unlimited,
-        "total_recharged": wallet.total_recharged,
         "total_consumed": wallet.total_consumed,
-        "total_refunded": wallet.total_refunded,
-        "total_adjusted": wallet.total_adjusted,
         "updated_at": unix_secs_to_rfc3339(wallet.updated_at_unix_secs),
     }))
 }
@@ -1635,12 +1493,6 @@ pub fn normalize_admin_system_config_key(requested_key: &str) -> String {
         REQUEST_RECORD_LEVEL_KEY.to_string()
     } else if trimmed.eq_ignore_ascii_case("module.notification_email.enabled") {
         "module.important_notification.enabled".to_string()
-    } else if trimmed.eq_ignore_ascii_case("module.important_notification.server_chan_enabled") {
-        "module.server_chan_push.enabled".to_string()
-    } else if trimmed.eq_ignore_ascii_case("module.important_notification.server_chan_send_key") {
-        "module.server_chan_push.send_key".to_string()
-    } else if trimmed.eq_ignore_ascii_case("module.important_notification.server_chan_template") {
-        "module.server_chan_push.template".to_string()
     } else {
         trimmed.to_string()
     }
@@ -1658,21 +1510,6 @@ pub fn admin_system_config_delete_keys(requested_key: &str) -> Vec<String> {
             "module.important_notification.enabled".to_string(),
             "module.notification_email.enabled".to_string(),
         ]
-    } else if normalized == "module.server_chan_push.enabled" {
-        vec![
-            "module.server_chan_push.enabled".to_string(),
-            "module.important_notification.server_chan_enabled".to_string(),
-        ]
-    } else if normalized == "module.server_chan_push.send_key" {
-        vec![
-            "module.server_chan_push.send_key".to_string(),
-            "module.important_notification.server_chan_send_key".to_string(),
-        ]
-    } else if normalized == "module.server_chan_push.template" {
-        vec![
-            "module.server_chan_push.template".to_string(),
-            "module.important_notification.server_chan_template".to_string(),
-        ]
     } else {
         vec![normalized]
     }
@@ -1688,7 +1525,7 @@ pub fn admin_system_config_default_value(key: &str) -> Option<serde_json::Value>
     match key {
         "site_name" => Some(json!("Aether")),
         "site_subtitle" => Some(json!("AI Gateway")),
-        "default_user_initial_gift_usd" => Some(json!(10.0)),
+        "default_user_initial_balance_usd" => Some(json!(10.0)),
         "daily_usage_limit_usd" => Some(json!(0.0)),
         "password_policy_level" => Some(json!("weak")),
         REQUEST_RECORD_LEVEL_KEY => Some(json!("full")),
@@ -1709,9 +1546,6 @@ pub fn admin_system_config_default_value(key: &str) -> Option<serde_json::Value>
         "cleanup_batch_size" => Some(json!(1000)),
         "request_candidates_retention_days" => Some(json!(30)),
         "request_candidates_cleanup_batch_size" => Some(json!(5000)),
-        "proxy_node_metrics_1m_retention_days" => Some(json!(30)),
-        "proxy_node_metrics_1h_retention_days" => Some(json!(180)),
-        "proxy_node_metrics_cleanup_batch_size" => Some(json!(5000)),
         "enable_provider_checkin" => Some(json!(true)),
         "provider_checkin_time" => Some(json!("01:05")),
         "provider_priority_mode" => Some(json!("provider")),
@@ -1742,15 +1576,11 @@ pub fn admin_system_config_default_value(key: &str) -> Option<serde_json::Value>
         "backup_s3_last_slot" => Some(serde_json::Value::Null),
         "email_suffix_mode" => Some(json!("none")),
         "email_suffix_list" => Some(json!([])),
-        "enable_format_conversion" => Some(json!(false)),
         "cyber_continue_failover" => Some(json!(false)),
         "enable_model_directives" => Some(json!(false)),
         "model_directives" => Some(aether_ai_formats::default_model_directives_config()),
-        "keep_priority_on_conversion" => Some(json!(false)),
         "audit_log_retention_days" => Some(json!(30)),
         "enable_db_maintenance" => Some(json!(true)),
-        "system_proxy_node_id" => Some(serde_json::Value::Null),
-        "external_models_proxy_node_id" => Some(serde_json::Value::Null),
         "smtp_host" => Some(serde_json::Value::Null),
         "smtp_port" => Some(json!(587)),
         "smtp_user" => Some(serde_json::Value::Null),
@@ -1759,19 +1589,11 @@ pub fn admin_system_config_default_value(key: &str) -> Option<serde_json::Value>
         "smtp_use_ssl" => Some(json!(false)),
         "smtp_from_email" => Some(serde_json::Value::Null),
         "smtp_from_name" => Some(json!("Aether")),
-        "enable_oauth_token_refresh" => Some(json!(true)),
         "module.important_notification.enabled" => Some(json!(false)),
         "module.important_notification.email_enabled" => Some(json!(false)),
         "module.important_notification.email_recipients" => Some(json!("")),
         "module.important_notification.default_channel" => Some(json!("all")),
         "module.important_notification.items" => Some(notification_service_default_items()),
-        "module.server_chan_push.enabled" => Some(json!(false)),
-        "module.server_chan_push.send_key" => Some(serde_json::Value::Null),
-        "module.server_chan_push.template" => Some(json!("")),
-        "module.bark_push.enabled" => Some(json!(false)),
-        "module.bark_push.device_key" => Some(serde_json::Value::Null),
-        "module.bark_push.server_url" => Some(json!(DEFAULT_BARK_API_BASE)),
-        "module.bark_push.template" => Some(json!("")),
         "module.chat_pii_redaction.enabled" => Some(json!(false)),
         "module.chat_pii_redaction.rules" => Some(chat_pii_redaction_default_rules()),
         "module.chat_pii_redaction.cache_ttl_seconds" => Some(json!(300)),
@@ -1947,42 +1769,6 @@ fn normalize_string_list_config_value(value: serde_json::Value) -> Result<serde_
     }
 }
 
-fn normalize_nullable_string_config_value(
-    value: serde_json::Value,
-) -> Result<serde_json::Value, ()> {
-    match value {
-        Value::Null => Ok(Value::Null),
-        Value::String(raw) => {
-            let raw = raw.trim();
-            if raw.is_empty() {
-                Ok(Value::Null)
-            } else {
-                Ok(json!(raw))
-            }
-        }
-        _ => Err(()),
-    }
-}
-
-fn normalize_bark_server_url_config_value(
-    value: serde_json::Value,
-) -> Result<serde_json::Value, ()> {
-    match value {
-        Value::Null => Ok(json!(DEFAULT_BARK_API_BASE)),
-        Value::String(raw) => {
-            let raw = raw.trim().trim_end_matches('/');
-            if raw.is_empty() {
-                return Ok(json!(DEFAULT_BARK_API_BASE));
-            }
-            if !raw.starts_with("https://") && !raw.starts_with("http://") {
-                return Err(());
-            }
-            Ok(json!(raw))
-        }
-        _ => Err(()),
-    }
-}
-
 fn normalize_notification_channel_value(value: serde_json::Value) -> Result<serde_json::Value, ()> {
     match value {
         Value::Null => Ok(json!("all")),
@@ -1998,8 +1784,6 @@ fn normalize_notification_channel(raw: &str, allow_global: bool) -> Result<&'sta
     match raw.to_ascii_lowercase().as_str() {
         "all" => Ok("all"),
         "email" => Ok("email"),
-        "server_chan" | "serverchan" | "serve_chan" => Ok("server_chan"),
-        "bark" => Ok("bark"),
         "global" | "" if allow_global => Ok("global"),
         _ => Err(()),
     }
@@ -2228,9 +2012,7 @@ pub fn parse_admin_system_config_update(
         "cyber_continue_failover"
         | "enable_model_directives"
         | "module.important_notification.enabled"
-        | "module.important_notification.email_enabled"
-        | "module.server_chan_push.enabled"
-        | "module.bark_push.enabled" => match value.as_bool() {
+        | "module.important_notification.email_enabled" => match value.as_bool() {
             Some(enabled) => value = json!(enabled),
             None if value.is_null() => {
                 value = admin_system_config_default_value(&normalized_key).unwrap_or(json!(false));
@@ -2269,54 +2051,6 @@ pub fn parse_admin_system_config_update(
                     )
                 })?;
             }
-        }
-        "module.server_chan_push.send_key" => {
-            value = normalize_nullable_string_config_value(value).map_err(|_| {
-                (
-                    http::StatusCode::BAD_REQUEST,
-                    json!({ "detail": "请求数据验证失败" }),
-                )
-            })?;
-        }
-        "module.server_chan_push.template" => {
-            value = match value {
-                Value::Null => json!(""),
-                Value::String(raw) => json!(raw),
-                _ => {
-                    return Err((
-                        http::StatusCode::BAD_REQUEST,
-                        json!({ "detail": "请求数据验证失败" }),
-                    ));
-                }
-            };
-        }
-        "module.bark_push.device_key" => {
-            value = normalize_nullable_string_config_value(value).map_err(|_| {
-                (
-                    http::StatusCode::BAD_REQUEST,
-                    json!({ "detail": "请求数据验证失败" }),
-                )
-            })?;
-        }
-        "module.bark_push.server_url" => {
-            value = normalize_bark_server_url_config_value(value).map_err(|_| {
-                (
-                    http::StatusCode::BAD_REQUEST,
-                    json!({ "detail": "请求数据验证失败" }),
-                )
-            })?;
-        }
-        "module.bark_push.template" => {
-            value = match value {
-                Value::Null => json!(""),
-                Value::String(raw) => json!(raw),
-                _ => {
-                    return Err((
-                        http::StatusCode::BAD_REQUEST,
-                        json!({ "detail": "请求数据验证失败" }),
-                    ));
-                }
-            };
         }
         "model_directives" => {
             if value.is_null() {
@@ -2679,360 +2413,6 @@ pub fn admin_adaptive_key_id_from_path(path: &str) -> Option<String> {
     }
 }
 
-pub const ADMIN_PROXY_NODES_DATA_UNAVAILABLE_DETAIL: &str = "Admin proxy nodes data unavailable";
-
-pub fn build_admin_proxy_nodes_data_unavailable_response() -> Response<Body> {
-    (
-        http::StatusCode::SERVICE_UNAVAILABLE,
-        Json(json!({ "detail": ADMIN_PROXY_NODES_DATA_UNAVAILABLE_DETAIL })),
-    )
-        .into_response()
-}
-
-pub fn build_admin_proxy_nodes_invalid_status_response() -> Response<Body> {
-    (
-        http::StatusCode::BAD_REQUEST,
-        Json(json!({
-            "detail": "status 必须是以下之一: ['offline', 'online']"
-        })),
-    )
-        .into_response()
-}
-
-pub fn build_admin_proxy_nodes_not_found_response() -> Response<Body> {
-    (
-        http::StatusCode::NOT_FOUND,
-        Json(json!({ "detail": "Proxy node 不存在" })),
-    )
-        .into_response()
-}
-
-pub fn build_admin_proxy_node_payload(node: &StoredProxyNode) -> serde_json::Value {
-    let mut payload = serde_json::Map::from_iter([
-        ("id".to_string(), json!(node.id)),
-        ("name".to_string(), json!(node.name)),
-        ("ip".to_string(), json!(node.ip)),
-        ("port".to_string(), json!(node.port)),
-        ("region".to_string(), json!(node.region)),
-        ("status".to_string(), json!(node.status)),
-        ("is_manual".to_string(), json!(node.is_manual)),
-        ("tunnel_mode".to_string(), json!(node.tunnel_mode)),
-        ("tunnel_connected".to_string(), json!(node.tunnel_connected)),
-        (
-            "tunnel_connected_at".to_string(),
-            json!(node
-                .tunnel_connected_at_unix_secs
-                .and_then(unix_secs_to_rfc3339)),
-        ),
-        ("registered_by".to_string(), json!(node.registered_by)),
-        (
-            "last_heartbeat_at".to_string(),
-            json!(node
-                .last_heartbeat_at_unix_secs
-                .and_then(unix_secs_to_rfc3339)),
-        ),
-        (
-            "heartbeat_interval".to_string(),
-            json!(node.heartbeat_interval),
-        ),
-        (
-            "active_connections".to_string(),
-            json!(node.active_connections),
-        ),
-        ("total_requests".to_string(), json!(node.total_requests)),
-        ("avg_latency_ms".to_string(), json!(node.avg_latency_ms)),
-        ("failed_requests".to_string(), json!(node.failed_requests)),
-        ("dns_failures".to_string(), json!(node.dns_failures)),
-        ("stream_errors".to_string(), json!(node.stream_errors)),
-        ("proxy_metadata".to_string(), json!(node.proxy_metadata)),
-        ("hardware_info".to_string(), json!(node.hardware_info)),
-        (
-            "estimated_max_concurrency".to_string(),
-            json!(node.estimated_max_concurrency),
-        ),
-        ("remote_config".to_string(), json!(node.remote_config)),
-        ("config_version".to_string(), json!(node.config_version)),
-        (
-            "created_at".to_string(),
-            json!(node.created_at_unix_ms.and_then(unix_secs_to_rfc3339)),
-        ),
-        (
-            "updated_at".to_string(),
-            json!(node.updated_at_unix_secs.and_then(unix_secs_to_rfc3339)),
-        ),
-    ]);
-
-    if node.is_manual {
-        payload.insert("proxy_url".to_string(), json!(node.proxy_url));
-        payload.insert("proxy_username".to_string(), json!(node.proxy_username));
-        payload.insert(
-            "proxy_password".to_string(),
-            json!(mask_admin_proxy_node_password(
-                node.proxy_password.as_deref()
-            )),
-        );
-    }
-
-    serde_json::Value::Object(payload)
-}
-
-pub fn build_admin_proxy_node_event_payload(event: &StoredProxyNodeEvent) -> serde_json::Value {
-    json!({
-        "id": event.id,
-        "event_type": event.event_type,
-        "detail": event.detail,
-        "event_metadata": event.event_metadata,
-        "created_at": event.created_at_unix_ms.and_then(unix_secs_to_rfc3339),
-    })
-}
-
-pub fn admin_proxy_node_event_node_id_from_path(request_path: &str) -> Option<&str> {
-    let request_path = request_path.trim_end_matches('/');
-    let node_id = request_path.strip_prefix("/api/admin/proxy-nodes/")?;
-    let node_id = node_id.strip_suffix("/events")?;
-    if node_id.is_empty() || node_id.contains('/') {
-        None
-    } else {
-        Some(node_id)
-    }
-}
-
-pub fn admin_proxy_node_metrics_node_id_from_path(request_path: &str) -> Option<&str> {
-    let request_path = request_path.trim_end_matches('/');
-    let node_id = request_path.strip_prefix("/api/admin/proxy-nodes/")?;
-    let node_id = node_id.strip_suffix("/metrics")?;
-    if node_id.is_empty() || node_id.contains('/') {
-        None
-    } else {
-        Some(node_id)
-    }
-}
-
-pub fn build_admin_proxy_node_metrics_payload_response(
-    step: ProxyNodeMetricsStep,
-    from_unix_secs: u64,
-    to_unix_secs: u64,
-    items: Vec<StoredProxyNodeMetricsBucket>,
-) -> Response<Body> {
-    let summary = summarize_proxy_node_metric_buckets(items.iter().map(|item| {
-        (
-            item.samples,
-            item.uptime_samples,
-            item.active_connections_sum,
-            item.active_connections_max,
-            item.heartbeat_rtt_ms_sum,
-            item.heartbeat_rtt_ms_max,
-            item.connect_errors_delta,
-            item.disconnects_delta,
-            item.error_events_delta,
-            item.ws_in_bytes_delta,
-            item.ws_out_bytes_delta,
-            item.ws_in_frames_delta,
-            item.ws_out_frames_delta,
-        )
-    }));
-    let items = items
-        .into_iter()
-        .map(build_admin_proxy_node_metrics_bucket_payload)
-        .collect::<Vec<_>>();
-    Json(json!({
-        "step": step.as_api_value(),
-        "from": from_unix_secs,
-        "to": to_unix_secs,
-        "items": items,
-        "summary": summary,
-    }))
-    .into_response()
-}
-
-pub fn build_admin_proxy_fleet_metrics_payload_response(
-    step: ProxyNodeMetricsStep,
-    from_unix_secs: u64,
-    to_unix_secs: u64,
-    items: Vec<StoredProxyFleetMetricsBucket>,
-) -> Response<Body> {
-    let summary = summarize_proxy_node_metric_buckets(items.iter().map(|item| {
-        (
-            item.samples,
-            item.uptime_samples,
-            item.active_connections_sum,
-            item.active_connections_max,
-            item.heartbeat_rtt_ms_sum,
-            item.heartbeat_rtt_ms_max,
-            item.connect_errors_delta,
-            item.disconnects_delta,
-            item.error_events_delta,
-            item.ws_in_bytes_delta,
-            item.ws_out_bytes_delta,
-            item.ws_in_frames_delta,
-            item.ws_out_frames_delta,
-        )
-    }));
-    let items = items
-        .into_iter()
-        .map(build_admin_proxy_fleet_metrics_bucket_payload)
-        .collect::<Vec<_>>();
-    Json(json!({
-        "step": step.as_api_value(),
-        "from": from_unix_secs,
-        "to": to_unix_secs,
-        "items": items,
-        "summary": summary,
-    }))
-    .into_response()
-}
-
-fn build_admin_proxy_node_metrics_bucket_payload(
-    item: StoredProxyNodeMetricsBucket,
-) -> serde_json::Value {
-    json!({
-        "node_id": item.node_id,
-        "bucket_start_unix_secs": item.bucket_start_unix_secs,
-        "bucket_start": unix_secs_to_rfc3339(item.bucket_start_unix_secs),
-        "samples": item.samples,
-        "uptime_samples": item.uptime_samples,
-        "uptime_ratio": ratio(item.uptime_samples, item.samples),
-        "active_connections_sum": item.active_connections_sum,
-        "active_connections_max": item.active_connections_max,
-        "active_connections_avg": ratio(item.active_connections_sum, item.samples),
-        "heartbeat_rtt_ms_sum": item.heartbeat_rtt_ms_sum,
-        "heartbeat_rtt_ms_max": item.heartbeat_rtt_ms_max,
-        "heartbeat_rtt_ms_avg": ratio(item.heartbeat_rtt_ms_sum, item.samples),
-        "connect_errors_delta": item.connect_errors_delta,
-        "disconnects_delta": item.disconnects_delta,
-        "error_events_delta": item.error_events_delta,
-        "ws_in_bytes_delta": item.ws_in_bytes_delta,
-        "ws_out_bytes_delta": item.ws_out_bytes_delta,
-        "ws_in_frames_delta": item.ws_in_frames_delta,
-        "ws_out_frames_delta": item.ws_out_frames_delta,
-    })
-}
-
-fn build_admin_proxy_fleet_metrics_bucket_payload(
-    item: StoredProxyFleetMetricsBucket,
-) -> serde_json::Value {
-    json!({
-        "bucket_start_unix_secs": item.bucket_start_unix_secs,
-        "bucket_start": unix_secs_to_rfc3339(item.bucket_start_unix_secs),
-        "samples": item.samples,
-        "uptime_samples": item.uptime_samples,
-        "uptime_ratio": ratio(item.uptime_samples, item.samples),
-        "active_connections_sum": item.active_connections_sum,
-        "active_connections_max": item.active_connections_max,
-        "active_connections_avg": ratio(item.active_connections_sum, item.samples),
-        "heartbeat_rtt_ms_sum": item.heartbeat_rtt_ms_sum,
-        "heartbeat_rtt_ms_max": item.heartbeat_rtt_ms_max,
-        "heartbeat_rtt_ms_avg": ratio(item.heartbeat_rtt_ms_sum, item.samples),
-        "connect_errors_delta": item.connect_errors_delta,
-        "disconnects_delta": item.disconnects_delta,
-        "error_events_delta": item.error_events_delta,
-        "ws_in_bytes_delta": item.ws_in_bytes_delta,
-        "ws_out_bytes_delta": item.ws_out_bytes_delta,
-        "ws_in_frames_delta": item.ws_in_frames_delta,
-        "ws_out_frames_delta": item.ws_out_frames_delta,
-    })
-}
-
-fn summarize_proxy_node_metric_buckets<I>(items: I) -> serde_json::Value
-where
-    I: IntoIterator<
-        Item = (
-            i64,
-            i64,
-            i64,
-            i64,
-            i64,
-            i64,
-            i64,
-            i64,
-            i64,
-            i64,
-            i64,
-            i64,
-            i64,
-        ),
-    >,
-{
-    let mut samples = 0;
-    let mut uptime_samples = 0;
-    let mut active_connections_sum = 0;
-    let mut active_connections_max = 0;
-    let mut heartbeat_rtt_ms_sum = 0;
-    let mut heartbeat_rtt_ms_max = 0;
-    let mut connect_errors_delta = 0;
-    let mut disconnects_delta = 0;
-    let mut error_events_delta = 0;
-    let mut ws_in_bytes_delta = 0;
-    let mut ws_out_bytes_delta = 0;
-    let mut ws_in_frames_delta = 0;
-    let mut ws_out_frames_delta = 0;
-
-    for item in items {
-        samples += item.0;
-        uptime_samples += item.1;
-        active_connections_sum += item.2;
-        active_connections_max = active_connections_max.max(item.3);
-        heartbeat_rtt_ms_sum += item.4;
-        heartbeat_rtt_ms_max = heartbeat_rtt_ms_max.max(item.5);
-        connect_errors_delta += item.6;
-        disconnects_delta += item.7;
-        error_events_delta += item.8;
-        ws_in_bytes_delta += item.9;
-        ws_out_bytes_delta += item.10;
-        ws_in_frames_delta += item.11;
-        ws_out_frames_delta += item.12;
-    }
-
-    json!({
-        "samples": samples,
-        "uptime_samples": uptime_samples,
-        "uptime_ratio": ratio(uptime_samples, samples),
-        "active_connections_sum": active_connections_sum,
-        "active_connections_max": active_connections_max,
-        "active_connections_avg": ratio(active_connections_sum, samples),
-        "heartbeat_rtt_ms_sum": heartbeat_rtt_ms_sum,
-        "heartbeat_rtt_ms_max": heartbeat_rtt_ms_max,
-        "heartbeat_rtt_ms_avg": ratio(heartbeat_rtt_ms_sum, samples),
-        "connect_errors_delta": connect_errors_delta,
-        "disconnects_delta": disconnects_delta,
-        "error_events_delta": error_events_delta,
-        "ws_in_bytes_delta": ws_in_bytes_delta,
-        "ws_out_bytes_delta": ws_out_bytes_delta,
-        "ws_in_frames_delta": ws_in_frames_delta,
-        "ws_out_frames_delta": ws_out_frames_delta,
-    })
-}
-
-fn ratio(numerator: i64, denominator: i64) -> Option<f64> {
-    if denominator <= 0 {
-        return None;
-    }
-    Some(numerator as f64 / denominator as f64)
-}
-
-pub fn build_admin_proxy_nodes_list_payload_response(
-    items: Vec<serde_json::Value>,
-    total: usize,
-    skip: usize,
-    limit: usize,
-    rollout: Option<serde_json::Value>,
-) -> Response<Body> {
-    Json(json!({
-        "items": items,
-        "total": total,
-        "skip": skip,
-        "limit": limit,
-        "rollout": rollout,
-    }))
-    .into_response()
-}
-
-pub fn build_admin_proxy_node_events_payload_response(
-    items: Vec<serde_json::Value>,
-) -> Response<Body> {
-    Json(json!({ "items": items })).into_response()
-}
-
 fn system_config_is_set(value: &serde_json::Value) -> bool {
     match value {
         serde_json::Value::Null => false,
@@ -3101,637 +2481,4 @@ fn suffixed_path_identifier_from_path(
         .strip_suffix(suffix)
         .map(|value| value.trim().trim_matches('/').to_string())
         .filter(|value| !value.is_empty() && !value.contains('/'))
-}
-
-fn mask_admin_proxy_node_password(password: Option<&str>) -> Option<String> {
-    let password = password?;
-    if password.is_empty() {
-        return None;
-    }
-    if password.len() < 8 {
-        return Some("****".to_string());
-    }
-    Some(format!(
-        "{}****{}",
-        &password[..2],
-        &password[password.len() - 2..]
-    ))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn build_admin_system_check_update_payload_reports_available_release() {
-        let payload = build_admin_system_check_update_payload_with_release(
-            "0.7.0-rc27".to_string(),
-            Some(AdminSystemUpdateRelease {
-                version: "v0.7.0-rc28".to_string(),
-                release_url: Some(
-                    "https://github.com/fawney19/Aether/releases/tag/v0.7.0-rc28".to_string(),
-                ),
-                release_notes: Some("release notes".to_string()),
-                published_at: Some("2026-05-13T00:00:00Z".to_string()),
-                tarball_url: None,
-                sha256sums_url: None,
-            }),
-            None,
-        );
-
-        assert_eq!(payload["current_version"], "0.7.0-rc27");
-        assert_eq!(payload["latest_version"], "v0.7.0-rc28");
-        assert_eq!(payload["has_update"], true);
-        assert_eq!(
-            payload["release_url"],
-            "https://github.com/fawney19/Aether/releases/tag/v0.7.0-rc28"
-        );
-        assert_eq!(payload["release_notes"], "release notes");
-        assert_eq!(payload["published_at"], "2026-05-13T00:00:00Z");
-        assert_eq!(payload["updatable"], false);
-        assert_eq!(payload["update_blocker"], "当前平台暂无安装包");
-        assert_eq!(payload["error"], serde_json::Value::Null);
-    }
-
-    #[test]
-    fn build_admin_system_check_update_payload_reports_updatable_release() {
-        let payload = build_admin_system_check_update_payload_with_release(
-            "0.7.0-rc27".to_string(),
-            Some(AdminSystemUpdateRelease {
-                version: "v0.7.0-rc28".to_string(),
-                release_url: None,
-                release_notes: None,
-                published_at: None,
-                tarball_url: Some("https://github.com/fawney19/Aether/releases/download/v0.7.0-rc28/aether.tar.gz".to_string()),
-                sha256sums_url: Some("https://github.com/fawney19/Aether/releases/download/v0.7.0-rc28/SHA256SUMS".to_string()),
-            }),
-            None,
-        );
-
-        assert_eq!(payload["has_update"], true);
-        assert_eq!(payload["updatable"], true);
-        assert_eq!(payload["update_blocker"], serde_json::Value::Null);
-    }
-
-    #[test]
-    fn build_admin_system_check_update_payload_normalizes_v_prefix() {
-        let payload = build_admin_system_check_update_payload_with_release(
-            "0.7.0-rc28".to_string(),
-            Some(AdminSystemUpdateRelease {
-                version: "v0.7.0-rc28".to_string(),
-                release_url: None,
-                release_notes: None,
-                published_at: None,
-                tarball_url: None,
-                sha256sums_url: None,
-            }),
-            None,
-        );
-
-        assert_eq!(payload["has_update"], false);
-        assert_eq!(payload["error"], serde_json::Value::Null);
-    }
-
-    #[test]
-    fn build_admin_system_check_update_payload_ignores_git_describe_build_on_latest_release() {
-        let payload = build_admin_system_check_update_payload_with_release(
-            "0.7.0-rc28-11-g63149fe2-dirty".to_string(),
-            Some(AdminSystemUpdateRelease {
-                version: "v0.7.0-rc28".to_string(),
-                release_url: None,
-                release_notes: None,
-                published_at: None,
-                tarball_url: None,
-                sha256sums_url: None,
-            }),
-            None,
-        );
-
-        assert_eq!(payload["has_update"], false);
-        assert_eq!(payload["error"], serde_json::Value::Null);
-    }
-
-    #[test]
-    fn build_admin_system_check_update_payload_ignores_newer_local_release() {
-        let payload = build_admin_system_check_update_payload_with_release(
-            "0.7.0-rc29".to_string(),
-            Some(AdminSystemUpdateRelease {
-                version: "v0.7.0-rc28".to_string(),
-                release_url: None,
-                release_notes: None,
-                published_at: None,
-                tarball_url: None,
-                sha256sums_url: None,
-            }),
-            None,
-        );
-
-        assert_eq!(payload["has_update"], false);
-        assert_eq!(payload["error"], serde_json::Value::Null);
-    }
-
-    #[test]
-    fn build_admin_system_check_update_payload_compares_rc_versions_numerically() {
-        let payload = build_admin_system_check_update_payload_with_release(
-            "0.7.0-rc9".to_string(),
-            Some(AdminSystemUpdateRelease {
-                version: "v0.7.0-rc10".to_string(),
-                release_url: None,
-                release_notes: None,
-                published_at: None,
-                tarball_url: None,
-                sha256sums_url: None,
-            }),
-            None,
-        );
-
-        assert_eq!(payload["has_update"], true);
-        assert_eq!(payload["error"], serde_json::Value::Null);
-    }
-
-    #[test]
-    fn parse_admin_system_config_import_request_accepts_supported_versions() {
-        for version in ADMIN_SYSTEM_CONFIG_SUPPORTED_VERSIONS {
-            let parsed = parse_admin_system_config_import_request(
-                json!({
-                    "version": version,
-                    "global_models": [],
-                    "providers": [],
-                })
-                .to_string()
-                .as_bytes(),
-            )
-            .expect("supported version should parse");
-
-            assert_eq!(parsed.request.document.version, *version);
-            assert_eq!(parsed.request.merge_mode, AdminImportMergeMode::Skip);
-            assert!(parsed.request.document.oauth_providers.is_empty());
-            assert!(parsed.request.document.system_configs.is_empty());
-            assert!(parsed.request.document.ldap_config.is_none());
-        }
-    }
-
-    #[test]
-    fn parse_admin_system_config_import_request_rejects_unknown_versions() {
-        for version in ["1.9", "2.4"] {
-            let err = parse_admin_system_config_import_request(
-                json!({
-                    "version": version,
-                    "global_models": [],
-                    "providers": [],
-                })
-                .to_string()
-                .as_bytes(),
-            )
-            .expect_err("unknown versions should fail");
-
-            assert_eq!(err.0, http::StatusCode::BAD_REQUEST);
-            assert_eq!(
-                err.1["detail"],
-                format!(
-                    "不支持的配置版本: {version}，支持的版本: {}",
-                    ADMIN_SYSTEM_CONFIG_SUPPORTED_VERSIONS.join(", ")
-                )
-            );
-        }
-    }
-
-    #[test]
-    fn parse_admin_system_config_import_request_rejects_invalid_merge_mode() {
-        let err = parse_admin_system_config_import_request(
-            json!({
-                "version": "2.2",
-                "merge_mode": "replace_all",
-            })
-            .to_string()
-            .as_bytes(),
-        )
-        .expect_err("invalid merge mode should fail");
-
-        assert_eq!(err.0, http::StatusCode::BAD_REQUEST);
-        assert_eq!(
-            err.1["detail"],
-            "merge_mode 仅支持 skip / overwrite / error"
-        );
-    }
-
-    #[test]
-    fn parse_admin_system_config_import_request_reports_field_path_for_shape_errors() {
-        let err = parse_admin_system_config_import_request(
-            json!({
-                "version": "2.2",
-                "global_models": [],
-                "providers": [{
-                    "name": "import-openai",
-                    "endpoints": [{
-                        "api_format": "openai:chat",
-                        "base_url": "https://api.example.com",
-                        "is_active": "yes"
-                    }]
-                }],
-            })
-            .to_string()
-            .as_bytes(),
-        )
-        .expect_err("invalid endpoint shape should fail");
-
-        assert_eq!(err.0, http::StatusCode::BAD_REQUEST);
-        let detail = err.1["detail"].as_str().expect("detail should be a string");
-        assert!(detail.contains("配置文件格式无效"));
-        assert!(detail.contains("providers[0].endpoints[0].is_active"));
-    }
-
-    #[test]
-    fn parse_admin_system_config_import_request_accepts_numeric_string_fields() {
-        let parsed = parse_admin_system_config_import_request(
-            json!({
-                "version": "2.2",
-                "global_models": [{
-                    "name": "veo3.1",
-                    "display_name": "Veo 3.1",
-                    "usage_count": "42",
-                    "default_price_per_request": "1.80000000",
-                }],
-                "providers": [{
-                    "name": "undyapi",
-                    "monthly_quota_usd": "12.50",
-                    "stream_first_byte_timeout": "60",
-                    "request_timeout": "120",
-                    "models": [{
-                        "global_model_name": "veo3.1",
-                        "provider_model_name": "veo3.1",
-                        "price_per_request": "0.70000000",
-                    }]
-                }],
-            })
-            .to_string()
-            .as_bytes(),
-        )
-        .expect("numeric string fields from Python exports should parse");
-
-        let global_model = &parsed.request.document.global_models[0];
-        assert_eq!(global_model.usage_count, Some(42));
-        assert_eq!(global_model.default_price_per_request, Some(1.8));
-
-        let provider = &parsed.request.document.providers[0];
-        assert_eq!(provider.monthly_quota_usd, Some(12.5));
-        assert_eq!(provider.stream_first_byte_timeout, Some(60.0));
-        assert_eq!(provider.request_timeout, Some(120.0));
-        assert_eq!(provider.models[0].price_per_request, Some(0.7));
-    }
-
-    #[test]
-    fn parse_admin_system_config_import_request_rejects_invalid_numeric_string_fields() {
-        let err = parse_admin_system_config_import_request(
-            json!({
-                "version": "2.2",
-                "global_models": [{
-                    "name": "veo3.1",
-                    "display_name": "Veo 3.1",
-                    "default_price_per_request": "not-a-number",
-                }],
-                "providers": [],
-            })
-            .to_string()
-            .as_bytes(),
-        )
-        .expect_err("invalid numeric string fields should fail");
-
-        assert_eq!(err.0, http::StatusCode::BAD_REQUEST);
-        let detail = err.1["detail"].as_str().expect("detail should be a string");
-        assert!(detail.contains("配置文件格式无效"));
-        assert!(detail.contains("default_price_per_request"));
-    }
-
-    #[test]
-    fn resolve_admin_system_export_key_api_formats_uses_endpoint_fallback() {
-        let provider_formats = vec!["openai:chat".to_string(), "claude:messages".to_string()];
-        let resolved =
-            resolve_admin_system_export_key_api_formats(None, &provider_formats, |value| {
-                Some(value.to_string())
-            });
-
-        assert_eq!(resolved, provider_formats);
-    }
-
-    #[test]
-    fn sensitive_admin_system_config_keys_are_case_insensitive() {
-        assert!(is_sensitive_admin_system_config_key("smtp_password"));
-        assert!(is_sensitive_admin_system_config_key("SMTP_PASSWORD"));
-        assert!(is_sensitive_admin_system_config_key("turnstile_secret_key"));
-        assert!(is_sensitive_admin_system_config_key("TURNSTILE_SECRET_KEY"));
-        assert!(is_sensitive_admin_system_config_key(
-            "module.server_chan_push.send_key"
-        ));
-        assert!(is_sensitive_admin_system_config_key(
-            "module.important_notification.server_chan_send_key"
-        ));
-        assert!(is_sensitive_admin_system_config_key(
-            "module.bark_push.device_key"
-        ));
-        assert!(!is_sensitive_admin_system_config_key("site_name"));
-    }
-
-    #[test]
-    fn s3_backup_secret_access_key_is_sensitive() {
-        assert!(is_sensitive_admin_system_config_key(
-            "backup_s3_secret_access_key"
-        ));
-        assert!(is_sensitive_admin_system_config_key(
-            "BACKUP_S3_SECRET_ACCESS_KEY"
-        ));
-        assert!(!is_sensitive_admin_system_config_key("backup_s3_bucket"));
-    }
-
-    #[test]
-    fn s3_backup_defaults_match_admin_ui_contract() {
-        assert_eq!(
-            admin_system_config_default_value("backup_s3_scope"),
-            Some(json!("data"))
-        );
-        assert_eq!(
-            admin_system_config_default_value("backup_s3_schedule_unit"),
-            Some(json!("days"))
-        );
-        assert_eq!(
-            admin_system_config_default_value("backup_s3_schedule_interval"),
-            Some(json!(1))
-        );
-        assert_eq!(
-            admin_system_config_default_value("backup_s3_retention_count"),
-            Some(json!(7))
-        );
-        assert_eq!(
-            admin_system_config_default_value("backup_s3_path_style"),
-            Some(json!(true))
-        );
-        assert_eq!(
-            admin_system_config_default_value("backup_s3_user_agent"),
-            Some(json!("rclone/v1.68.0"))
-        );
-    }
-
-    #[test]
-    fn cyber_continue_failover_defaults_to_disabled() {
-        assert_eq!(
-            admin_system_config_default_value("cyber_continue_failover"),
-            Some(json!(false))
-        );
-    }
-
-    #[test]
-    fn cyber_continue_failover_update_requires_a_boolean() {
-        let update =
-            parse_admin_system_config_update("cyber_continue_failover", br#"{"value":true}"#)
-                .expect("boolean Cyber failover setting should parse");
-        assert_eq!(update.value, json!(true));
-
-        assert!(parse_admin_system_config_update(
-            "cyber_continue_failover",
-            br#"{"value":"true"}"#,
-        )
-        .is_err());
-    }
-
-    #[test]
-    fn model_directives_update_accepts_legacy_and_current_config_shapes() {
-        for body in [
-            r#"{
-                "value": {
-                    "reasoning_effort": {
-                        "enabled": true,
-                        "api_formats": {
-                            "openai:responses": {
-                                "enabled": true,
-                                "mappings": {
-                                    "low": { "reasoning": { "effort": "low" } }
-                                }
-                            }
-                        }
-                    }
-                }
-            }"#,
-            r#"{
-                "value": {
-                    "reasoning_effort": {
-                        "api_formats": {
-                            "openai:responses": {
-                                "suffixes": ["low", "VendorFuture"],
-                                "mappings": {
-                                    "VendorFuture": { "reasoning": { "context": "all_turns" } }
-                                }
-                            }
-                        }
-                    }
-                }
-            }"#,
-            r#"{
-                "value": {
-                    "reasoning_effort": {
-                        "api_formats": {
-                            "/v1/responses": {
-                                "suffixes": ["low"],
-                                "mappings": {}
-                            }
-                        }
-                    }
-                }
-            }"#,
-        ] {
-            let update = parse_admin_system_config_update("model_directives", body.as_bytes())
-                .expect("valid model directive config should parse");
-            assert!(update.value["reasoning_effort"].is_object());
-        }
-
-        let reset = parse_admin_system_config_update("model_directives", br#"{"value":null}"#)
-            .expect("null should reset model directives to defaults");
-        assert_eq!(
-            reset.value,
-            aether_ai_formats::default_model_directives_config()
-        );
-    }
-
-    #[test]
-    fn model_directives_update_rejects_unsafe_mapping_shapes() {
-        for body in [
-            r#"{"value":[]}"#,
-            r#"{"value":{"reasoning_effort":true}}"#,
-            r#"{"value":{"reasoning_effort":{"enabled":"true"}}}"#,
-            r#"{"value":{"reasoning_effort":{"api_formats":[]}}}"#,
-            r#"{"value":{"reasoning_effort":{"api_formats":{"openai:responses":{"suffixes":["low",42]}}}}}"#,
-            r#"{"value":{"reasoning_effort":{"api_formats":{"openai:responses":{"mappings":{"low":"replace-body"}}}}}}"#,
-        ] {
-            let error = parse_admin_system_config_update("model_directives", body.as_bytes())
-                .expect_err("invalid model directive config should fail");
-            assert_eq!(error.0, http::StatusCode::BAD_REQUEST);
-            assert_eq!(error.1["detail"], "模型后缀参数配置格式无效");
-        }
-    }
-
-    #[test]
-    fn model_directives_update_rejects_ambiguous_aliases_and_suffixes() {
-        for body in [
-            r#"{"value":{"reasoning_effort":{"api_formats":{"openai:responses":true,"/v1/responses":false}}}}"#,
-            r#"{"value":{"reasoning_effort":{"api_formats":{"openai:responses":{"suffixes":["low","LOW"]}}}}}"#,
-            r#"{"value":{"reasoning_effort":{"api_formats":{"openai:responses":{"mappings":{"VendorFuture":{},"vendorfuture":{}}}}}}}"#,
-        ] {
-            let error = parse_admin_system_config_update("model_directives", body.as_bytes())
-                .expect_err("ambiguous model directive config should fail");
-            assert_eq!(error.0, http::StatusCode::BAD_REQUEST);
-            assert_eq!(error.1["detail"], "模型后缀参数配置格式无效");
-        }
-    }
-
-    #[test]
-    fn enable_model_directives_update_requires_a_boolean() {
-        let update =
-            parse_admin_system_config_update("enable_model_directives", br#"{"value":true}"#)
-                .expect("boolean model directives flag should parse");
-        assert_eq!(update.value, json!(true));
-        assert!(parse_admin_system_config_update(
-            "enable_model_directives",
-            br#"{"value":"true"}"#,
-        )
-        .is_err());
-    }
-
-    #[test]
-    fn legacy_notification_email_config_key_normalizes_to_important_notification() {
-        assert_eq!(
-            normalize_admin_system_config_key("module.notification_email.enabled"),
-            "module.important_notification.enabled"
-        );
-        assert_eq!(
-            admin_system_config_delete_keys("module.important_notification.enabled"),
-            vec![
-                "module.important_notification.enabled".to_string(),
-                "module.notification_email.enabled".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn s3_backup_secret_detail_is_write_only() {
-        let payload = build_admin_system_config_detail_payload(
-            "backup_s3_secret_access_key",
-            Some(json!("encrypted-secret")),
-        )
-        .expect("sensitive backup key should render");
-
-        assert_eq!(payload["key"], json!("backup_s3_secret_access_key"));
-        assert_eq!(payload["value"], serde_json::Value::Null);
-        assert_eq!(payload["is_set"], json!(true));
-    }
-
-    #[test]
-    fn legacy_server_chan_config_keys_normalize_to_push_module() {
-        assert_eq!(
-            normalize_admin_system_config_key("module.important_notification.server_chan_send_key"),
-            "module.server_chan_push.send_key"
-        );
-        assert_eq!(
-            admin_system_config_delete_keys("module.server_chan_push.send_key"),
-            vec![
-                "module.server_chan_push.send_key".to_string(),
-                "module.important_notification.server_chan_send_key".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn system_config_list_normalizes_legacy_keys_and_prefers_canonical_rows() {
-        let entries = vec![
-            StoredSystemConfigEntry {
-                key: "module.important_notification.server_chan_send_key".to_string(),
-                value: json!("legacy-secret"),
-                description: None,
-                updated_at_unix_secs: None,
-            },
-            StoredSystemConfigEntry {
-                key: "module.server_chan_push.send_key".to_string(),
-                value: json!("canonical-secret"),
-                description: None,
-                updated_at_unix_secs: None,
-            },
-            StoredSystemConfigEntry {
-                key: "module.notification_email.enabled".to_string(),
-                value: json!(true),
-                description: None,
-                updated_at_unix_secs: None,
-            },
-        ];
-
-        let payload = build_admin_system_configs_payload(&entries);
-        let rows = payload.as_array().expect("config list should be an array");
-        assert_eq!(rows.len(), 2);
-        assert!(rows.iter().any(|row| {
-            row["key"] == json!("module.server_chan_push.send_key") && row["is_set"] == json!(true)
-        }));
-        assert!(rows.iter().any(|row| {
-            row["key"] == json!("module.important_notification.enabled")
-                && row["value"] == json!(true)
-        }));
-    }
-
-    #[test]
-    fn notification_service_items_are_normalized() {
-        let update = parse_admin_system_config_update(
-            "module.important_notification.items",
-            r#"{
-                "value": [
-                    {
-                        "key": "user_balance_low",
-                        "name": " 用户余额不足 ",
-                        "enabled": true,
-                        "channel": "serverchan",
-                        "title_template": " 余额提醒 ",
-                        "markdown_template": " {body} ",
-                        "text_template": null,
-                        "user_email_enabled": true,
-                        "system": true
-                    }
-                ]
-            }"#
-            .as_bytes(),
-        )
-        .expect("items should parse");
-
-        assert_eq!(update.normalized_key, "module.important_notification.items");
-        assert_eq!(update.value[0]["channel"], json!("server_chan"));
-        assert_eq!(update.value[0]["name"], json!("用户余额不足"));
-        assert_eq!(update.value[0]["text_template"], json!(""));
-        assert_eq!(update.value[0]["user_email_enabled"], json!(true));
-    }
-
-    #[test]
-    fn bark_push_config_values_are_normalized() {
-        let update = parse_admin_system_config_update(
-            "module.bark_push.server_url",
-            r#"{ "value": " https://api.day.app/ " }"#.as_bytes(),
-        )
-        .expect("server url should parse");
-
-        assert_eq!(update.normalized_key, "module.bark_push.server_url");
-        assert_eq!(update.value, json!("https://api.day.app"));
-
-        let err = parse_admin_system_config_update(
-            "module.bark_push.server_url",
-            r#"{ "value": "api.day.app" }"#.as_bytes(),
-        )
-        .expect_err("server url without scheme should fail");
-        assert_eq!(err.0, http::StatusCode::BAD_REQUEST);
-    }
-
-    #[test]
-    fn build_admin_system_config_detail_masks_turnstile_secret_key() {
-        let payload = build_admin_system_config_detail_payload(
-            "turnstile_secret_key",
-            Some(json!("encrypted-turnstile-secret")),
-        )
-        .expect("turnstile secret detail should build");
-
-        assert_eq!(payload["key"], "turnstile_secret_key");
-        assert_eq!(payload["value"], serde_json::Value::Null);
-        assert_eq!(payload["is_set"], json!(true));
-    }
 }

@@ -28,7 +28,6 @@ async fn gateway_executes_gemini_files_upload_via_local_decision_gate_with_local
         content_type: String,
         body_bytes_b64: String,
         endpoint_tag: String,
-        proxy_node_id: String,
         transport_profile_id: String,
     }
 
@@ -156,12 +155,6 @@ async fn gateway_executes_gemini_files_upload_via_local_decision_gate_with_local
                         .and_then(|value| value.as_str())
                         .unwrap_or_default()
                         .to_string(),
-                    proxy_node_id: payload
-                        .get("proxy")
-                        .and_then(|value| value.get("node_id"))
-                        .and_then(|value| value.as_str())
-                        .unwrap_or_default()
-                        .to_string(),
                     transport_profile_id: payload
                         .get("transport_profile")
                         .and_then(|value| value.get("profile_id"))
@@ -199,17 +192,13 @@ async fn gateway_executes_gemini_files_upload_via_local_decision_gate_with_local
             sample_files_candidate_row(),
         ]));
     let request_candidate_repository = Arc::new(InMemoryRequestCandidateRepository::default());
-    let mut provider = sample_files_provider_catalog_provider();
-    provider.proxy = Some(serde_json::json!({"url":"http://provider-proxy.internal:8080"}));
+    let provider = sample_files_provider_catalog_provider();
     let mut endpoint = sample_files_provider_catalog_endpoint();
     endpoint.custom_path = Some("/custom/upload/v1beta/files".to_string());
     endpoint.header_rules = Some(
         serde_json::json!([{"action":"set","key":"x-endpoint-tag","value":"gemini-files-upload-local"}]),
     );
     let mut key = sample_files_provider_catalog_key();
-    key.proxy = Some(
-        serde_json::json!({"enabled": true, "node_id":"proxy-node-gemini-files-upload-local"}),
-    );
     key.fingerprint = Some(serde_json::json!({"transport_profile":"chrome_136"}));
     let provider_catalog_repository = Arc::new(InMemoryProviderCatalogReadRepository::seed(
         vec![provider],
@@ -281,10 +270,6 @@ async fn gateway_executes_gemini_files_upload_via_local_decision_gate_with_local
             .decode(seen_execution_runtime_request.body_bytes_b64)
             .expect("execution runtime body should decode"),
         b"upload-local-bytes"
-    );
-    assert_eq!(
-        seen_execution_runtime_request.proxy_node_id,
-        "proxy-node-gemini-files-upload-local"
     );
     assert_eq!(
         seen_execution_runtime_request.transport_profile_id,

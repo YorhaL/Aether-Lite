@@ -26,7 +26,6 @@ SELECT
   key_id,
   client_api_format,
   provider_api_format,
-  format_converted,
   model,
   prompt,
   original_request_body,
@@ -365,13 +364,13 @@ const UPSERT_SQL: &str = r#"
 INSERT INTO video_tasks (
   id, short_id, request_id, user_id, api_key_id, username, api_key_name,
   external_task_id, provider_id, endpoint_id, key_id, client_api_format,
-  provider_api_format, format_converted, model, prompt, original_request_body,
+  provider_api_format, model, prompt, original_request_body,
   duration_seconds, resolution, aspect_ratio, size, status, progress_percent,
   progress_message, retry_count, poll_interval_seconds, next_poll_at, poll_count,
   max_poll_count, video_url, error_code, error_message, request_metadata,
   created_at, submitted_at, completed_at, updated_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   short_id = excluded.short_id,
   request_id = excluded.request_id,
@@ -385,7 +384,6 @@ ON CONFLICT(id) DO UPDATE SET
   key_id = excluded.key_id,
   client_api_format = excluded.client_api_format,
   provider_api_format = excluded.provider_api_format,
-  format_converted = excluded.format_converted,
   model = excluded.model,
   prompt = excluded.prompt,
   original_request_body = excluded.original_request_body,
@@ -425,7 +423,6 @@ UPDATE video_tasks SET
   key_id = ?,
   client_api_format = ?,
   provider_api_format = ?,
-  format_converted = ?,
   model = ?,
   prompt = ?,
   original_request_body = ?,
@@ -479,7 +476,6 @@ fn bind_task<'q>(
         .bind(task.key_id)
         .bind(task.client_api_format)
         .bind(task.provider_api_format)
-        .bind(task.format_converted)
         .bind(task.model)
         .bind(task.prompt)
         .bind(original_request_body)
@@ -604,7 +600,6 @@ fn map_video_task_row(row: &SqliteRow) -> Result<StoredVideoTask, DataLayerError
         row.try_get("key_id").map_sql_err()?,
         row.try_get("client_api_format").map_sql_err()?,
         row.try_get("provider_api_format").map_sql_err()?,
-        row.try_get("format_converted").map_sql_err()?,
         row.try_get("model").map_sql_err()?,
         row.try_get("prompt").map_sql_err()?,
         parse_json(row.try_get("original_request_body").ok().flatten())?,
@@ -885,7 +880,6 @@ mod tests {
             key_id: Some("provider-key-1".to_string()),
             client_api_format: Some("openai:video".to_string()),
             provider_api_format: Some("openai:video".to_string()),
-            format_converted: false,
             model: Some("sora-2".to_string()),
             prompt: Some("hello".to_string()),
             original_request_body: Some(serde_json::json!({"prompt": "hello"})),

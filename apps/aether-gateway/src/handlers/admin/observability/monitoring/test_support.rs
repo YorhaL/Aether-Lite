@@ -1,5 +1,5 @@
 use crate::control::GatewayPublicRequestContext;
-use aether_crypto::{encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
+use aether_crypto::{encrypt_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
 use aether_data_contracts::repository::{
     candidates::{RequestCandidateStatus, StoredRequestCandidate},
     provider_catalog::{
@@ -208,7 +208,7 @@ pub(super) fn sample_monitoring_export_api_key(
         api_key_id.to_string(),
         format!("hash-{api_key_id}"),
         Some(
-            encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-user-monitoring-1234")
+            encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-user-monitoring-1234")
                 .expect("user key should encrypt"),
         ),
         Some("Alice Key".to_string()),
@@ -248,7 +248,7 @@ pub(super) fn sample_monitoring_catalog_key() -> StoredProviderCatalogKey {
     sample_key()
         .with_transport_fields(
             None,
-            encrypt_python_fernet_plaintext(
+            encrypt_fernet_plaintext(
                 DEVELOPMENT_ENCRYPTION_KEY,
                 "sk-upstream-monitoring-5678",
             )

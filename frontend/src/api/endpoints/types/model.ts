@@ -103,7 +103,6 @@ export interface Model {
   global_model_display_name?: string
   // 有效配置（合并 Model 和 GlobalModel 的 config）
   effective_config?: Record<string, unknown> | null
-  model_test_capabilities?: ModelTestCapabilities | null
 }
 
 export interface ModelCreate {
@@ -145,17 +144,6 @@ export interface ModelCapabilities {
   supports_streaming: boolean
   supports_embedding: boolean
   [key: string]: boolean
-}
-
-export interface OpenAiImageModelTestCapability {
-  max_generation_count?: number | null
-  supports_generation?: boolean | null
-  supports_edit?: boolean | null
-}
-
-export interface ModelTestCapabilities {
-  'openai:image'?: OpenAiImageModelTestCapability | null
-  [apiFormat: string]: OpenAiImageModelTestCapability | Record<string, unknown> | null | undefined
 }
 
 export interface ProviderModelPriceInfo {
@@ -306,7 +294,6 @@ export interface UpstreamModel {
   visibility?: string
   supported_in_api?: boolean
   api_formats: string[]  // 该模型支持的所有 API 格式（后端保证返回数组）
-  model_test_capabilities?: ModelTestCapabilities | null
 }
 
 /**

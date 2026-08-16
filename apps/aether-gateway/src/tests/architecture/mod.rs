@@ -188,12 +188,9 @@ pub(super) fn read_workspace_module_tree(path: &str) -> String {
 mod admin_billing;
 mod admin_model;
 mod admin_observability;
-mod admin_provider;
 mod admin_shared;
 mod admin_system;
 mod admin_users;
-mod ai_serving;
 mod runtime_and_security;
-mod sql_and_data;
 mod usage;
 mod workspace_tiers;

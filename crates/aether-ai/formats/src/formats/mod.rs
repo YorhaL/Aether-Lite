@@ -1,17 +1,10 @@
-pub mod aliyun;
 pub mod claude;
-pub mod context;
-pub mod conversion;
-pub mod doubao;
 pub mod gemini;
 pub mod id;
-pub mod jina;
 pub mod matrix;
 pub mod openai;
-pub mod registry;
 pub mod shared;
 
-pub use context::{FormatContext, FormatError};
 pub use id::{
     api_format_alias_matches, api_format_defaults_to_client_error_failover,
     api_format_defaults_to_non_stream, api_format_permission_covers,

@@ -67,9 +67,6 @@
               <TableHead class="w-[18%] min-w-[140px]">
                 {{ legacyT('提供商信息') }}
               </TableHead>
-              <TableHead class="w-[20%] min-w-[180px]">
-                {{ legacyT('余额监控') }}
-              </TableHead>
               <SortableTableHead
                 class="w-[12%] min-w-[100px] text-center"
                 column-key="model"
@@ -134,21 +131,10 @@
               :key="provider.id"
               :provider="provider"
               :editing-description-id="editingDescriptionId"
-              :is-balance-loading="isBalanceLoading"
-              :get-provider-balance="getProviderBalance"
-              :get-provider-balance-breakdown="getProviderBalanceBreakdown"
-              :get-provider-balance-error="getProviderBalanceError"
-              :get-provider-checkin="getProviderCheckin"
-              :get-provider-cookie-expired="getProviderCookieExpired"
-              :get-provider-balance-extra="getProviderBalanceExtra"
-              :format-balance-display="formatBalanceDisplay"
-              :format-reset-countdown="formatResetCountdown"
-              :get-quota-used-color-class="getQuotaUsedColorClass"
               @mousedown="handleMouseDown"
               @row-click="handleRowClick"
               @view-detail="openProviderDrawer"
               @edit-provider="openEditProviderDialog"
-              @open-ops-config="openOpsConfigDialog"
               @toggle-status="toggleProviderStatus"
               @delete-provider="handleDeleteProvider"
               @start-edit-description="startEditDescription"
@@ -169,16 +155,8 @@
           :key="provider.id"
           :provider="provider"
           :editing-description-id="editingDescriptionId"
-          :is-balance-loading="isBalanceLoading"
-          :get-provider-balance="getProviderBalance"
-          :get-provider-balance-error="getProviderBalanceError"
-          :get-provider-checkin="getProviderCheckin"
-          :get-provider-cookie-expired="getProviderCookieExpired"
-          :format-balance-display="formatBalanceDisplay"
-          :get-quota-used-color-class="getQuotaUsedColorClass"
           @view-detail="openProviderDrawer"
           @edit-provider="openEditProviderDialog"
-          @open-ops-config="openOpsConfigDialog"
           @toggle-status="toggleProviderStatus"
           @delete-provider="handleDeleteProvider"
           @start-edit-description="startEditDescription"
@@ -230,13 +208,6 @@
     @toggle-status="toggleProviderStatus"
     @refresh="handleDrawerRefresh"
   />
-
-  <ProviderAuthDialog
-    v-model:open="opsConfigDialogOpen"
-    :provider-id="opsConfigProviderId"
-    :provider-website="opsConfigProviderWebsite"
-    @saved="handleOpsConfigSaved"
-  />
 </template>
 
 <script setup lang="ts">
@@ -250,7 +221,7 @@ import TableHead from '@/components/ui/table-head.vue'
 import SortableTableHead from '@/components/ui/sortable-table-head.vue'
 import TableFilterMenu from '@/components/ui/table-filter-menu.vue'
 import Pagination from '@/components/ui/pagination.vue'
-import { ProviderFormDialog, PriorityManagementDialog, ProviderAuthDialog } from '@/features/providers/components'
+import { ProviderFormDialog, PriorityManagementDialog } from '@/features/providers/components'
 import ProviderBatchActionDialog from '@/features/providers/components/ProviderBatchActionDialog.vue'
 import ProviderTableHeader from '@/features/providers/components/ProviderTableHeader.vue'
 import ProviderTableRow from '@/features/providers/components/ProviderTableRow.vue'
@@ -261,7 +232,6 @@ import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { useRowClick } from '@/composables/useRowClick'
 import { useProviderFilters } from '@/features/providers/composables/useProviderFilters'
-import { useProviderBalance } from '@/features/providers/composables/useProviderBalance'
 import {
   getProvidersSummary,
   getProvider,
@@ -380,7 +350,7 @@ const providerDeleteStageLabel = computed(() => {
     case 'cleaning_provider_refs':
       return legacyT('清理历史引用')
     case 'deleting_keys':
-      return legacyT('删除号池账号')
+      return legacyT('删除密钥')
     case 'deleting_endpoints':
       return legacyT('删除端点')
     case 'completed':
@@ -448,28 +418,6 @@ const {
 } = useProviderFilters(
   () => globalModels.value,
 )
-
-const {
-  loadArchitectureSchemas,
-  loadBalances,
-  getProviderBalance,
-  getProviderBalanceBreakdown,
-  getProviderBalanceError,
-  isBalanceLoading,
-  getProviderCheckin,
-  getProviderCookieExpired,
-  formatBalanceDisplay,
-  formatResetCountdown,
-  getProviderBalanceExtra,
-  getQuotaUsedColorClass,
-  startTick,
-  stopTick,
-} = useProviderBalance()
-
-// 扩展操作配置对话框
-const opsConfigDialogOpen = ref(false)
-const opsConfigProviderId = ref('')
-const opsConfigProviderWebsite = ref('')
 
 // 内联编辑备注
 const editingDescriptionId = ref<string | null>(null)
@@ -577,8 +525,6 @@ async function loadProviders(options: { cacheTtlMs?: number } = {}) {
       return existing
     })
     total.value = response.total
-    // 异步加载配置了 ops 的 provider 的余额数据
-    loadBalances(providers.value)
   } catch (err: unknown) {
     if (requestId !== providersRequestId) return
     showLegacyError(err, '加载提供商列表失败')
@@ -648,7 +594,6 @@ function mergeUpdatedProvider(updated: ProviderWithEndpointsSummary) {
   const index = providers.value.findIndex(p => p.id === updated.id)
   if (index !== -1) {
     Object.assign(providers.value[index], updated)
-    loadBalances([providers.value[index]], false)
   }
 }
 
@@ -671,19 +616,6 @@ async function openEditProviderDialog(provider: ProviderWithEndpointsSummary) {
   const latest = await refreshProviderSnapshot(provider.id, '刷新提供商状态失败')
   providerToEdit.value = latest ?? provider
   providerDialogOpen.value = true
-}
-
-// 打开扩展操作配置对话框
-function openOpsConfigDialog(provider: ProviderWithEndpointsSummary) {
-  opsConfigProviderId.value = provider.id
-  opsConfigProviderWebsite.value = provider.website || ''
-  opsConfigDialogOpen.value = true
-}
-
-// 扩展操作配置保存回调
-function handleOpsConfigSaved() {
-  opsConfigDialogOpen.value = false
-  void loadProviders()
 }
 
 // 处理提供商编辑完成
@@ -781,16 +713,12 @@ onMounted(() => {
   void loadProviders({ cacheTtlMs: PROVIDER_SUMMARY_CACHE_TTL_MS })
   void loadPriorityMode({ cacheTtlMs: PROVIDER_PRIORITY_MODE_CACHE_TTL_MS })
   void loadGlobalModelList({ cacheTtlMs: PROVIDER_MODEL_FILTER_CACHE_TTL_MS })
-  void loadArchitectureSchemas()
   document.addEventListener('click', handleGlobalClick, true)
-  // 每秒更新一次倒计时
-  startTick()
 })
 
 onUnmounted(() => {
   deletePollAbort?.abort()
   if (debounceTimer) clearTimeout(debounceTimer)
   document.removeEventListener('click', handleGlobalClick, true)
-  stopTick()
 })
 </script>

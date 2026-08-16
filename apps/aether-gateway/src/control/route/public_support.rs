@@ -326,185 +326,12 @@ pub(super) fn classify_public_support_route(
             "user:announcements",
             false,
         ))
-    } else if method == http::Method::GET
-        && matches!(
-            normalized_path,
-            "/api/wallet/balance"
-                | "/api/wallet/transactions"
-                | "/api/wallet/flow"
-                | "/api/wallet/today-cost"
-                | "/api/wallet/recharge"
-                | "/api/wallet/recharge/options"
-                | "/api/wallet/refunds"
-                | "/api/wallet/refunds/eligible-providers"
-        )
-    {
-        let route_kind = match normalized_path {
-            "/api/wallet/balance" => "balance",
-            "/api/wallet/transactions" => "transactions",
-            "/api/wallet/flow" => "flow",
-            "/api/wallet/today-cost" => "today_cost",
-            "/api/wallet/recharge" => "list_recharge_orders",
-            "/api/wallet/recharge/options" => "recharge_options",
-            "/api/wallet/refunds" => "list_refunds",
-            "/api/wallet/refunds/eligible-providers" => "refund_eligible_providers",
-            _ => "balance",
-        };
+    } else if method == http::Method::GET && normalized_path == "/api/wallet/balance" {
         Some(classified(
             "public_support",
             "wallet",
-            route_kind,
+            "balance",
             "user:wallet",
-            false,
-        ))
-    } else if method == http::Method::GET
-        && has_single_segment_after_prefix(normalized_path, "/api/wallet/recharge/")
-    {
-        Some(classified(
-            "public_support",
-            "wallet",
-            "recharge_detail",
-            "user:wallet",
-            false,
-        ))
-    } else if method == http::Method::GET
-        && has_single_segment_after_prefix(normalized_path, "/api/wallet/refunds/")
-    {
-        Some(classified(
-            "public_support",
-            "wallet",
-            "refund_detail",
-            "user:wallet",
-            false,
-        ))
-    } else if method == http::Method::POST
-        && matches!(
-            normalized_path,
-            "/api/wallet/recharge" | "/api/wallet/refunds" | "/api/wallet/redeem"
-        )
-    {
-        let route_kind = match normalized_path {
-            "/api/wallet/recharge" => "create_recharge_order",
-            "/api/wallet/refunds" => "create_refund",
-            "/api/wallet/redeem" => "redeem",
-            _ => "create_recharge_order",
-        };
-        Some(classified(
-            "public_support",
-            "wallet",
-            route_kind,
-            "user:wallet",
-            false,
-        ))
-    } else if method == http::Method::GET
-        && matches!(
-            normalized_path,
-            "/api/billing/plans" | "/api/billing/plans/"
-        )
-    {
-        Some(classified(
-            "public_support",
-            "billing",
-            "plans",
-            "public:billing",
-            false,
-        ))
-    } else if method == http::Method::GET
-        && matches!(
-            normalized_path,
-            "/api/billing/entitlements" | "/api/billing/entitlements/"
-        )
-    {
-        Some(classified(
-            "public_support",
-            "billing",
-            "entitlements",
-            "user:billing",
-            false,
-        ))
-    } else if method == http::Method::POST
-        && has_single_nested_suffix_after_prefix(normalized_path, "/api/billing/plans/", "checkout")
-    {
-        Some(classified(
-            "public_support",
-            "billing",
-            "plan_checkout",
-            "user:billing",
-            false,
-        ))
-    } else if method == http::Method::POST
-        && has_single_segment_after_prefix(normalized_path, "/api/payment/callback/")
-    {
-        Some(classified(
-            "public_support",
-            "payment_callback",
-            "callback",
-            "public:payment",
-            false,
-        ))
-    } else if matches!(method, &http::Method::GET | &http::Method::POST)
-        && matches!(
-            normalized_path,
-            "/api/payment/alipay/notify" | "/api/payment/alipay/notify/"
-        )
-    {
-        Some(classified(
-            "public_support",
-            "payment_callback",
-            "alipay_notify",
-            "public:payment",
-            false,
-        ))
-    } else if method == http::Method::POST
-        && matches!(
-            normalized_path,
-            "/api/payment/wxpay/notify" | "/api/payment/wxpay/notify/"
-        )
-    {
-        Some(classified(
-            "public_support",
-            "payment_callback",
-            "wxpay_notify",
-            "public:payment",
-            false,
-        ))
-    } else if method == http::Method::POST
-        && matches!(
-            normalized_path,
-            "/api/payment/stripe/webhook" | "/api/payment/stripe/webhook/"
-        )
-    {
-        Some(classified(
-            "public_support",
-            "payment_callback",
-            "stripe_webhook",
-            "public:payment",
-            false,
-        ))
-    } else if matches!(method, &http::Method::GET | &http::Method::POST)
-        && matches!(
-            normalized_path,
-            "/api/payment/epay/notify" | "/api/payment/epay/notify/"
-        )
-    {
-        Some(classified(
-            "public_support",
-            "payment_callback",
-            "epay_notify",
-            "public:payment",
-            false,
-        ))
-    } else if matches!(method, &http::Method::GET | &http::Method::POST)
-        && matches!(
-            normalized_path,
-            "/api/payment/epay/return" | "/api/payment/epay/return/"
-        )
-    {
-        Some(classified(
-            "public_support",
-            "payment_callback",
-            "epay_return",
-            "public:payment",
             false,
         ))
     } else if method == http::Method::GET
@@ -535,7 +362,6 @@ pub(super) fn classify_public_support_route(
                 | "/api/users/me/client-config"
                 | "/api/users/me/endpoint-status"
                 | "/api/users/me/preferences"
-                | "/api/users/me/referral"
                 | "/api/users/me/model-capabilities"
         )
     {
@@ -552,7 +378,6 @@ pub(super) fn classify_public_support_route(
             "/api/users/me/client-config" => "client_config",
             "/api/users/me/endpoint-status" => "endpoint_status",
             "/api/users/me/preferences" => "preferences",
-            "/api/users/me/referral" => "referral",
             "/api/users/me/model-capabilities" => "model_capabilities",
             _ => "detail",
         };
@@ -815,7 +640,6 @@ pub(super) fn classify_public_support_route(
         ))
     } else if method == http::Method::GET
         && (has_single_segment_after_prefix(normalized_path, "/install/")
-            || has_single_segment_after_prefix(normalized_path, "/install-tunnel/")
             || has_single_segment_after_prefix(normalized_path, "/i/"))
     {
         Some(classified(

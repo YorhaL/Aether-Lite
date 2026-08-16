@@ -8,7 +8,7 @@ use axum::{
 use crate::control::GatewayPublicRequestContext;
 use crate::AppState;
 
-use super::super::build_unhandled_public_support_response;
+use super::super::build_public_support_route_not_found_response;
 use super::announcements_shared::{
     announcements_bad_request_response, announcements_internal_detail,
     announcements_internal_error_response, announcements_not_found_response,
@@ -82,7 +82,9 @@ pub(crate) async fn maybe_build_local_public_announcements_response(
             let Some(announcement_id) =
                 public_announcement_id_from_path(&request_context.request_path)
             else {
-                return Some(build_unhandled_public_support_response(request_context));
+                return Some(build_public_support_route_not_found_response(
+                    request_context,
+                ));
             };
             let announcement = match state.find_announcement_by_id(announcement_id).await {
                 Ok(Some(value)) => value,
@@ -95,6 +97,8 @@ pub(crate) async fn maybe_build_local_public_announcements_response(
             };
             Some(Json(build_public_announcement_payload(&announcement)).into_response())
         }
-        _ => Some(build_unhandled_public_support_response(request_context)),
+        _ => Some(build_public_support_route_not_found_response(
+            request_context,
+        )),
     }
 }

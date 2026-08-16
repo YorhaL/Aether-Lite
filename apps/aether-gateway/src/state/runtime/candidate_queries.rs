@@ -1,8 +1,5 @@
 use crate::{AppState, GatewayError};
-use aether_data_contracts::repository::{candidate_selection, candidates, quota};
-use std::time::Duration;
-
-const PROVIDER_QUOTA_RUNTIME_CACHE_TTL: Duration = Duration::from_secs(5);
+use aether_data_contracts::repository::{candidate_selection, candidates};
 
 impl AppState {
     pub(crate) async fn list_minimal_candidate_selection_rows_for_api_format(
@@ -46,55 +43,6 @@ impl AppState {
     ) -> Result<Vec<candidate_selection::StoredMinimalCandidateSelectionRow>, GatewayError> {
         self.data
             .list_minimal_candidate_selection_rows_for_requested_model_page(query)
-            .await
-            .map_err(|err| GatewayError::Internal(err.to_string()))
-    }
-
-    pub(crate) async fn list_pool_key_candidate_rows_for_group(
-        &self,
-        query: &candidate_selection::StoredPoolKeyCandidateRowsQuery,
-    ) -> Result<Vec<candidate_selection::StoredMinimalCandidateSelectionRow>, GatewayError> {
-        self.data
-            .list_pool_key_candidate_rows_for_group(query)
-            .await
-            .map_err(|err| GatewayError::Internal(err.to_string()))
-    }
-
-    pub(crate) async fn list_pool_key_candidate_rows_for_group_key_ids(
-        &self,
-        query: &candidate_selection::StoredPoolKeyCandidateRowsByKeyIdsQuery,
-    ) -> Result<Vec<candidate_selection::StoredMinimalCandidateSelectionRow>, GatewayError> {
-        self.data
-            .list_pool_key_candidate_rows_for_group_key_ids(query)
-            .await
-            .map_err(|err| GatewayError::Internal(err.to_string()))
-    }
-
-    pub(crate) async fn read_provider_quota_snapshot(
-        &self,
-        provider_id: &str,
-    ) -> Result<Option<quota::StoredProviderQuotaSnapshot>, GatewayError> {
-        let provider_id = provider_id.trim();
-        if provider_id.is_empty() {
-            return Ok(None);
-        }
-        let cache_key = provider_id.to_string();
-        self.provider_quota_snapshot_cache
-            .get_or_load(cache_key, PROVIDER_QUOTA_RUNTIME_CACHE_TTL, || async move {
-                self.data
-                    .find_provider_quota_by_provider_id(provider_id)
-                    .await
-                    .map_err(|err| GatewayError::Internal(err.to_string()))
-            })
-            .await
-    }
-
-    pub(crate) async fn read_provider_quota_snapshots(
-        &self,
-        provider_ids: &[String],
-    ) -> Result<Vec<quota::StoredProviderQuotaSnapshot>, GatewayError> {
-        self.data
-            .find_provider_quotas_by_provider_ids(provider_ids)
             .await
             .map_err(|err| GatewayError::Internal(err.to_string()))
     }

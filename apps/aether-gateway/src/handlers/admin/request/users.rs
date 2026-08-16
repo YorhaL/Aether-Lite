@@ -255,22 +255,22 @@ impl<'a> AdminAppState<'a> {
     pub(crate) async fn initialize_auth_user_wallet(
         &self,
         user_id: &str,
-        initial_gift_usd: f64,
+        initial_balance_usd: f64,
         unlimited: bool,
     ) -> Result<Option<aether_data::repository::wallet::StoredWalletSnapshot>, GatewayError> {
         self.app
-            .initialize_auth_user_wallet(user_id, initial_gift_usd, unlimited)
+            .initialize_auth_user_wallet(user_id, initial_balance_usd, unlimited)
             .await
     }
 
     pub(crate) async fn initialize_auth_api_key_wallet(
         &self,
         api_key_id: &str,
-        initial_gift_usd: f64,
+        initial_balance_usd: f64,
         unlimited: bool,
     ) -> Result<Option<aether_data::repository::wallet::StoredWalletSnapshot>, GatewayError> {
         self.app
-            .initialize_auth_api_key_wallet(api_key_id, initial_gift_usd, unlimited)
+            .initialize_auth_api_key_wallet(api_key_id, initial_balance_usd, unlimited)
             .await
     }
 
@@ -372,28 +372,20 @@ impl<'a> AdminAppState<'a> {
         &self,
         user_id: &str,
         balance: f64,
-        gift_balance: f64,
         limit_mode: &str,
         currency: &str,
         status: &str,
-        total_recharged: f64,
         total_consumed: f64,
-        total_refunded: f64,
-        total_adjusted: f64,
         updated_at_unix_secs: Option<u64>,
     ) -> Result<Option<aether_data::repository::wallet::StoredWalletSnapshot>, GatewayError> {
         self.app
             .update_auth_user_wallet_snapshot(
                 user_id,
                 balance,
-                gift_balance,
                 limit_mode,
                 currency,
                 status,
-                total_recharged,
                 total_consumed,
-                total_refunded,
-                total_adjusted,
                 updated_at_unix_secs,
             )
             .await
@@ -404,28 +396,20 @@ impl<'a> AdminAppState<'a> {
         &self,
         api_key_id: &str,
         balance: f64,
-        gift_balance: f64,
         limit_mode: &str,
         currency: &str,
         status: &str,
-        total_recharged: f64,
         total_consumed: f64,
-        total_refunded: f64,
-        total_adjusted: f64,
         updated_at_unix_secs: Option<u64>,
     ) -> Result<Option<aether_data::repository::wallet::StoredWalletSnapshot>, GatewayError> {
         self.app
             .update_auth_api_key_wallet_snapshot(
                 api_key_id,
                 balance,
-                gift_balance,
                 limit_mode,
                 currency,
                 status,
-                total_recharged,
                 total_consumed,
-                total_refunded,
-                total_adjusted,
                 updated_at_unix_secs,
             )
             .await
@@ -453,20 +437,6 @@ impl<'a> AdminAppState<'a> {
         self.app
             .update_user_feature_settings(user_id, settings)
             .await
-    }
-
-    pub(crate) async fn count_user_pending_refunds(
-        &self,
-        user_id: &str,
-    ) -> Result<u64, GatewayError> {
-        self.app.count_user_pending_refunds(user_id).await
-    }
-
-    pub(crate) async fn count_user_pending_payment_orders(
-        &self,
-        user_id: &str,
-    ) -> Result<u64, GatewayError> {
-        self.app.count_user_pending_payment_orders(user_id).await
     }
 
     pub(crate) async fn delete_local_auth_user(&self, user_id: &str) -> Result<bool, GatewayError> {

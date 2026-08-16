@@ -177,25 +177,6 @@ export function formatModelPrice(price: number | undefined | null): string {
   }
 }
 
-// Billing type formatting
-export function formatBillingType(type: string | undefined | null): string {
-  if (getI18nLocale() === 'en-US') {
-    const englishTypeMap: Record<string, string> = {
-      'pay_as_you_go': 'Pay as you go',
-      'monthly_quota': 'Monthly quota',
-      'free_tier': 'Free tier',
-    }
-    return englishTypeMap[type || ''] || type || 'Pay as you go'
-  }
-
-  const typeMap: Record<string, string> = {
-    'pay_as_you_go': '按量付费',
-    'monthly_quota': '月卡配额',
-    'free_tier': '免费套餐'
-  }
-  return typeMap[type || ''] || type || '按量付费'
-}
-
 // Format cost with 4 decimal places (for cache analysis)
 export function formatCost(cost: number | null | undefined): string {
   if (cost === null || cost === undefined) return '-'

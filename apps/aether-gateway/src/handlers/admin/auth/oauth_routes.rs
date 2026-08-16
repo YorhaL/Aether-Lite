@@ -117,15 +117,9 @@ async fn build_admin_oauth_test_payload(
         }));
     };
 
-    let proxy_snapshot = state.app().resolve_system_proxy_snapshot().await;
-    let mut client_builder = reqwest::Client::builder()
+    let client_builder = reqwest::Client::builder()
         .timeout(Duration::from_secs(ADMIN_OAUTH_TEST_TIMEOUT_SECS))
         .redirect(reqwest::redirect::Policy::limited(3));
-    if let Some(proxy_url) = proxy_snapshot.as_ref().and_then(|p| p.url.as_deref()) {
-        if let Ok(proxy) = reqwest::Proxy::all(proxy_url) {
-            client_builder = client_builder.proxy(proxy);
-        }
-    }
     let client = client_builder.build();
     let Ok(client) = client else {
         return Ok(json!({

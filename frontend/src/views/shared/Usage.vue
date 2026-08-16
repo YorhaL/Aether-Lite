@@ -581,10 +581,9 @@ async function pollActiveRequests() {
           record.client_requested_stream = update.client_requested_stream
           record.client_is_stream = update.client_requested_stream
         }
-        // API 格式/格式转换：streaming 时已可确定，轮询时同步更新
+        // API 格式：streaming 时已可确定，轮询时同步更新
         if (update.api_format != null) record.api_format = update.api_format
         if (update.endpoint_api_format != null) record.endpoint_api_format = update.endpoint_api_format
-        if (update.has_format_conversion != null) record.has_format_conversion = update.has_format_conversion
         if (typeof update.has_fallback === 'boolean') {
           record.has_fallback = record.has_fallback === true || update.has_fallback
         }
@@ -1080,7 +1079,6 @@ function handleDetailRequestState(update: {
   clientIsStream?: boolean | null
   apiFormat?: string | null
   endpointApiFormat?: string | null
-  hasFormatConversion?: boolean | null
   targetModel?: string | null
   requestedReasoningEffort?: string | null
   reasoningEffort?: string | null
@@ -1180,9 +1178,6 @@ function handleDetailRequestState(update: {
   }
   if ('endpointApiFormat' in update && typeof update.endpointApiFormat === 'string') {
     record.endpoint_api_format = update.endpointApiFormat
-  }
-  if ('hasFormatConversion' in update && typeof update.hasFormatConversion === 'boolean') {
-    record.has_format_conversion = update.hasFormatConversion
   }
   if ('targetModel' in update) {
     record.target_model = typeof update.targetModel === 'string' ? update.targetModel : update.targetModel ?? undefined

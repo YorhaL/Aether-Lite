@@ -87,10 +87,7 @@ pub(in crate::control) fn resolve_gateway_credential_carrier(
 
 fn has_trusted_gateway_marker(headers: &http::HeaderMap) -> bool {
     header_value_str(headers, crate::constants::GATEWAY_HEADER)
-        .unwrap_or_default()
-        .trim()
-        .to_ascii_lowercase()
-        .starts_with("rust-phase3")
+        .is_some_and(|value| value.trim() == crate::constants::GATEWAY_MARKER_VALUE)
 }
 
 pub(super) fn build_auth_context_cache_key(
@@ -224,9 +221,6 @@ fn select_primary_credential(
     if signature.starts_with("gemini:") {
         return select_gemini_credential(bundle);
     }
-    if signature.starts_with("antigravity:") {
-        return select_antigravity_credential(bundle);
-    }
     if signature.starts_with("claude:") {
         return select_claude_messages_credential(bundle);
     }
@@ -238,20 +232,6 @@ fn select_primary_credential(
     }
 
     select_generic_credential(bundle)
-}
-
-fn select_antigravity_credential(
-    bundle: &GatewayCredentialBundle,
-) -> Option<GatewayPrimaryCredential> {
-    first_provider_api_key(
-        bundle,
-        &[
-            GatewayCredentialCarrier::XApiKey,
-            GatewayCredentialCarrier::ApiKey,
-        ],
-    )
-    .or_else(|| first_bearer_token(bundle))
-    .or_else(|| select_cookie_credential(bundle))
 }
 
 fn select_openai_credential(bundle: &GatewayCredentialBundle) -> Option<GatewayPrimaryCredential> {
@@ -518,29 +498,6 @@ mod tests {
     }
 
     #[test]
-    fn prefers_antigravity_aether_api_key_over_google_bearer() {
-        let mut headers = http::HeaderMap::new();
-        headers.insert(
-            http::header::AUTHORIZATION,
-            "Bearer google-oauth-access-token".parse().unwrap(),
-        );
-        headers.insert("x-api-key", "sk-aether-antigravity".parse().unwrap());
-
-        let extracted = extract_request_credentials(
-            &headers,
-            &uri("/v1internal:streamGenerateContent?alt=sse"),
-            "antigravity:v1internal",
-        );
-        assert_eq!(
-            extracted.primary,
-            Some(GatewayPrimaryCredential::ProviderApiKey {
-                raw: "sk-aether-antigravity".to_string(),
-                carrier: GatewayCredentialCarrier::XApiKey,
-            })
-        );
-    }
-
-    #[test]
     fn prefers_gemini_query_key_over_header_key() {
         let mut headers = http::HeaderMap::new();
         headers.insert("x-goog-api-key", "gemini-header".parse().unwrap());
@@ -592,10 +549,7 @@ mod tests {
     #[test]
     fn cache_key_includes_trusted_auth_headers() {
         let mut first_headers = http::HeaderMap::new();
-        first_headers.insert(
-            crate::constants::GATEWAY_HEADER,
-            "rust-phase3b".parse().unwrap(),
-        );
+        first_headers.insert(crate::constants::GATEWAY_HEADER, "aether".parse().unwrap());
         first_headers.insert(
             crate::constants::TRUSTED_AUTH_USER_ID_HEADER,
             "user-1".parse().unwrap(),
@@ -648,10 +602,7 @@ mod tests {
     #[test]
     fn cache_key_ignores_untrusted_auth_identity_headers() {
         let mut trusted_headers = http::HeaderMap::new();
-        trusted_headers.insert(
-            crate::constants::GATEWAY_HEADER,
-            "rust-phase3b".parse().unwrap(),
-        );
+        trusted_headers.insert(crate::constants::GATEWAY_HEADER, "aether".parse().unwrap());
         trusted_headers.insert(
             crate::constants::TRUSTED_AUTH_USER_ID_HEADER,
             "user-1".parse().unwrap(),
@@ -689,10 +640,7 @@ mod tests {
     #[test]
     fn extracts_trusted_auth_headers() {
         let mut headers = http::HeaderMap::new();
-        headers.insert(
-            crate::constants::GATEWAY_HEADER,
-            "rust-phase3b".parse().unwrap(),
-        );
+        headers.insert(crate::constants::GATEWAY_HEADER, "aether".parse().unwrap());
         headers.insert(
             crate::constants::TRUSTED_AUTH_USER_ID_HEADER,
             "user-1".parse().unwrap(),
@@ -742,12 +690,30 @@ mod tests {
     }
 
     #[test]
-    fn extracts_trusted_admin_headers() {
+    fn ignores_trusted_auth_headers_with_noncanonical_gateway_marker() {
         let mut headers = http::HeaderMap::new();
         headers.insert(
             crate::constants::GATEWAY_HEADER,
-            "rust-phase3b".parse().unwrap(),
+            "aether-extra".parse().unwrap(),
         );
+        headers.insert(
+            crate::constants::TRUSTED_AUTH_USER_ID_HEADER,
+            "user-1".parse().unwrap(),
+        );
+        headers.insert(
+            crate::constants::TRUSTED_AUTH_API_KEY_ID_HEADER,
+            "key-1".parse().unwrap(),
+        );
+
+        let extracted =
+            extract_request_credentials(&headers, &uri("/v1/chat/completions"), "openai:chat");
+        assert_eq!(extracted.trusted_headers, None);
+    }
+
+    #[test]
+    fn extracts_trusted_admin_headers() {
+        let mut headers = http::HeaderMap::new();
+        headers.insert(crate::constants::GATEWAY_HEADER, "aether".parse().unwrap());
         headers.insert(
             crate::constants::TRUSTED_ADMIN_USER_ID_HEADER,
             "admin-user-1".parse().unwrap(),
@@ -780,10 +746,7 @@ mod tests {
     #[test]
     fn extracts_trusted_audit_admin_headers() {
         let mut headers = http::HeaderMap::new();
-        headers.insert(
-            crate::constants::GATEWAY_HEADER,
-            "rust-phase3b".parse().unwrap(),
-        );
+        headers.insert(crate::constants::GATEWAY_HEADER, "aether".parse().unwrap());
         headers.insert(
             crate::constants::TRUSTED_ADMIN_USER_ID_HEADER,
             "audit-admin-1".parse().unwrap(),

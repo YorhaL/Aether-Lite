@@ -4,10 +4,6 @@ use async_trait::async_trait;
 pub enum AiSyncDecisionStep {
     VideoTaskFollowUp,
     LocalVideo,
-    LocalImage,
-    LocalOpenAiChat,
-    LocalOpenAiResponses,
-    LocalStandardFamily,
     LocalSameFormatProvider,
     LocalGeminiFiles,
 }
@@ -15,10 +11,6 @@ pub enum AiSyncDecisionStep {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AiStreamDecisionStep {
     LocalVideoContent,
-    LocalImage,
-    LocalOpenAiChat,
-    LocalOpenAiResponses,
-    LocalStandardFamily,
     LocalSameFormatProvider,
     LocalGeminiFiles,
 }
@@ -56,10 +48,6 @@ where
     for step in [
         AiSyncDecisionStep::VideoTaskFollowUp,
         AiSyncDecisionStep::LocalVideo,
-        AiSyncDecisionStep::LocalImage,
-        AiSyncDecisionStep::LocalOpenAiChat,
-        AiSyncDecisionStep::LocalOpenAiResponses,
-        AiSyncDecisionStep::LocalStandardFamily,
         AiSyncDecisionStep::LocalSameFormatProvider,
         AiSyncDecisionStep::LocalGeminiFiles,
     ] {
@@ -82,10 +70,6 @@ where
 {
     for step in [
         AiStreamDecisionStep::LocalVideoContent,
-        AiStreamDecisionStep::LocalImage,
-        AiStreamDecisionStep::LocalOpenAiChat,
-        AiStreamDecisionStep::LocalOpenAiResponses,
-        AiStreamDecisionStep::LocalStandardFamily,
         AiStreamDecisionStep::LocalSameFormatProvider,
         AiStreamDecisionStep::LocalGeminiFiles,
     ] {

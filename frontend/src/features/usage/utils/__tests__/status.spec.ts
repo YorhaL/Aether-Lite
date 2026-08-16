@@ -177,66 +177,18 @@ describe('usage status helpers', () => {
     expect(hasUsageRetry(buildUsageRecord({ has_retry: undefined }))).toBe(false)
   })
 
-  it('prefers symmetric stream aliases when present', () => {
+  it('shows streaming requests as streaming', () => {
     expect(formatUsageStreamLabel(buildUsageRecord({
       is_stream: true,
       upstream_is_stream: true,
-      client_requested_stream: false,
-      client_is_stream: false,
-    }))).toBe('标准->流式')
-  })
-
-  it('falls back to legacy stream fields when symmetric aliases are absent', () => {
-    expect(formatUsageStreamLabel(buildUsageRecord({
-      is_stream: true,
-      client_requested_stream: false,
-    }))).toBe('标准->流式')
-  })
-
-  it('defaults OpenAI and Claude requests to non-stream when client flags are absent', () => {
-    expect(formatUsageStreamLabel(buildUsageRecord({
-      api_format: 'openai:responses',
-      is_stream: true,
-      upstream_is_stream: true,
-      client_requested_stream: undefined,
-      client_is_stream: undefined,
-    }))).toBe('标准->流式')
-
-    expect(formatUsageStreamLabel(buildUsageRecord({
-      api_format: 'openai:search',
-      is_stream: false,
-      upstream_is_stream: false,
-      client_requested_stream: undefined,
-      client_is_stream: undefined,
-    }))).toBe('标准')
-
-    expect(formatUsageStreamLabel(buildUsageRecord({
-      api_format: 'claude:messages',
-      is_stream: false,
-      upstream_is_stream: false,
-      client_requested_stream: undefined,
-      client_is_stream: undefined,
-    }))).toBe('标准')
-  })
-
-  it('keeps upstream fallback for formats without a default non-stream convention', () => {
-    expect(formatUsageStreamLabel(buildUsageRecord({
-      api_format: 'gemini:generate_content',
-      is_stream: true,
-      upstream_is_stream: true,
-      client_requested_stream: undefined,
-      client_is_stream: undefined,
     }))).toBe('流式')
   })
 
-  it('prefers client_requested_stream over stale client_is_stream when they disagree', () => {
+  it('shows non-streaming requests as standard', () => {
     expect(formatUsageStreamLabel(buildUsageRecord({
-      api_format: 'openai:responses',
-      is_stream: true,
-      upstream_is_stream: true,
-      client_requested_stream: false,
-      client_is_stream: true,
-    }))).toBe('标准->流式')
+      is_stream: false,
+      upstream_is_stream: false,
+    }))).toBe('标准')
   })
 
   it('uses status code only as a last fallback for timeline status', () => {

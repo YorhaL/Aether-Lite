@@ -1,5 +1,5 @@
 pub(super) use super::{
-    build_auth_error_response, build_unhandled_public_support_response, query_param_value,
+    build_auth_error_response, build_public_support_route_not_found_response, query_param_value,
     resolve_authenticated_local_user, AppState, GatewayError, GatewayPublicRequestContext,
 };
 use axum::{body::Body, http, response::Response};
@@ -42,7 +42,7 @@ pub(super) async fn maybe_build_local_dashboard_response(
         {
             handle_dashboard_daily_stats_get(state, request_context, headers).await
         }
-        _ => build_unhandled_public_support_response(request_context),
+        _ => build_public_support_route_not_found_response(request_context),
     }
 }
 
@@ -70,22 +70,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn dashboard_unhandled_route_returns_local_not_implemented_response() {
+    async fn dashboard_unhandled_route_returns_not_found_response() {
         let state = AppState::new().expect("gateway should build");
         let request_context = request_context(Method::GET, "/api/dashboard/stats/history", "stats");
         let response =
             maybe_build_local_dashboard_response(&state, &request_context, &HeaderMap::new()).await;
 
-        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
         let body = to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("body should read");
         let payload: serde_json::Value =
             serde_json::from_slice(&body).expect("json body should parse");
-        assert_eq!(
-            payload["detail"],
-            "public support route not implemented in rust frontdoor"
-        );
+        assert_eq!(payload["detail"], "Route not found");
         assert_eq!(payload["route_family"], "dashboard");
         assert_eq!(payload["route_kind"], "stats");
         assert_eq!(payload["request_path"], "/api/dashboard/stats/history");

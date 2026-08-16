@@ -61,22 +61,10 @@ pub(crate) const ADMIN_MONITORING_REDIS_CACHE_CATEGORIES: &[(&str, &str, &str, &
         "请求路由亲和性缓存",
     ),
     (
-        "provider_billing",
-        "Provider 计费",
-        "provider:billing_type:*",
-        "Provider 计费类型缓存",
-    ),
-    (
         "provider_rate",
         "Provider 费率",
         "provider_api_key:rate_multiplier:*",
         "ProviderAPIKey 费率倍数缓存",
-    ),
-    (
-        "provider_balance",
-        "Provider 余额",
-        "provider_ops:balance:*",
-        "Provider 余额查询缓存",
     ),
     ("health", "健康检查", "health:*", "端点健康状态缓存"),
     (
@@ -97,18 +85,6 @@ pub(crate) const ADMIN_MONITORING_REDIS_CACHE_CATEGORIES: &[(&str, &str, &str, &
         "Gemini 文件映射",
         "gemini_files:*",
         "Gemini Files API 文件-Key 映射缓存",
-    ),
-    (
-        "provider_oauth",
-        "OAuth 状态",
-        "provider_oauth_state:*",
-        "Provider OAuth 授权流程临时状态",
-    ),
-    (
-        "oauth_refresh_lock",
-        "OAuth 刷新锁",
-        "provider_oauth_refresh_lock:*",
-        "OAuth Token 刷新分布式锁",
     ),
     (
         "concurrency_lock",

@@ -49,49 +49,16 @@ export function hasUsageRetry(
   return record.has_retry === true
 }
 
-export function resolveUsageStreamModes(
-  record: Pick<
-    UsageRecord,
-    | 'is_stream'
-    | 'upstream_is_stream'
-    | 'client_requested_stream'
-    | 'client_is_stream'
-    | 'api_format'
-    | 'endpoint_api_format'
-  >
-): { clientRequestedStream: boolean, upstreamStream: boolean } {
-  const upstreamStream = typeof record.upstream_is_stream === 'boolean'
-    ? record.upstream_is_stream
-    : record.is_stream
-
-  const streamFormat = normalizeUsageStreamApiFormat(
-    record.api_format ?? record.endpoint_api_format
-  )
-
-  return {
-    clientRequestedStream: typeof record.client_requested_stream === 'boolean'
-      ? record.client_requested_stream
-      : typeof record.client_is_stream === 'boolean'
-        ? record.client_is_stream
-        : usageApiFormatDefaultsToNonStream(streamFormat)
-          ? false
-        : upstreamStream,
-    upstreamStream
-  }
-}
-
 export function isUsageUpstreamStream(
   record: Pick<
     UsageRecord,
     | 'is_stream'
     | 'upstream_is_stream'
-    | 'client_requested_stream'
-    | 'client_is_stream'
-    | 'api_format'
-    | 'endpoint_api_format'
   >
 ): boolean {
-  return resolveUsageStreamModes(record).upstreamStream
+  return typeof record.upstream_is_stream === 'boolean'
+    ? record.upstream_is_stream
+    : record.is_stream
 }
 
 export function formatUsageStreamLabel(
@@ -99,74 +66,9 @@ export function formatUsageStreamLabel(
     UsageRecord,
     | 'is_stream'
     | 'upstream_is_stream'
-    | 'client_requested_stream'
-    | 'client_is_stream'
-    | 'api_format'
-    | 'endpoint_api_format'
   >
 ): string {
-  const { clientRequestedStream, upstreamStream } = resolveUsageStreamModes(record)
-  const clientLabel = clientRequestedStream ? '流式' : '标准'
-  const upstreamLabel = upstreamStream ? '流式' : '标准'
-
-  if (clientRequestedStream === upstreamStream) {
-    return clientLabel
-  }
-
-  return `${clientLabel}->${upstreamLabel}`
-}
-
-export interface UsageStreamLabelSegments {
-  client: '流式' | '标准'
-  upstream: '流式' | '标准'
-  hasConversion: boolean
-}
-
-export function resolveUsageStreamLabelSegments(
-  record: Pick<
-    UsageRecord,
-    | 'is_stream'
-    | 'upstream_is_stream'
-    | 'client_requested_stream'
-    | 'client_is_stream'
-    | 'api_format'
-    | 'endpoint_api_format'
-  >
-): UsageStreamLabelSegments {
-  const { clientRequestedStream, upstreamStream } = resolveUsageStreamModes(record)
-  return {
-    client: clientRequestedStream ? '流式' : '标准',
-    upstream: upstreamStream ? '流式' : '标准',
-    hasConversion: clientRequestedStream !== upstreamStream,
-  }
-}
-
-function normalizeUsageStreamApiFormat(value: string | null | undefined): string {
-  const normalized = value?.trim().toLowerCase().replaceAll('_', ':') ?? ''
-  switch (normalized) {
-    case 'openai':
-      return 'openai:chat'
-    case 'claude':
-      return 'claude:messages'
-    case 'gemini':
-      return 'gemini:generate_content'
-    default:
-      return normalized
-  }
-}
-
-function usageApiFormatDefaultsToNonStream(apiFormat: string): boolean {
-  switch (apiFormat) {
-    case 'openai:chat':
-    case 'openai:responses':
-    case 'openai:responses:compact':
-    case 'openai:search':
-    case 'openai:image':
-    case 'claude:messages':
-      return true
-    default:
-      return false
-  }
+  return isUsageUpstreamStream(record) ? '流式' : '标准'
 }
 
 function hasTerminalSuccessStatusCode(

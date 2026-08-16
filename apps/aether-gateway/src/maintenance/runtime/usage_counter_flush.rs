@@ -100,7 +100,6 @@ pub(crate) struct UsageCounterFlushRuntimeMetrics {
     flush_provider_api_key_targets_total: AtomicU64,
     flush_model_targets_total: AtomicU64,
     flush_provider_monthly_targets_total: AtomicU64,
-    flush_proxy_node_targets_total: AtomicU64,
     flush_management_token_targets_total: AtomicU64,
     flush_api_key_last_used_targets_total: AtomicU64,
     flush_failed_batches_total: AtomicU64,
@@ -133,8 +132,6 @@ impl UsageCounterFlushRuntimeMetrics {
             usize_to_u64(summary.provider_monthly_targets),
             Ordering::AcqRel,
         );
-        self.flush_proxy_node_targets_total
-            .fetch_add(usize_to_u64(summary.proxy_node_targets), Ordering::AcqRel);
         self.flush_management_token_targets_total.fetch_add(
             usize_to_u64(summary.management_token_targets),
             Ordering::AcqRel,
@@ -244,10 +241,6 @@ impl UsageCounterFlushRuntimeMetrics {
                 "provider_monthly",
                 self.flush_provider_monthly_targets_total
                     .load(Ordering::Acquire),
-            ),
-            (
-                "proxy_node",
-                self.flush_proxy_node_targets_total.load(Ordering::Acquire),
             ),
             (
                 "management_token",
@@ -436,7 +429,6 @@ mod tests {
             provider_api_key_targets: 2,
             model_targets: 3,
             provider_monthly_targets: 4,
-            proxy_node_targets: 5,
             management_token_targets: 6,
             api_key_last_used_targets: 7,
         });
@@ -491,7 +483,6 @@ mod tests {
         assert_eq!(target_value(&samples, "provider_api_key"), 2);
         assert_eq!(target_value(&samples, "model"), 3);
         assert_eq!(target_value(&samples, "provider_monthly"), 4);
-        assert_eq!(target_value(&samples, "proxy_node"), 5);
         assert_eq!(target_value(&samples, "management_token"), 6);
         assert_eq!(target_value(&samples, "api_key_last_used"), 7);
     }

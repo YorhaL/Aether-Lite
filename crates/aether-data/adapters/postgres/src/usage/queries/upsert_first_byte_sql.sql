@@ -16,7 +16,6 @@ INSERT INTO "usage" (
   endpoint_api_format,
   provider_api_family,
   provider_endpoint_kind,
-  has_format_conversion,
   is_stream,
   upstream_is_stream,
   status_code,
@@ -45,26 +44,25 @@ INSERT INTO "usage" (
   $15,
   $16,
   $17,
-  COALESCE($18, FALSE),
   TRUE,
   COALESCE(
     CASE
-      WHEN ($22::json->>'upstream_is_stream') IN ('true', 'false')
-      THEN ($22::json->>'upstream_is_stream')::boolean
+      WHEN ($21::json->>'upstream_is_stream') IN ('true', 'false')
+      THEN ($21::json->>'upstream_is_stream')::boolean
       ELSE NULL
     END,
     TRUE
   ),
+  $18,
   $19,
   $20,
-  $21,
   'streaming',
   'pending',
-  $22::json,
-  COALESCE(TO_TIMESTAMP($23::double precision), NOW()),
+  $21::json,
+  COALESCE(TO_TIMESTAMP($22::double precision), NOW()),
   COALESCE(
-    NULLIF($24::bigint, 0),
-    CAST(EXTRACT(EPOCH FROM COALESCE(TO_TIMESTAMP($23::double precision), NOW())) AS BIGINT)
+    NULLIF($23::bigint, 0),
+    CAST(EXTRACT(EPOCH FROM COALESCE(TO_TIMESTAMP($22::double precision), NOW())) AS BIGINT)
   )
 )
 ON CONFLICT (request_id)
@@ -84,12 +82,11 @@ DO UPDATE SET
   endpoint_api_format = COALESCE(EXCLUDED.endpoint_api_format, "usage".endpoint_api_format),
   provider_api_family = COALESCE(EXCLUDED.provider_api_family, "usage".provider_api_family),
   provider_endpoint_kind = COALESCE(EXCLUDED.provider_endpoint_kind, "usage".provider_endpoint_kind),
-  has_format_conversion = COALESCE($18, "usage".has_format_conversion, FALSE),
   is_stream = TRUE,
   upstream_is_stream = COALESCE(
     CASE
-      WHEN ($22::json->>'upstream_is_stream') IN ('true', 'false')
-      THEN ($22::json->>'upstream_is_stream')::boolean
+      WHEN ($21::json->>'upstream_is_stream') IN ('true', 'false')
+      THEN ($21::json->>'upstream_is_stream')::boolean
       ELSE NULL
     END,
     "usage".upstream_is_stream,

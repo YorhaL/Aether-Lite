@@ -1,10 +1,9 @@
 use std::sync::{Arc, Mutex};
 
-use aether_crypto::{encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
+use aether_crypto::{encrypt_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
 use aether_data::repository::auth::{
     InMemoryAuthApiKeySnapshotRepository, StoredAuthApiKeyExportRecord, StoredAuthApiKeySnapshot,
 };
-use aether_data::repository::billing::InMemoryBillingReadRepository;
 use aether_data::repository::usage::InMemoryUsageReadRepository;
 use aether_data::repository::users::{
     InMemoryUserReadRepository, StoredUserAuthRecord, StoredUserExportRow, UpsertUserGroupRecord,
@@ -12,7 +11,6 @@ use aether_data::repository::users::{
 };
 use aether_data::repository::wallet::InMemoryWalletRepository;
 use aether_data::repository::wallet::StoredWalletSnapshot;
-use aether_data_contracts::repository::billing::UserPlanEntitlementRecord;
 use aether_data_contracts::repository::usage::StoredRequestUsageAudit;
 use axum::body::Body;
 use axum::routing::{any, delete, get, patch, post, put};
@@ -284,7 +282,7 @@ async fn gateway_sorts_admin_users_by_created_at() {
         .get(format!(
             "{gateway_url}/api/admin/users?skip=0&limit=10&sort_by=created_at&sort_order=desc"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -305,7 +303,7 @@ async fn gateway_sorts_admin_users_by_created_at() {
         .get(format!(
             "{gateway_url}/api/admin/users?skip=0&limit=10&sort_by=created_at&sort_order=asc"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -321,103 +319,6 @@ async fn gateway_sorts_admin_users_by_created_at() {
         .map(|item| item["id"].as_str().expect("id should be string"))
         .collect::<Vec<_>>();
     assert_eq!(asc_ids, vec!["user-old", "user-middle", "user-new"]);
-
-    gateway_handle.abort();
-}
-
-#[tokio::test]
-async fn gateway_admin_users_include_plan_membership_groups_in_effective_rpm() {
-    let user_repository = Arc::new(
-        InMemoryUserReadRepository::seed_auth_users(vec![sample_admin_user("user-1")])
-            .with_export_users(vec![sample_admin_export_user("user-1")]),
-    );
-    let plan_group = user_repository
-        .create_user_group(UpsertUserGroupRecord {
-            name: "Plan RPM".to_string(),
-            description: None,
-            priority: 10,
-            allowed_providers: None,
-            allowed_providers_mode: "unrestricted".to_string(),
-            allowed_api_formats: None,
-            allowed_api_formats_mode: "unrestricted".to_string(),
-            allowed_models: None,
-            allowed_models_mode: "unrestricted".to_string(),
-            rate_limit: Some(100),
-            rate_limit_mode: "custom".to_string(),
-            daily_usage_limit_usd: None,
-            daily_usage_limit_mode: "inherit".to_string(),
-        })
-        .await
-        .expect("plan group should create")
-        .expect("plan group should exist");
-    let now = Utc::now().timestamp().max(0) as u64;
-    let billing_repository = Arc::new(
-        InMemoryBillingReadRepository::seed(Vec::new()).with_entitlements(vec![
-            UserPlanEntitlementRecord {
-                id: "entitlement-1".to_string(),
-                user_id: "user-1".to_string(),
-                plan_id: "plan-1".to_string(),
-                payment_order_id: "order-1".to_string(),
-                status: "active".to_string(),
-                starts_at_unix_secs: now.saturating_sub(60),
-                expires_at_unix_secs: now.saturating_add(3600),
-                entitlements_snapshot: json!([{
-                    "type": "membership_group",
-                    "grant_user_groups": [plan_group.id],
-                }]),
-                created_at_unix_secs: now.saturating_sub(60),
-                updated_at_unix_secs: now.saturating_sub(60),
-            },
-        ]),
-    );
-    let data_state = GatewayDataState::with_billing_reader_for_tests(billing_repository)
-        .with_user_reader(user_repository);
-    let gateway = build_router_with_state(
-        AppState::new()
-            .expect("gateway should build")
-            .with_data_state_for_tests(data_state),
-    );
-    let (gateway_url, gateway_handle) = start_server(gateway).await;
-    let client = reqwest::Client::new();
-
-    let list_response = client
-        .get(format!("{gateway_url}/api/admin/users?skip=0&limit=10"))
-        .header(GATEWAY_HEADER, "rust-phase3b")
-        .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
-        .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
-        .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
-        .send()
-        .await
-        .expect("list request should succeed");
-    assert_eq!(list_response.status(), StatusCode::OK);
-    let list_payload: serde_json::Value = list_response.json().await.expect("json should parse");
-    let user = &list_payload["items"][0];
-    assert_eq!(user["rate_limit"], 60);
-    assert_eq!(user["groups"], json!([]));
-    assert_eq!(user["effective_policy"]["rate_limit"]["value"], 100);
-    assert_eq!(user["effective_policy"]["rate_limit"]["source"], "group");
-    assert_eq!(
-        user["effective_policy"]["rate_limit"]["group_name"],
-        "Plan RPM"
-    );
-
-    let detail_response = client
-        .get(format!("{gateway_url}/api/admin/users/user-1"))
-        .header(GATEWAY_HEADER, "rust-phase3b")
-        .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
-        .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
-        .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
-        .send()
-        .await
-        .expect("detail request should succeed");
-    assert_eq!(detail_response.status(), StatusCode::OK);
-    let detail_payload: serde_json::Value =
-        detail_response.json().await.expect("json should parse");
-    assert_eq!(detail_payload["groups"], json!([]));
-    assert_eq!(
-        detail_payload["effective_policy"]["rate_limit"]["value"],
-        100
-    );
 
     gateway_handle.abort();
 }
@@ -506,7 +407,7 @@ async fn gateway_handles_admin_users_root_locally_with_trusted_admin_principal()
         .get(format!(
             "{gateway_url}/api/admin/users?skip=0&limit=20&role=user&is_active=true"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -539,7 +440,7 @@ async fn gateway_handles_admin_users_root_locally_with_trusted_admin_principal()
         .get(format!(
             "{gateway_url}/api/admin/users?skip=0&limit=20&search=carol"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -564,7 +465,7 @@ async fn gateway_handles_admin_users_root_locally_with_trusted_admin_principal()
         .get(format!(
             "{gateway_url}/api/admin/users?skip=0&limit=20&search=user-3"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -587,7 +488,7 @@ async fn gateway_handles_admin_users_root_locally_with_trusted_admin_principal()
         .get(format!(
             "{gateway_url}/api/admin/users?skip=0&limit=2&search=example.com"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -621,7 +522,7 @@ async fn gateway_handles_admin_users_root_locally_with_trusted_admin_principal()
 
     let create_response = reqwest::Client::new()
         .post(format!("{create_gateway_url}/api/admin/users"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -631,7 +532,7 @@ async fn gateway_handles_admin_users_root_locally_with_trusted_admin_principal()
             "password": "NewUser123!",
             "role": "user",
             "unlimited": false,
-            "initial_gift_usd": 6.5
+            "initial_balance_usd": 6.5
         }))
         .send()
         .await
@@ -649,7 +550,7 @@ async fn gateway_handles_admin_users_root_locally_with_trusted_admin_principal()
 
     let hidden_policy_response = reqwest::Client::new()
         .post(format!("{create_gateway_url}/api/admin/users"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -732,7 +633,7 @@ async fn gateway_allows_default_user_group_access_policy_updates() {
 
     let default_response = client
         .put(format!("{gateway_url}/api/admin/user-groups/default"))
-        .header(GATEWAY_HEADER, "rust-phase3b")
+        .header(GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -756,7 +657,7 @@ async fn gateway_allows_default_user_group_access_policy_updates() {
 
     let update_response = client
         .put(format!("{gateway_url}/api/admin/user-groups/{group_id}"))
-        .header(GATEWAY_HEADER, "rust-phase3b")
+        .header(GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -883,7 +784,7 @@ async fn gateway_allows_removing_default_group_members_when_other_group_remains(
             "{gateway_url}/api/admin/user-groups/{}/members",
             default_group.id
         ))
-        .header(GATEWAY_HEADER, "rust-phase3b")
+        .header(GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -898,7 +799,7 @@ async fn gateway_allows_removing_default_group_members_when_other_group_remains(
             "{gateway_url}/api/admin/user-groups/{}/members",
             default_group.id
         ))
-        .header(GATEWAY_HEADER, "rust-phase3b")
+        .header(GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -949,7 +850,7 @@ async fn gateway_resolves_admin_user_batch_selection_locally() {
 
     let response = reqwest::Client::new()
         .post(format!("{gateway_url}/api/admin/users/resolve-selection"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -978,7 +879,7 @@ async fn gateway_resolves_admin_user_batch_selection_locally() {
 
     let all_filtered_response = reqwest::Client::new()
         .post(format!("{gateway_url}/api/admin/users/resolve-selection"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -995,7 +896,7 @@ async fn gateway_resolves_admin_user_batch_selection_locally() {
 
     let empty_selection_response = reqwest::Client::new()
         .post(format!("{gateway_url}/api/admin/users/resolve-selection"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1033,7 +934,7 @@ async fn gateway_handles_admin_user_batch_actions_locally() {
 
     let disable_response = client
         .post(format!("{gateway_url}/api/admin/users/batch-action"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1058,7 +959,7 @@ async fn gateway_handles_admin_user_batch_actions_locally() {
 
     let empty_selection_response = client
         .post(format!("{gateway_url}/api/admin/users/batch-action"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1073,7 +974,7 @@ async fn gateway_handles_admin_user_batch_actions_locally() {
 
     let access_response = client
         .post(format!("{gateway_url}/api/admin/users/batch-action"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1101,7 +1002,7 @@ async fn gateway_handles_admin_user_batch_actions_locally() {
 
     let hidden_access_response = client
         .post(format!("{gateway_url}/api/admin/users/batch-action"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1129,7 +1030,7 @@ async fn gateway_handles_admin_user_batch_actions_locally() {
 
     let role_response = client
         .post(format!("{gateway_url}/api/admin/users/batch-action"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1154,7 +1055,7 @@ async fn gateway_handles_admin_user_batch_actions_locally() {
 
     let blank_role_response = client
         .post(format!("{gateway_url}/api/admin/users/batch-action"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1174,7 +1075,7 @@ async fn gateway_handles_admin_user_batch_actions_locally() {
 
     let enable_admin_response = client
         .post(format!("{gateway_url}/api/admin/users/batch-action"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1191,7 +1092,7 @@ async fn gateway_handles_admin_user_batch_actions_locally() {
 
     let last_admin_demotion_response = client
         .post(format!("{gateway_url}/api/admin/users/batch-action"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1221,7 +1122,7 @@ async fn gateway_handles_admin_user_batch_actions_locally() {
 
     let last_admin_audit_demotion_response = client
         .post(format!("{gateway_url}/api/admin/users/batch-action"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1251,7 +1152,7 @@ async fn gateway_handles_admin_user_batch_actions_locally() {
 
     let detail_response = client
         .get(format!("{gateway_url}/api/admin/users/user-1"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1365,7 +1266,7 @@ async fn gateway_handles_admin_user_detail_routes_locally_with_trusted_admin_pri
 
     let update_response = client
         .put(format!("{gateway_url}/api/admin/users/user-1"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1393,7 +1294,7 @@ async fn gateway_handles_admin_user_detail_routes_locally_with_trusted_admin_pri
 
     let hidden_update_response = client
         .put(format!("{gateway_url}/api/admin/users/user-1"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1415,7 +1316,7 @@ async fn gateway_handles_admin_user_detail_routes_locally_with_trusted_admin_pri
 
     let delete_response = client
         .delete(format!("{gateway_url}/api/admin/users/user-1"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1452,7 +1353,7 @@ async fn gateway_rejects_demoting_the_last_active_admin() {
     for role in ["user", "audit_admin"] {
         let response = client
             .put(format!("{gateway_url}/api/admin/users/admin-1"))
-            .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+            .header(crate::constants::GATEWAY_HEADER, "aether")
             .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
             .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
             .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1505,7 +1406,7 @@ async fn gateway_handles_admin_user_detail_locally_with_trusted_admin_principal(
 
     let response = reqwest::Client::new()
         .get(format!("{gateway_url}/api/admin/users/user-1"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1576,7 +1477,7 @@ async fn gateway_handles_admin_user_session_routes_locally_with_trusted_admin_pr
 
     let response = reqwest::Client::new()
         .get(format!("{gateway_url}/api/admin/users/user-1/sessions"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1615,7 +1516,7 @@ async fn gateway_handles_admin_user_api_key_routes_locally_with_trusted_admin_pr
         }
     }));
 
-    let encrypted = encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-user-1")
+    let encrypted = encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-user-1")
         .expect("ciphertext should build");
     let auth_repository = Arc::new(
         InMemoryAuthApiKeySnapshotRepository::seed(vec![(
@@ -1671,7 +1572,7 @@ async fn gateway_handles_admin_user_api_key_routes_locally_with_trusted_admin_pr
 
     let create_response = client
         .post(format!("{gateway_url}/api/admin/users/user-1/api-keys"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1710,7 +1611,7 @@ async fn gateway_handles_admin_user_api_key_routes_locally_with_trusted_admin_pr
         .put(format!(
             "{gateway_url}/api/admin/users/user-1/api-keys/key-1"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1739,7 +1640,7 @@ async fn gateway_handles_admin_user_api_key_routes_locally_with_trusted_admin_pr
         .patch(format!(
             "{gateway_url}/api/admin/users/user-1/api-keys/key-1/lock"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1758,7 +1659,7 @@ async fn gateway_handles_admin_user_api_key_routes_locally_with_trusted_admin_pr
         .delete(format!(
             "{gateway_url}/api/admin/users/user-1/api-keys/key-1"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -1868,7 +1769,7 @@ async fn admin_created_user_keys_inherit_owner_group_policy() {
         .post(format!(
             "{gateway_url}/api/admin/users/target-user/api-keys"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "admin-session")
@@ -1968,7 +1869,7 @@ async fn admin_created_user_keys_inherit_owner_group_policy() {
 
     let response = reqwest::Client::new()
         .post(format!("{gateway_url}/api/admin/users/admin-user/api-keys"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "admin-session")
@@ -2019,7 +1920,7 @@ async fn gateway_returns_conflict_for_admin_create_user_api_key_when_writer_unav
         }
     }));
 
-    let encrypted = encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-user-1")
+    let encrypted = encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-user-1")
         .expect("ciphertext should build");
     let auth_repository = Arc::new(
         InMemoryAuthApiKeySnapshotRepository::seed(vec![(
@@ -2065,7 +1966,7 @@ async fn gateway_returns_conflict_for_admin_create_user_api_key_when_writer_unav
 
     let response = reqwest::Client::new()
         .post(format!("{gateway_url}/api/admin/users/user-1/api-keys"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2112,7 +2013,7 @@ async fn gateway_returns_conflict_for_admin_create_user_when_writer_unavailable(
 
     let response = reqwest::Client::new()
         .post(format!("{gateway_url}/api/admin/users"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2148,7 +2049,7 @@ async fn gateway_returns_conflict_for_admin_lock_user_api_key_when_writer_unavai
         }
     }));
 
-    let encrypted = encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-user-1")
+    let encrypted = encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-user-1")
         .expect("ciphertext should build");
     let auth_repository = Arc::new(
         InMemoryAuthApiKeySnapshotRepository::seed(vec![(
@@ -2192,7 +2093,7 @@ async fn gateway_returns_conflict_for_admin_lock_user_api_key_when_writer_unavai
         .patch(format!(
             "{gateway_url}/api/admin/users/user-1/api-keys/key-1/lock"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2270,7 +2171,7 @@ async fn gateway_allows_admin_update_user_to_clear_explicit_groups() {
 
     let response = reqwest::Client::new()
         .put(format!("{gateway_url}/api/admin/users/user-1"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2322,7 +2223,7 @@ async fn gateway_returns_conflict_for_admin_update_user_when_writer_unavailable(
 
     let response = reqwest::Client::new()
         .put(format!("{gateway_url}/api/admin/users/user-1"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2353,7 +2254,7 @@ async fn gateway_returns_conflict_for_admin_update_user_api_key_when_writer_unav
         }
     }));
 
-    let encrypted = encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-user-1")
+    let encrypted = encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-user-1")
         .expect("ciphertext should build");
     let auth_repository = Arc::new(
         InMemoryAuthApiKeySnapshotRepository::seed(vec![(
@@ -2397,7 +2298,7 @@ async fn gateway_returns_conflict_for_admin_update_user_api_key_when_writer_unav
         .put(format!(
             "{gateway_url}/api/admin/users/user-1/api-keys/key-1"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2428,7 +2329,7 @@ async fn gateway_returns_conflict_for_admin_delete_user_api_key_when_writer_unav
         }
     }));
 
-    let encrypted = encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-user-1")
+    let encrypted = encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-user-1")
         .expect("ciphertext should build");
     let auth_repository = Arc::new(
         InMemoryAuthApiKeySnapshotRepository::seed(vec![(
@@ -2472,7 +2373,7 @@ async fn gateway_returns_conflict_for_admin_delete_user_api_key_when_writer_unav
         .delete(format!(
             "{gateway_url}/api/admin/users/user-1/api-keys/key-1"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2505,7 +2406,7 @@ async fn gateway_lists_admin_user_api_keys_locally_with_trusted_admin_principal(
         }),
     );
 
-    let encrypted = encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-user-1")
+    let encrypted = encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-user-1")
         .expect("ciphertext should build");
     let auth_repository = Arc::new(
         InMemoryAuthApiKeySnapshotRepository::seed(vec![(
@@ -2557,7 +2458,7 @@ async fn gateway_lists_admin_user_api_keys_locally_with_trusted_admin_principal(
 
     let response = reqwest::Client::new()
         .get(format!("{gateway_url}/api/admin/users/user-1/api-keys"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2625,7 +2526,7 @@ async fn gateway_revokes_admin_user_session_locally_with_trusted_admin_principal
         .delete(format!(
             "{gateway_url}/api/admin/users/user-1/sessions/session-1"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2677,7 +2578,7 @@ async fn gateway_revokes_all_admin_user_sessions_locally_with_trusted_admin_prin
 
     let response = reqwest::Client::new()
         .delete(format!("{gateway_url}/api/admin/users/user-1/sessions"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -2710,7 +2611,7 @@ async fn gateway_reveals_admin_user_full_key_locally_with_trusted_admin_principa
         }),
     );
 
-    let encrypted = encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-user-1")
+    let encrypted = encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-user-1")
         .expect("ciphertext should build");
     let auth_repository = Arc::new(
         InMemoryAuthApiKeySnapshotRepository::seed(vec![(
@@ -2754,7 +2655,7 @@ async fn gateway_reveals_admin_user_full_key_locally_with_trusted_admin_principa
         .get(format!(
             "{gateway_url}/api/admin/users/user-1/api-keys/key-1/full-key"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")

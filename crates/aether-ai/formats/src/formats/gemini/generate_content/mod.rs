@@ -1,9 +1,6 @@
 pub mod chat_spec;
 pub mod cli_spec;
-pub mod request;
-pub mod response;
 pub mod spec;
-pub mod stream;
 
 use crate::formats::shared::family::LocalStandardSpec;
 

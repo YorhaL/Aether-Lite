@@ -25,7 +25,6 @@ const SELECT_VIDEO_TASK_COLUMNS_PREFIX: &str = r#"
   key_id,
   client_api_format,
   provider_api_format,
-  format_converted,
   model,
 "#;
 
@@ -134,7 +133,6 @@ fn select_video_task_page_summary_columns() -> &'static str {
   NULL::TEXT AS key_id,
   NULL::TEXT AS client_api_format,
   NULL::TEXT AS provider_api_format,
-  FALSE AS format_converted,
   model,
   CASE
     WHEN prompt IS NULL THEN NULL
@@ -206,7 +204,6 @@ fn upsert_sql() -> String {
   key_id,
   client_api_format,
   provider_api_format,
-  format_converted,
   model,
   prompt,
   original_request_body,
@@ -256,18 +253,17 @@ fn upsert_sql() -> String {
   $23,
   $24,
   $25,
-  $26,
-  TO_TIMESTAMP($27),
+  TO_TIMESTAMP($26),
+  $27,
   $28,
   $29,
   $30,
   $31,
   $32,
-  $33,
+  TO_TIMESTAMP($33),
   TO_TIMESTAMP($34),
   TO_TIMESTAMP($35),
-  TO_TIMESTAMP($36),
-  TO_TIMESTAMP($37)
+  TO_TIMESTAMP($36)
 )
 ON CONFLICT (id) DO UPDATE SET
   short_id = EXCLUDED.short_id,
@@ -282,7 +278,6 @@ ON CONFLICT (id) DO UPDATE SET
   key_id = EXCLUDED.key_id,
   client_api_format = EXCLUDED.client_api_format,
   provider_api_format = EXCLUDED.provider_api_format,
-  format_converted = EXCLUDED.format_converted,
   model = EXCLUDED.model,
   prompt = EXCLUDED.prompt,
   original_request_body = EXCLUDED.original_request_body,
@@ -328,32 +323,31 @@ fn update_if_active_sql() -> String {
   key_id = $11,
   client_api_format = $12,
   provider_api_format = $13,
-  format_converted = $14,
-  model = $15,
-  prompt = $16,
-  original_request_body = $17,
-  duration_seconds = $18,
-  resolution = $19,
-  aspect_ratio = $20,
-  size = $21,
-  status = $22,
-  progress_percent = $23,
-  progress_message = $24,
-  retry_count = $25,
-  poll_interval_seconds = $26,
-  next_poll_at = TO_TIMESTAMP($27),
-  poll_count = $28,
-  max_poll_count = $29,
-  video_url = $30,
-  error_code = $31,
-  error_message = $32,
-  request_metadata = $33,
-  created_at = TO_TIMESTAMP($34),
-  submitted_at = TO_TIMESTAMP($35),
-  completed_at = TO_TIMESTAMP($36),
-  updated_at = TO_TIMESTAMP($37)
+  model = $14,
+  prompt = $15,
+  original_request_body = $16,
+  duration_seconds = $17,
+  resolution = $18,
+  aspect_ratio = $19,
+  size = $20,
+  status = $21,
+  progress_percent = $22,
+  progress_message = $23,
+  retry_count = $24,
+  poll_interval_seconds = $25,
+  next_poll_at = TO_TIMESTAMP($26),
+  poll_count = $27,
+  max_poll_count = $28,
+  video_url = $29,
+  error_code = $30,
+  error_message = $31,
+  request_metadata = $32,
+  created_at = TO_TIMESTAMP($33),
+  submitted_at = TO_TIMESTAMP($34),
+  completed_at = TO_TIMESTAMP($35),
+  updated_at = TO_TIMESTAMP($36)
 WHERE id = $1
-  AND status = ANY($38)
+  AND status = ANY($37)
 RETURNING
 {columns}
 "
@@ -677,7 +671,6 @@ impl SqlxVideoTaskRepository {
             .bind(task.key_id)
             .bind(task.client_api_format)
             .bind(task.provider_api_format)
-            .bind(task.format_converted)
             .bind(task.model)
             .bind(task.prompt)
             .bind(task.original_request_body)
@@ -746,7 +739,6 @@ impl SqlxVideoTaskRepository {
             .bind(task.key_id)
             .bind(task.client_api_format)
             .bind(task.provider_api_format)
-            .bind(task.format_converted)
             .bind(task.model)
             .bind(task.prompt)
             .bind(task.original_request_body)
@@ -1038,7 +1030,6 @@ fn map_video_task_row(row: &PgRow) -> Result<StoredVideoTask, DataLayerError> {
         row.try_get("key_id").map_postgres_err()?,
         row.try_get("client_api_format").map_postgres_err()?,
         row.try_get("provider_api_format").map_postgres_err()?,
-        row.try_get("format_converted").map_postgres_err()?,
         row.try_get("model").map_postgres_err()?,
         row.try_get("prompt").map_postgres_err()?,
         row.try_get("original_request_body").map_postgres_err()?,
@@ -1138,7 +1129,6 @@ mod tests {
                 key_id: Some("key-1".to_string()),
                 client_api_format: Some("openai:video".to_string()),
                 provider_api_format: Some("openai:video".to_string()),
-                format_converted: false,
                 model: Some("sora-2".to_string()),
                 prompt: Some("hello".to_string()),
                 original_request_body: Some(serde_json::json!({"prompt": "hello"})),
@@ -1186,7 +1176,6 @@ mod tests {
                 key_id: Some("key-1".to_string()),
                 client_api_format: Some("openai:video".to_string()),
                 provider_api_format: Some("openai:video".to_string()),
-                format_converted: false,
                 model: Some("sora-2".to_string()),
                 prompt: Some("hello".to_string()),
                 original_request_body: Some(serde_json::json!({"prompt": "hello"})),

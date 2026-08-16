@@ -32,9 +32,6 @@ use user_me_catalog::*;
 #[path = "user_me_preferences.rs"]
 mod user_me_preferences;
 use user_me_preferences::*;
-#[path = "user_me_referral.rs"]
-mod user_me_referral;
-use user_me_referral::*;
 #[path = "user_me_profile.rs"]
 mod user_me_profile;
 use user_me_profile::*;

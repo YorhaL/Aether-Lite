@@ -30,8 +30,6 @@ impl std::fmt::Debug for OAuthHttpRequest {
             .field("content_type", &self.content_type)
             .field("has_json_body", &self.json_body.is_some())
             .field("body_bytes_len", &self.body_bytes.as_ref().map(Vec::len))
-            .field("network_policy", &self.network.policy)
-            .field("has_proxy", &self.network.proxy.is_some())
             .field(
                 "transport_profile_id",
                 &self

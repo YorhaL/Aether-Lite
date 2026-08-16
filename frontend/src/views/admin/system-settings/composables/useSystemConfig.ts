@@ -9,9 +9,8 @@ export interface SystemConfig {
   site_name: string
   site_subtitle: string
   // 网络代理
-  system_proxy_node_id: string | null
   // 基础配置
-  default_user_initial_gift_usd: number
+  default_user_initial_balance_usd: number
   rate_limit_per_minute: number
   daily_usage_limit_usd: number
   enable_registration: boolean
@@ -21,19 +20,12 @@ export interface SystemConfig {
   turnstile_secret_key: string
   turnstile_secret_key_is_set: boolean
   turnstile_allowed_hostnames: string[]
-  referral_enabled: boolean
-  referral_reward_mode: string
-  referral_recharge_percent: number
-  referral_headcount_amount_usd: number
-  referral_headcount_trigger: string
   registration_privacy_policy_enabled: boolean
   registration_privacy_policy_format: string
   registration_privacy_policy_content: string
   registration_privacy_policy_version: string
   // 独立余额 Key 过期管理
   auto_delete_expired_keys: boolean
-  // 格式转换
-  enable_format_conversion: boolean
   // 同步生图心跳
   enable_openai_image_sync_heartbeat: boolean
   // 标准文本非流式心跳
@@ -53,23 +45,14 @@ export interface SystemConfig {
   audit_log_retention_days: number
   request_candidates_retention_days: number
   request_candidates_cleanup_batch_size: number
-  proxy_node_metrics_1m_retention_days: number
-  proxy_node_metrics_1h_retention_days: number
-  proxy_node_metrics_cleanup_batch_size: number
-  // 定时任务
-  enable_provider_checkin: boolean
-  provider_checkin_time: string
-  enable_oauth_token_refresh: boolean
 }
 
 const CONFIG_KEYS = [
   // 站点信息
   'site_name',
   'site_subtitle',
-  // 网络代理
-  'system_proxy_node_id',
   // 基础配置
-  'default_user_initial_gift_usd',
+  'default_user_initial_balance_usd',
   'rate_limit_per_minute',
   'daily_usage_limit_usd',
   'enable_registration',
@@ -78,19 +61,12 @@ const CONFIG_KEYS = [
   'turnstile_site_key',
   'turnstile_secret_key',
   'turnstile_allowed_hostnames',
-  'referral_enabled',
-  'referral_reward_mode',
-  'referral_recharge_percent',
-  'referral_headcount_amount_usd',
-  'referral_headcount_trigger',
   'registration_privacy_policy_enabled',
   'registration_privacy_policy_format',
   'registration_privacy_policy_content',
   'registration_privacy_policy_version',
   // 独立余额 Key 过期管理
   'auto_delete_expired_keys',
-  // 格式转换
-  'enable_format_conversion',
   // 同步生图心跳
   'enable_openai_image_sync_heartbeat',
   // 标准文本非流式心跳
@@ -110,13 +86,6 @@ const CONFIG_KEYS = [
   'audit_log_retention_days',
   'request_candidates_retention_days',
   'request_candidates_cleanup_batch_size',
-  'proxy_node_metrics_1m_retention_days',
-  'proxy_node_metrics_1h_retention_days',
-  'proxy_node_metrics_cleanup_batch_size',
-  // 定时任务
-  'enable_provider_checkin',
-  'provider_checkin_time',
-  'enable_oauth_token_refresh',
 ]
 
 function createDefaultConfig(): SystemConfig {
@@ -124,10 +93,8 @@ function createDefaultConfig(): SystemConfig {
     // 站点信息
     site_name: 'Aether',
     site_subtitle: 'AI Gateway',
-    // 网络代理
-    system_proxy_node_id: null,
     // 基础配置
-    default_user_initial_gift_usd: 10.0,
+    default_user_initial_balance_usd: 10.0,
     rate_limit_per_minute: 0,
     daily_usage_limit_usd: 0,
     enable_registration: false,
@@ -137,19 +104,12 @@ function createDefaultConfig(): SystemConfig {
     turnstile_secret_key: '',
     turnstile_secret_key_is_set: false,
     turnstile_allowed_hostnames: [],
-    referral_enabled: false,
-    referral_reward_mode: 'percent',
-    referral_recharge_percent: 5,
-    referral_headcount_amount_usd: 0,
-    referral_headcount_trigger: 'registration',
     registration_privacy_policy_enabled: false,
     registration_privacy_policy_format: 'markdown',
     registration_privacy_policy_content: '',
     registration_privacy_policy_version: '1',
     // 独立余额 Key 过期管理
     auto_delete_expired_keys: false,
-    // 格式转换
-    enable_format_conversion: false,
     // 同步生图心跳
     enable_openai_image_sync_heartbeat: false,
     // 标准文本非流式心跳
@@ -169,13 +129,6 @@ function createDefaultConfig(): SystemConfig {
     audit_log_retention_days: 30,
     request_candidates_retention_days: 30,
     request_candidates_cleanup_batch_size: 5000,
-    proxy_node_metrics_1m_retention_days: 30,
-    proxy_node_metrics_1h_retention_days: 180,
-    proxy_node_metrics_cleanup_batch_size: 5000,
-    // 定时任务
-    enable_provider_checkin: true,
-    provider_checkin_time: '01:05',
-    enable_oauth_token_refresh: true,
   }
 }
 
@@ -190,7 +143,6 @@ export function useSystemConfig() {
 
   // 各模块 loading 状态
   const siteInfoLoading = ref(false)
-  const proxyConfigLoading = ref(false)
   const basicConfigLoading = ref(false)
   const logConfigLoading = ref(false)
   const cleanupConfigLoading = ref(false)
@@ -205,17 +157,11 @@ export function useSystemConfig() {
     )
   })
 
-  const hasProxyConfigChanges = computed(() => {
-    if (systemConfigLoading.value) return false
-    if (!originalConfig.value) return false
-    return systemConfig.value.system_proxy_node_id !== originalConfig.value.system_proxy_node_id
-  })
-
   const hasBasicConfigChanges = computed(() => {
     if (systemConfigLoading.value) return false
     if (!originalConfig.value) return false
     return (
-      systemConfig.value.default_user_initial_gift_usd !== originalConfig.value.default_user_initial_gift_usd ||
+      systemConfig.value.default_user_initial_balance_usd !== originalConfig.value.default_user_initial_balance_usd ||
       systemConfig.value.rate_limit_per_minute !== originalConfig.value.rate_limit_per_minute ||
       systemConfig.value.daily_usage_limit_usd !== originalConfig.value.daily_usage_limit_usd ||
       systemConfig.value.enable_registration !== originalConfig.value.enable_registration ||
@@ -225,11 +171,6 @@ export function useSystemConfig() {
       systemConfig.value.turnstile_secret_key.trim() !== '' ||
       JSON.stringify(systemConfig.value.turnstile_allowed_hostnames) !==
       JSON.stringify(originalConfig.value.turnstile_allowed_hostnames) ||
-      systemConfig.value.referral_enabled !== originalConfig.value.referral_enabled ||
-      systemConfig.value.referral_reward_mode !== originalConfig.value.referral_reward_mode ||
-      systemConfig.value.referral_recharge_percent !== originalConfig.value.referral_recharge_percent ||
-      systemConfig.value.referral_headcount_amount_usd !== originalConfig.value.referral_headcount_amount_usd ||
-      systemConfig.value.referral_headcount_trigger !== originalConfig.value.referral_headcount_trigger ||
       systemConfig.value.registration_privacy_policy_enabled !==
       originalConfig.value.registration_privacy_policy_enabled ||
       systemConfig.value.registration_privacy_policy_format !==
@@ -239,7 +180,6 @@ export function useSystemConfig() {
       systemConfig.value.registration_privacy_policy_version !==
       originalConfig.value.registration_privacy_policy_version ||
       systemConfig.value.auto_delete_expired_keys !== originalConfig.value.auto_delete_expired_keys ||
-      systemConfig.value.enable_format_conversion !== originalConfig.value.enable_format_conversion ||
       systemConfig.value.enable_openai_image_sync_heartbeat !==
       originalConfig.value.enable_openai_image_sync_heartbeat ||
       systemConfig.value.enable_standard_text_sync_heartbeat !==
@@ -275,13 +215,7 @@ export function useSystemConfig() {
       systemConfig.value.request_candidates_retention_days !==
       originalConfig.value.request_candidates_retention_days ||
       systemConfig.value.request_candidates_cleanup_batch_size !==
-      originalConfig.value.request_candidates_cleanup_batch_size ||
-      systemConfig.value.proxy_node_metrics_1m_retention_days !==
-      originalConfig.value.proxy_node_metrics_1m_retention_days ||
-      systemConfig.value.proxy_node_metrics_1h_retention_days !==
-      originalConfig.value.proxy_node_metrics_1h_retention_days ||
-      systemConfig.value.proxy_node_metrics_cleanup_batch_size !==
-      originalConfig.value.proxy_node_metrics_cleanup_batch_size
+      originalConfig.value.request_candidates_cleanup_batch_size
     )
   })
 
@@ -380,34 +314,14 @@ export function useSystemConfig() {
     }
   }
 
-  async function saveProxyConfig() {
-    proxyConfigLoading.value = true
-    try {
-      await adminApi.updateSystemConfig(
-        'system_proxy_node_id',
-        systemConfig.value.system_proxy_node_id || null,
-        '系统默认代理节点 ID'
-      )
-      if (originalConfig.value) {
-        originalConfig.value.system_proxy_node_id = systemConfig.value.system_proxy_node_id
-      }
-      success('网络代理配置已保存')
-    } catch (err) {
-      error('保存代理配置失败')
-      log.error('保存代理配置失败:', err)
-    } finally {
-      proxyConfigLoading.value = false
-    }
-  }
-
   async function saveBasicConfig() {
     basicConfigLoading.value = true
     try {
       const configItems = [
         {
-          key: 'default_user_initial_gift_usd',
-          value: systemConfig.value.default_user_initial_gift_usd,
-          description: '默认用户初始赠款（美元）',
+          key: 'default_user_initial_balance_usd',
+          value: systemConfig.value.default_user_initial_balance_usd,
+          description: '默认用户初始额度（美元）',
         },
         {
           key: 'rate_limit_per_minute',
@@ -445,31 +359,6 @@ export function useSystemConfig() {
           description: 'Cloudflare Turnstile 允许的 hostname 列表',
         },
         {
-          key: 'referral_enabled',
-          value: systemConfig.value.referral_enabled,
-          description: '邀请返利开关',
-        },
-        {
-          key: 'referral_reward_mode',
-          value: systemConfig.value.referral_reward_mode,
-          description: '邀请返利方式',
-        },
-        {
-          key: 'referral_recharge_percent',
-          value: systemConfig.value.referral_recharge_percent,
-          description: '邀请充值比例返利百分比',
-        },
-        {
-          key: 'referral_headcount_amount_usd',
-          value: systemConfig.value.referral_headcount_amount_usd,
-          description: '邀请人头返利金额（美元）',
-        },
-        {
-          key: 'referral_headcount_trigger',
-          value: systemConfig.value.referral_headcount_trigger,
-          description: '邀请人头返利触发时机',
-        },
-        {
           key: 'registration_privacy_policy_enabled',
           value: systemConfig.value.registration_privacy_policy_enabled,
           description: '注册隐私政策确认开关',
@@ -493,11 +382,6 @@ export function useSystemConfig() {
           key: 'auto_delete_expired_keys',
           value: systemConfig.value.auto_delete_expired_keys,
           description: '是否自动删除过期的API Key',
-        },
-        {
-          key: 'enable_format_conversion',
-          value: systemConfig.value.enable_format_conversion,
-          description: '全局格式转换开关：开启时强制允许所有提供商的格式转换',
         },
         {
           key: 'enable_openai_image_sync_heartbeat',
@@ -530,7 +414,7 @@ export function useSystemConfig() {
         )
       )
       if (originalConfig.value) {
-        originalConfig.value.default_user_initial_gift_usd = systemConfig.value.default_user_initial_gift_usd
+        originalConfig.value.default_user_initial_balance_usd = systemConfig.value.default_user_initial_balance_usd
         originalConfig.value.rate_limit_per_minute = systemConfig.value.rate_limit_per_minute
         originalConfig.value.daily_usage_limit_usd = systemConfig.value.daily_usage_limit_usd
         originalConfig.value.enable_registration = systemConfig.value.enable_registration
@@ -540,13 +424,6 @@ export function useSystemConfig() {
         originalConfig.value.turnstile_allowed_hostnames = [
           ...systemConfig.value.turnstile_allowed_hostnames,
         ]
-        originalConfig.value.referral_enabled = systemConfig.value.referral_enabled
-        originalConfig.value.referral_reward_mode = systemConfig.value.referral_reward_mode
-        originalConfig.value.referral_recharge_percent = systemConfig.value.referral_recharge_percent
-        originalConfig.value.referral_headcount_amount_usd =
-          systemConfig.value.referral_headcount_amount_usd
-        originalConfig.value.referral_headcount_trigger =
-          systemConfig.value.referral_headcount_trigger
         originalConfig.value.registration_privacy_policy_enabled =
           systemConfig.value.registration_privacy_policy_enabled
         originalConfig.value.registration_privacy_policy_format =
@@ -563,8 +440,6 @@ export function useSystemConfig() {
         }
         originalConfig.value.auto_delete_expired_keys =
           systemConfig.value.auto_delete_expired_keys
-        originalConfig.value.enable_format_conversion =
-          systemConfig.value.enable_format_conversion
         originalConfig.value.enable_openai_image_sync_heartbeat =
           systemConfig.value.enable_openai_image_sync_heartbeat
         originalConfig.value.enable_standard_text_sync_heartbeat =
@@ -682,21 +557,6 @@ export function useSystemConfig() {
           value: systemConfig.value.request_candidates_cleanup_batch_size,
           description: '请求候选记录每批次清理条数',
         },
-        {
-          key: 'proxy_node_metrics_1m_retention_days',
-          value: systemConfig.value.proxy_node_metrics_1m_retention_days,
-          description: '代理节点 1m 指标保留天数',
-        },
-        {
-          key: 'proxy_node_metrics_1h_retention_days',
-          value: systemConfig.value.proxy_node_metrics_1h_retention_days,
-          description: '代理节点 1h 指标保留天数',
-        },
-        {
-          key: 'proxy_node_metrics_cleanup_batch_size',
-          value: systemConfig.value.proxy_node_metrics_cleanup_batch_size,
-          description: '代理节点指标每批次清理条数',
-        },
       ]
 
       await Promise.all(
@@ -718,12 +578,6 @@ export function useSystemConfig() {
           systemConfig.value.request_candidates_retention_days
         originalConfig.value.request_candidates_cleanup_batch_size =
           systemConfig.value.request_candidates_cleanup_batch_size
-        originalConfig.value.proxy_node_metrics_1m_retention_days =
-          systemConfig.value.proxy_node_metrics_1m_retention_days
-        originalConfig.value.proxy_node_metrics_1h_retention_days =
-          systemConfig.value.proxy_node_metrics_1h_retention_days
-        originalConfig.value.proxy_node_metrics_cleanup_batch_size =
-          systemConfig.value.proxy_node_metrics_cleanup_batch_size
       }
       success('请求记录清理配置已保存')
     } catch (err) {
@@ -758,13 +612,11 @@ export function useSystemConfig() {
     systemConfigLoading,
     // loading 状态
     siteInfoLoading,
-    proxyConfigLoading,
     basicConfigLoading,
     logConfigLoading,
     cleanupConfigLoading,
     // 变动检测
     hasSiteInfoChanges,
-    hasProxyConfigChanges,
     hasBasicConfigChanges,
     hasLogConfigChanges,
     hasCleanupConfigChanges,
@@ -776,7 +628,6 @@ export function useSystemConfig() {
     loadSystemVersion,
     // 保存函数
     saveSiteInfo,
-    saveProxyConfig,
     saveBasicConfig,
     clearTurnstileSecret,
     saveLogConfig,

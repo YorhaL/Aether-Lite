@@ -12,7 +12,7 @@ use aether_data_contracts::repository::video_tasks::{
 use serde_json::json;
 
 use super::{AppState, FrontdoorRuntimeGuardConfig, GatewayDataState};
-use crate::{provider_transport, usage};
+use crate::usage;
 
 #[cfg(test)]
 impl AppState {
@@ -42,18 +42,6 @@ impl AppState {
         config: FrontdoorRuntimeGuardConfig,
     ) -> Self {
         self.frontdoor_runtime_guards = Arc::new(config);
-        self
-    }
-
-    pub(crate) fn with_tunnel_identity_for_tests(
-        mut self,
-        instance_id: &str,
-        relay_base_url: Option<&str>,
-    ) -> Self {
-        self.tunnel = crate::tunnel::EmbeddedTunnelState::with_data_and_directory(
-            Arc::clone(&self.data),
-            crate::tunnel::TunnelAttachmentDirectory::for_tests(instance_id, relay_base_url, 90),
-        );
         self
     }
 
@@ -221,84 +209,6 @@ impl AppState {
         self
     }
 
-    pub(crate) fn with_oauth_refresh_coordinator_for_tests(
-        mut self,
-        coordinator: provider_transport::LocalOAuthRefreshCoordinator,
-    ) -> Self {
-        self.oauth_refresh = Arc::new(coordinator);
-        self
-    }
-
-    pub(crate) fn with_provider_oauth_state_entry_for_tests(
-        mut self,
-        nonce: &str,
-        payload: serde_json::Value,
-    ) -> Self {
-        let store = self
-            .provider_oauth_state_store
-            .get_or_insert_with(|| Arc::new(StdMutex::new(HashMap::new())));
-        store
-            .lock()
-            .expect("provider oauth state store should lock")
-            .insert(format!("provider_oauth_state:{nonce}"), payload.to_string());
-        self.runtime_state.kv_set_local_nowait(
-            &format!("provider_oauth_state:{nonce}"),
-            payload.to_string(),
-            Some(Duration::from_secs(
-                aether_data::repository::provider_oauth::PROVIDER_OAUTH_STATE_TTL_SECS,
-            )),
-        );
-        self
-    }
-
-    pub(crate) fn with_provider_oauth_device_session_entry_for_tests(
-        mut self,
-        session_id: &str,
-        payload: serde_json::Value,
-    ) -> Self {
-        let store = self
-            .provider_oauth_device_session_store
-            .get_or_insert_with(|| Arc::new(StdMutex::new(HashMap::new())));
-        store
-            .lock()
-            .expect("provider oauth device session store should lock")
-            .insert(
-                format!("device_auth_session:{session_id}"),
-                payload.to_string(),
-            );
-        self.runtime_state.kv_set_local_nowait(
-            &format!("device_auth_session:{session_id}"),
-            payload.to_string(),
-            Some(Duration::from_secs(3600)),
-        );
-        self
-    }
-
-    pub(crate) fn with_provider_oauth_batch_task_entry_for_tests(
-        mut self,
-        task_id: &str,
-        payload: serde_json::Value,
-    ) -> Self {
-        let store = self
-            .provider_oauth_batch_task_store
-            .get_or_insert_with(|| Arc::new(StdMutex::new(HashMap::new())));
-        store
-            .lock()
-            .expect("provider oauth batch task store should lock")
-            .insert(
-                format!("provider_oauth_batch_task:{task_id}"),
-                payload.to_string(),
-            );
-        self.runtime_state.kv_set_local_nowait(
-            &format!("provider_oauth_batch_task:{task_id}"),
-            payload.to_string(),
-            Some(Duration::from_secs(
-                aether_data::repository::provider_oauth::PROVIDER_OAUTH_BATCH_TASK_TTL_SECS,
-            )),
-        );
-        self
-    }
-
     pub(crate) fn with_auth_session_for_tests(
         self,
         session: crate::data::state::StoredUserSessionRecord,
@@ -356,104 +266,6 @@ impl AppState {
         let mut guard = store.lock().expect("auth wallet store should lock");
         for wallet in wallets {
             guard.insert(wallet.id.clone(), wallet);
-        }
-        drop(guard);
-        self
-    }
-
-    pub(crate) fn with_admin_wallet_payment_orders_for_tests<I>(mut self, orders: I) -> Self
-    where
-        I: IntoIterator<Item = crate::AdminWalletPaymentOrderRecord>,
-    {
-        let store = self
-            .admin_wallet_payment_order_store
-            .get_or_insert_with(|| Arc::new(StdMutex::new(HashMap::new())));
-        let mut guard = store
-            .lock()
-            .expect("admin wallet payment order store should lock");
-        for order in orders {
-            guard.insert(order.id.clone(), order);
-        }
-        drop(guard);
-        self
-    }
-
-    pub(crate) fn with_admin_payment_callbacks_for_tests<I>(mut self, callbacks: I) -> Self
-    where
-        I: IntoIterator<Item = crate::state::AdminPaymentCallbackRecord>,
-    {
-        let store = self
-            .admin_payment_callback_store
-            .get_or_insert_with(|| Arc::new(StdMutex::new(HashMap::new())));
-        let mut guard = store
-            .lock()
-            .expect("admin payment callback store should lock");
-        for callback in callbacks {
-            guard.insert(callback.id.clone(), callback);
-        }
-        drop(guard);
-        self
-    }
-
-    pub(crate) fn with_admin_wallet_transactions_for_tests<I>(mut self, transactions: I) -> Self
-    where
-        I: IntoIterator<Item = crate::AdminWalletTransactionRecord>,
-    {
-        let store = self
-            .admin_wallet_transaction_store
-            .get_or_insert_with(|| Arc::new(StdMutex::new(HashMap::new())));
-        let mut guard = store
-            .lock()
-            .expect("admin wallet transaction store should lock");
-        for transaction in transactions {
-            guard.insert(transaction.id.clone(), transaction);
-        }
-        drop(guard);
-        self
-    }
-
-    pub(crate) fn with_admin_wallet_refunds_for_tests<I>(mut self, refunds: I) -> Self
-    where
-        I: IntoIterator<Item = crate::AdminWalletRefundRecord>,
-    {
-        let store = self
-            .admin_wallet_refund_store
-            .get_or_insert_with(|| Arc::new(StdMutex::new(HashMap::new())));
-        let mut guard = store.lock().expect("admin wallet refund store should lock");
-        for refund in refunds {
-            guard.insert(refund.id.clone(), refund);
-        }
-        drop(guard);
-        self
-    }
-
-    pub(crate) fn with_admin_billing_rules_for_tests<I>(mut self, rules: I) -> Self
-    where
-        I: IntoIterator<Item = crate::AdminBillingRuleRecord>,
-    {
-        let store = self
-            .admin_billing_rule_store
-            .get_or_insert_with(|| Arc::new(StdMutex::new(HashMap::new())));
-        let mut guard = store.lock().expect("admin billing rule store should lock");
-        for rule in rules {
-            guard.insert(rule.id.clone(), rule);
-        }
-        drop(guard);
-        self
-    }
-
-    pub(crate) fn with_admin_billing_collectors_for_tests<I>(mut self, collectors: I) -> Self
-    where
-        I: IntoIterator<Item = crate::AdminBillingCollectorRecord>,
-    {
-        let store = self
-            .admin_billing_collector_store
-            .get_or_insert_with(|| Arc::new(StdMutex::new(HashMap::new())));
-        let mut guard = store
-            .lock()
-            .expect("admin billing collector store should lock");
-        for collector in collectors {
-            guard.insert(collector.id.clone(), collector);
         }
         drop(guard);
         self
@@ -655,18 +467,6 @@ impl AppState {
             .lock()
             .expect("auth user model capability store should lock")
             .insert(user_id.to_string(), settings);
-        self
-    }
-
-    pub(crate) fn with_provider_oauth_token_url_for_tests(
-        self,
-        provider_type: &str,
-        token_url: impl Into<String>,
-    ) -> Self {
-        self.provider_oauth_token_url_overrides
-            .lock()
-            .expect("provider oauth token url overrides should lock")
-            .insert(provider_type.trim().to_ascii_lowercase(), token_url.into());
         self
     }
 }

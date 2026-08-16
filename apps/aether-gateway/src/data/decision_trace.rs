@@ -113,7 +113,6 @@ mod tests {
             "provider-1".to_string(),
             "OpenAI".to_string(),
             Some("https://openai.com".to_string()),
-            "custom".to_string(),
         )
         .expect("provider should build")
     }
@@ -173,14 +172,10 @@ mod tests {
                     candidate: sample_candidate("req-1"),
                     provider_name: Some("OpenAI".to_string()),
                     provider_website: Some("https://openai.com".to_string()),
-                    provider_type: Some("custom".to_string()),
                     provider_priority: Some(0),
-                    provider_keep_priority_on_conversion: Some(false),
-                    provider_enable_format_conversion: Some(false),
                     endpoint_api_format: Some("openai:chat".to_string()),
                     endpoint_api_family: Some("openai".to_string()),
                     endpoint_kind: Some("chat".to_string()),
-                    endpoint_format_acceptance_config: None,
                     provider_key_name: Some("prod-key".to_string()),
                     provider_key_auth_type: Some("api_key".to_string()),
                     provider_key_api_formats: None,

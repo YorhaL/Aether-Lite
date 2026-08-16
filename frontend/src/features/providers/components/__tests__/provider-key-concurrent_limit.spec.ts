@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp, nextTick, type App, type Component } from 'vue'
 import KeyFormDialog from '@/features/providers/components/KeyFormDialog.vue'
-import OAuthKeyEditDialog from '@/features/providers/components/OAuthKeyEditDialog.vue'
 import type { EndpointAPIKey } from '@/api/endpoints'
 
 const endpointMocks = vi.hoisted(() => ({
@@ -272,11 +271,6 @@ function updateInput(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
-function updateTextarea(textarea: HTMLTextAreaElement, value: string) {
-  textarea.value = value
-  textarea.dispatchEvent(new Event('input', { bubbles: true }))
-}
-
 async function submit(root: HTMLElement) {
   const form = root.querySelector('form')
   expect(form).not.toBeNull()
@@ -309,75 +303,13 @@ afterEach(() => {
 })
 
 describe('provider key concurrent_limit form behavior', () => {
-  it('lets Vertex AI keys switch to Service Account JSON and submit auth_config', async () => {
-    const root = mountDialog(KeyFormDialog, {
-      open: true,
-      endpoint: null,
-      editingKey: null,
-      providerId: 'provider-vertex',
-      providerType: 'vertex_ai',
-      availableApiFormats: ['gemini:generate_content', 'claude:messages'],
-    })
-    await settle()
-
-    const serviceAccountOption = root.querySelector<HTMLButtonElement>('[data-select-item="service_account"]')
-    expect(serviceAccountOption).not.toBeNull()
-    serviceAccountOption?.click()
-    await settle()
-
-    const nameInput = root.querySelector<HTMLInputElement>('input[placeholder="例如：主 Key、备用 Key 1"]')
-    expect(nameInput).not.toBeNull()
-    updateInput(nameInput as HTMLInputElement, 'Vertex service account')
-
-    const textarea = root.querySelector<HTMLTextAreaElement>('textarea')
-    expect(textarea).not.toBeNull()
-    updateTextarea(textarea as HTMLTextAreaElement, JSON.stringify({
-      client_email: 'svc@example.iam.gserviceaccount.com',
-      private_key: '-----BEGIN PRIVATE KEY-----\\nTEST\\n-----END PRIVATE KEY-----\\n',
-      project_id: 'demo-project',
-    }))
-
-    await submit(root)
-
-    expect(endpointMocks.addProviderKey).toHaveBeenCalledWith('provider-vertex', expect.objectContaining({
-      auth_type: 'service_account',
-      auth_config: expect.objectContaining({
-        client_email: 'svc@example.iam.gserviceaccount.com',
-        private_key: '-----BEGIN PRIVATE KEY-----\\nTEST\\n-----END PRIVATE KEY-----\\n',
-        project_id: 'demo-project',
-      }),
-      api_formats: ['gemini:generate_content'],
-    }))
-  })
-
-  it('keeps Gemini embedding selectable for Vertex AI keys', async () => {
-    const root = mountDialog(KeyFormDialog, {
-      open: true,
-      endpoint: null,
-      editingKey: null,
-      providerId: 'provider-vertex',
-      providerType: 'vertex_ai',
-      availableApiFormats: ['gemini:generate_content', 'gemini:embedding', 'claude:messages'],
-    })
-    await settle()
-
-    expect(root.textContent).toContain('Gemini Embedding')
-
-    const serviceAccountOption = root.querySelector<HTMLButtonElement>('[data-select-item="service_account"]')
-    expect(serviceAccountOption).not.toBeNull()
-    serviceAccountOption?.click()
-    await settle()
-
-    expect(root.textContent).toContain('Gemini Embedding')
-  })
-
   it('hydrates and serializes a positive concurrent_limit number from the normal key form', async () => {
     const root = mountDialog(KeyFormDialog, {
       open: true,
       endpoint: null,
       editingKey: createProviderKey({ rpm_limit: 42, concurrent_limit: 3 }),
       providerId: 'provider-1',
-      providerType: 'openai',
+      providerType: 'custom',
       availableApiFormats: ['openai:chat'],
     })
     await settle()
@@ -402,7 +334,7 @@ describe('provider key concurrent_limit form behavior', () => {
       endpoint: null,
       editingKey: createProviderKey({ rpm_limit: 24, concurrent_limit: 6 }),
       providerId: 'provider-1',
-      providerType: 'openai',
+      providerType: 'custom',
       availableApiFormats: ['openai:chat'],
     })
     await settle()
@@ -416,73 +348,4 @@ describe('provider key concurrent_limit form behavior', () => {
     expect(payload.rpm_limit).toBe(24)
   })
 
-  it('hydrates and serializes a positive concurrent_limit number from the OAuth edit form', async () => {
-    const root = mountDialog(OAuthKeyEditDialog, {
-      open: true,
-      editingKey: createProviderKey({
-        id: 'oauth-key-1',
-        auth_type: 'oauth',
-        name: 'OAuth account',
-        rpm_limit: 35,
-        concurrent_limit: 3,
-      }),
-    })
-    await settle()
-
-    const concurrentLimitInput = findInput(root, 'concurrent_limit')
-    expect(concurrentLimitInput.value).toBe('3')
-    expect(findInput(root, 'rpm_limit').value).toBe('35')
-
-    updateInput(concurrentLimitInput, '7')
-    await submit(root)
-
-    const payload = lastUpdatePayload()
-    expect(endpointMocks.updateProviderKey).toHaveBeenCalledWith('oauth-key-1', expect.any(Object))
-    expect(payload.concurrent_limit).toBe(7)
-    expect(typeof payload.concurrent_limit).toBe('number')
-    expect(payload.concurrent_limit).not.toBe('')
-    expect(payload.rpm_limit).toBe(35)
-  })
-
-  it('serializes cleared OAuth concurrent_limit as null instead of an empty string', async () => {
-    const root = mountDialog(OAuthKeyEditDialog, {
-      open: true,
-      editingKey: createProviderKey({
-        id: 'oauth-key-2',
-        auth_type: 'oauth',
-        rpm_limit: 18,
-        concurrent_limit: 4,
-      }),
-    })
-    await settle()
-
-    updateInput(findInput(root, 'concurrent_limit'), '')
-    await submit(root)
-
-    const payload = lastUpdatePayload()
-    expect(payload).toHaveProperty('concurrent_limit', null)
-    expect(payload.concurrent_limit).not.toBe('')
-    expect(payload.rpm_limit).toBe(18)
-  })
-
-  it('keeps zero concurrent_limit as a numeric unlimited value', async () => {
-    const root = mountDialog(OAuthKeyEditDialog, {
-      open: true,
-      editingKey: createProviderKey({
-        id: 'oauth-key-zero',
-        auth_type: 'oauth',
-        rpm_limit: 11,
-        concurrent_limit: 2,
-      }),
-    })
-    await settle()
-
-    updateInput(findInput(root, 'concurrent_limit'), '0')
-    await submit(root)
-
-    const payload = lastUpdatePayload()
-    expect(payload.concurrent_limit).toBe(0)
-    expect(typeof payload.concurrent_limit).toBe('number')
-    expect(payload.rpm_limit).toBe(11)
-  })
 })

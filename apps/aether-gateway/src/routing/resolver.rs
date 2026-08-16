@@ -81,7 +81,7 @@ pub(crate) fn resolve_gateway_routing_policy(
 pub(crate) fn resolve_gateway_static_default_routing_policy(
     input: GatewayStaticRoutingPolicyInput<'_>,
 ) -> Result<Option<ResolvedRoutingPolicy>, GatewayError> {
-    let Some((priority_mode, scheduling_mode, keep_priority_on_conversion)) =
+    let Some((priority_mode, scheduling_mode)) =
         static_default_policy_fields(input.group_config_json)?
     else {
         return Ok(None);
@@ -95,17 +95,15 @@ pub(crate) fn resolve_gateway_static_default_routing_policy(
         resolved_model: input.resolved_model.to_string(),
         priority_mode,
         scheduling_mode,
-        keep_priority_on_conversion,
         ranking_overlay: RankingOverlay::default(),
         mutation_plan: MutationPlan::default(),
-        pool_policy_overrides: BTreeMap::new(),
         matched_rules: Vec::new(),
     }))
 }
 
 fn static_default_policy_fields(
     config_json: &Value,
-) -> Result<Option<(RoutingSetPriorityMode, RoutingSchedulingMode, bool)>, GatewayError> {
+) -> Result<Option<(RoutingSetPriorityMode, RoutingSchedulingMode)>, GatewayError> {
     let Some(object) = config_json.as_object() else {
         return Ok(None);
     };
@@ -120,7 +118,6 @@ fn static_default_policy_fields(
         return Ok(Some((
             RoutingSetPriorityMode::default(),
             RoutingSchedulingMode::default(),
-            false,
         )));
     };
     let Some(default_policy) = default_policy.as_object() else {
@@ -135,18 +132,7 @@ fn static_default_policy_fields(
         default_policy.get("scheduling_mode"),
         RoutingSchedulingMode::default,
     )?;
-    let keep_priority_on_conversion = match default_policy.get("keep_priority_on_conversion") {
-        Some(value) => value.as_bool().ok_or_else(|| {
-            invalid_routing_group_config("keep_priority_on_conversion must be a boolean")
-        })?,
-        None => false,
-    };
-
-    Ok(Some((
-        priority_mode,
-        scheduling_mode,
-        keep_priority_on_conversion,
-    )))
+    Ok(Some((priority_mode, scheduling_mode)))
 }
 
 fn routing_array_field_is_missing_or_empty(
@@ -193,8 +179,7 @@ mod tests {
         let config = json!({
             "default_policy": {
                 "priority_mode": "global_key",
-                "scheduling_mode": "load_balance",
-                "keep_priority_on_conversion": true
+                "scheduling_mode": "load_balance"
             },
             "allowed_models": [],
             "model_policies": [],
@@ -238,7 +223,6 @@ mod tests {
             static_policy.scheduling_mode,
             RoutingSchedulingMode::LoadBalance
         );
-        assert!(static_policy.keep_priority_on_conversion);
         assert!(static_policy.mutation_plan.is_empty());
         assert!(static_policy.matched_rules.is_empty());
     }

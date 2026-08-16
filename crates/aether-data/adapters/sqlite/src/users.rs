@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
-use sqlx::{sqlite::SqliteRow, QueryBuilder, Row, Sqlite};
+use sqlx::{sqlite::SqliteRow, QueryBuilder, Row, Sqlite, Transaction};
 
 use aether_data_contracts::repository::users::{
     normalize_user_group_name, LdapAuthUserProvisioningOutcome, StoredUserAuthRecord,
@@ -159,8 +159,12 @@ SELECT
   allowed_models_mode,
   rate_limit,
   rate_limit_mode,
-  daily_usage_limit_usd,
-  daily_usage_limit_mode,
+  (SELECT daily_usage_limit_usd
+   FROM lite_user_group_daily_usage_limits AS lite_limits
+   WHERE lite_limits.user_group_id = user_groups.id) AS daily_usage_limit_usd,
+  COALESCE((SELECT daily_usage_limit_mode
+            FROM lite_user_group_daily_usage_limits AS lite_limits
+            WHERE lite_limits.user_group_id = user_groups.id), 'inherit') AS daily_usage_limit_mode,
   created_at,
   updated_at
 FROM user_groups
@@ -475,6 +479,9 @@ WHERE is_deleted = 0
         let id = uuid::Uuid::new_v4().to_string();
         let name = normalize_user_group_name(&record.name);
         let normalized_name = name.to_ascii_lowercase();
+        let daily_usage_limit_usd = record.daily_usage_limit_usd;
+        let daily_usage_limit_mode = record.daily_usage_limit_mode.clone();
+        let mut tx = self.pool.begin().await.map_sql_err()?;
         let result = sqlx::query(
             r#"
 INSERT INTO user_groups (
@@ -482,10 +489,9 @@ INSERT INTO user_groups (
   allowed_providers, allowed_providers_mode,
   allowed_api_formats, allowed_api_formats_mode,
   allowed_models, allowed_models_mode,
-  rate_limit, rate_limit_mode, daily_usage_limit_usd, daily_usage_limit_mode,
-  created_at, updated_at
+  rate_limit, rate_limit_mode, created_at, updated_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 "#,
         )
         .bind(&id)
@@ -505,14 +511,22 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         .bind(record.allowed_models_mode)
         .bind(record.rate_limit)
         .bind(record.rate_limit_mode)
-        .bind(record.daily_usage_limit_usd)
-        .bind(record.daily_usage_limit_mode)
         .bind(now)
         .bind(now)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await;
         match result {
-            Ok(_) => self.find_user_group_by_id(&id).await,
+            Ok(_) => {
+                upsert_sqlite_user_group_daily_usage_limit(
+                    &mut tx,
+                    &id,
+                    daily_usage_limit_usd,
+                    &daily_usage_limit_mode,
+                )
+                .await?;
+                tx.commit().await.map_sql_err()?;
+                self.find_user_group_by_id(&id).await
+            }
             Err(sqlx::Error::Database(err)) if err.is_unique_violation() => Err(
                 DataLayerError::InvalidInput("duplicate user group name".to_string()),
             ),
@@ -528,6 +542,9 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         let now = current_unix_secs();
         let name = normalize_user_group_name(&record.name);
         let normalized_name = name.to_ascii_lowercase();
+        let daily_usage_limit_usd = record.daily_usage_limit_usd;
+        let daily_usage_limit_mode = record.daily_usage_limit_mode.clone();
+        let mut tx = self.pool.begin().await.map_sql_err()?;
         let result = sqlx::query(
             r#"
 UPDATE user_groups
@@ -543,8 +560,6 @@ SET name = ?,
     allowed_models_mode = ?,
     rate_limit = ?,
     rate_limit_mode = ?,
-    daily_usage_limit_usd = ?,
-    daily_usage_limit_mode = ?,
     updated_at = ?
 WHERE id = ?
 "#,
@@ -565,15 +580,23 @@ WHERE id = ?
         .bind(record.allowed_models_mode)
         .bind(record.rate_limit)
         .bind(record.rate_limit_mode)
-        .bind(record.daily_usage_limit_usd)
-        .bind(record.daily_usage_limit_mode)
         .bind(now)
         .bind(group_id)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await;
         match result {
             Ok(result) if result.rows_affected() == 0 => Ok(None),
-            Ok(_) => self.find_user_group_by_id(group_id).await,
+            Ok(_) => {
+                upsert_sqlite_user_group_daily_usage_limit(
+                    &mut tx,
+                    group_id,
+                    daily_usage_limit_usd,
+                    &daily_usage_limit_mode,
+                )
+                .await?;
+                tx.commit().await.map_sql_err()?;
+                self.find_user_group_by_id(group_id).await
+            }
             Err(sqlx::Error::Database(err)) if err.is_unique_violation() => Err(
                 DataLayerError::InvalidInput("duplicate user group name".to_string()),
             ),
@@ -582,11 +605,20 @@ WHERE id = ?
     }
 
     async fn delete_user_group(&self, group_id: &str) -> Result<bool, DataLayerError> {
+        let mut tx = self.pool.begin().await.map_sql_err()?;
         let result = sqlx::query("DELETE FROM user_groups WHERE id = ?")
             .bind(group_id)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_sql_err()?;
+        if result.rows_affected() > 0 {
+            sqlx::query("DELETE FROM lite_user_group_daily_usage_limits WHERE user_group_id = ?")
+                .bind(group_id)
+                .execute(&mut *tx)
+                .await
+                .map_sql_err()?;
+        }
+        tx.commit().await.map_sql_err()?;
         Ok(result.rows_affected() > 0)
     }
 
@@ -2022,6 +2054,34 @@ fn map_user_auth_row(row: &SqliteRow) -> Result<StoredUserAuthRecord, DataLayerE
     })
 }
 
+async fn upsert_sqlite_user_group_daily_usage_limit(
+    tx: &mut Transaction<'_, Sqlite>,
+    group_id: &str,
+    daily_usage_limit_usd: Option<f64>,
+    daily_usage_limit_mode: &str,
+) -> Result<(), DataLayerError> {
+    sqlx::query(
+        r#"
+INSERT INTO lite_user_group_daily_usage_limits (
+    user_group_id,
+    daily_usage_limit_usd,
+    daily_usage_limit_mode
+)
+VALUES (?, ?, ?)
+ON CONFLICT(user_group_id) DO UPDATE
+SET daily_usage_limit_usd = excluded.daily_usage_limit_usd,
+    daily_usage_limit_mode = excluded.daily_usage_limit_mode
+"#,
+    )
+    .bind(group_id)
+    .bind(daily_usage_limit_usd)
+    .bind(daily_usage_limit_mode)
+    .execute(&mut **tx)
+    .await
+    .map_sql_err()?;
+    Ok(())
+}
+
 fn map_user_group_row(row: &SqliteRow) -> Result<StoredUserGroup, DataLayerError> {
     StoredUserGroup::new(
         row.try_get("id").map_sql_err()?,
@@ -2144,8 +2204,8 @@ mod tests {
     use super::SqliteUserReadRepository;
     use crate::run_migrations;
     use aether_data_contracts::repository::users::{
-        StoredUserPreferenceRecord, StoredUserSessionRecord, UserExportListQuery,
-        UserReadRepository,
+        StoredUserPreferenceRecord, StoredUserSessionRecord, UpsertUserGroupRecord,
+        UserExportListQuery, UserReadRepository,
     };
 
     #[tokio::test]
@@ -2158,6 +2218,7 @@ mod tests {
         run_migrations(&pool)
             .await
             .expect("sqlite migrations should run");
+        run_lite_migrations(&pool).await;
         sqlx::query(
             r#"
 INSERT INTO users (
@@ -2504,6 +2565,7 @@ INSERT INTO users (
         run_migrations(&pool)
             .await
             .expect("sqlite migrations should run");
+        run_lite_migrations(&pool).await;
         sqlx::query(
             r#"
 INSERT INTO oauth_providers (
@@ -2599,5 +2661,88 @@ INSERT INTO oauth_providers (
                 .expect("link count should load"),
             0
         );
+    }
+
+    #[tokio::test]
+    async fn sqlite_repository_stores_user_group_daily_limits_in_lite_extension_table() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("sqlite pool should connect");
+        run_migrations(&pool)
+            .await
+            .expect("sqlite migrations should run");
+        run_lite_migrations(&pool).await;
+
+        let repository = SqliteUserReadRepository::new(pool);
+        let created = repository
+            .create_user_group(UpsertUserGroupRecord {
+                name: "Limited".to_string(),
+                description: None,
+                priority: 10,
+                allowed_providers: None,
+                allowed_providers_mode: "inherit".to_string(),
+                allowed_api_formats: None,
+                allowed_api_formats_mode: "inherit".to_string(),
+                allowed_models: None,
+                allowed_models_mode: "inherit".to_string(),
+                rate_limit: None,
+                rate_limit_mode: "inherit".to_string(),
+                daily_usage_limit_usd: Some(12.5),
+                daily_usage_limit_mode: "custom".to_string(),
+            })
+            .await
+            .expect("group should create")
+            .expect("group should reload");
+        assert_eq!(created.daily_usage_limit_usd, Some(12.5));
+        assert_eq!(created.daily_usage_limit_mode, "custom");
+
+        let updated = repository
+            .update_user_group(
+                &created.id,
+                UpsertUserGroupRecord {
+                    name: "Limited".to_string(),
+                    description: None,
+                    priority: 10,
+                    allowed_providers: None,
+                    allowed_providers_mode: "inherit".to_string(),
+                    allowed_api_formats: None,
+                    allowed_api_formats_mode: "inherit".to_string(),
+                    allowed_models: None,
+                    allowed_models_mode: "inherit".to_string(),
+                    rate_limit: None,
+                    rate_limit_mode: "inherit".to_string(),
+                    daily_usage_limit_usd: None,
+                    daily_usage_limit_mode: "inherit".to_string(),
+                },
+            )
+            .await
+            .expect("group should update")
+            .expect("group should reload");
+        assert_eq!(updated.daily_usage_limit_usd, None);
+        assert_eq!(updated.daily_usage_limit_mode, "inherit");
+
+        assert!(repository
+            .delete_user_group(&created.id)
+            .await
+            .expect("group should delete"));
+        let extension_rows: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM lite_user_group_daily_usage_limits WHERE user_group_id = ?",
+        )
+        .bind(&created.id)
+        .fetch_one(&repository.pool)
+        .await
+        .expect("Lite group limit should be inspectable");
+        assert_eq!(extension_rows, 0);
+    }
+
+    async fn run_lite_migrations(pool: &sqlx::SqlitePool) {
+        sqlx::raw_sql(include_str!(
+            "../../../runtime/migrations/lite/sqlite/20260803000000_daily_usage_limits.sql"
+        ))
+        .execute(pool)
+        .await
+        .expect("Lite SQLite migrations should run");
     }
 }

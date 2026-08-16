@@ -101,7 +101,6 @@
               >
                 <div
                   class="node-line"
-                  :class="{ 'conversion-boundary': groupIndex + 1 === conversionBoundaryIndex }"
                 />
               </div>
             </div>
@@ -227,14 +226,14 @@
                     v-if="currentAttemptKeyDisplay"
                     class="info-item"
                   >
-                    <span class="info-label">{{ isOAuthType(currentAttempt.key_auth_type) ? '账号' : '密钥' }}</span>
+                    <span class="info-label">认证</span>
                     <span class="info-value info-value-stacked">
                       <span class="key-name">
                         {{ currentAttemptKeyDisplay }}
                         <span
                           v-if="currentAttempt.key_auth_type && currentAttempt.key_auth_type !== 'api_key'"
                           class="auth-type-tag"
-                        >{{ formatAuthTypeWithPlan(currentAttempt.key_auth_type, currentAttempt.key_oauth_plan_type) }}</span>
+                        >{{ formatAuthType(currentAttempt.key_auth_type) }}</span>
                       </span>
                       <code
                         v-if="currentAttempt.key_preview"
@@ -251,93 +250,6 @@
                       <code class="format-code">{{ currentAttemptKeyFormatsDisplay }}</code>
                       <span class="text-xs text-muted-foreground">
                         Key 声明的可用 endpoint 格式
-                      </span>
-                    </span>
-                  </div>
-                  <div
-                    v-if="currentAttempt.extra_data?.proxy"
-                    class="info-item"
-                  >
-                    <span class="info-label">代理</span>
-                    <span class="info-value info-value-stacked">
-                      <span class="proxy-name">
-                        {{ currentAttempt.extra_data.proxy.node_name || currentAttempt.extra_data.proxy.url || '未知' }}
-                        <span
-                          v-if="currentAttempt.extra_data.proxy.source === 'system'"
-                          class="text-xs text-muted-foreground ml-1"
-                        >(系统)</span>
-                      </span>
-                      <span class="proxy-detail">
-                        <span
-                          v-if="currentAttempt.extra_data.proxy.ttfb_ms != null"
-                          class="text-xs text-muted-foreground"
-                        >{{ formatLatency(currentAttempt.extra_data.proxy.ttfb_ms) }}</span>
-                        <span
-                          v-if="currentAttempt.extra_data.proxy.timing"
-                          class="text-xs text-muted-foreground"
-                        >(<!--
-                          -->{{ proxyTimingBreakdown(currentAttempt.extra_data.proxy) }}<!--
-                        -->)</span>
-                      </span>
-                      <code
-                        v-if="typeof currentAttempt.extra_data.proxy.node_id === 'string' && currentAttempt.extra_data.proxy.node_id"
-                        class="text-xs font-mono text-muted-foreground"
-                      >节点 Key {{ currentAttempt.extra_data.proxy.node_id }}</code>
-                    </span>
-                  </div>
-                  <div
-                    v-if="currentAttempt.extra_data?.pool_selection"
-                    class="info-item"
-                  >
-                    <span class="info-label">号池调度</span>
-                    <span class="info-value info-value-stacked">
-                      <span class="pool-reason">
-                        <span
-                          class="pool-reason-tag"
-                          :class="'pool-' + currentAttempt.extra_data.pool_selection.reason"
-                        >
-                          {{ poolSelectionLabel(currentAttempt.extra_data.pool_selection.reason) }}
-                        </span>
-                        <span
-                          v-if="currentAttempt.extra_data.pool_selection.cost_soft_threshold"
-                          class="pool-cost-warn"
-                        >接近限额</span>
-                      </span>
-                      <span
-                        v-if="currentAttempt.extra_data.pool_selection.cost_window_usage"
-                        class="text-xs text-muted-foreground"
-                      >
-                        {{ formatNumber(currentAttempt.extra_data.pool_selection.cost_window_usage) }}
-                        <template v-if="currentAttempt.extra_data.pool_selection.cost_limit">
-                          / {{ formatNumber(currentAttempt.extra_data.pool_selection.cost_limit) }}
-                        </template>
-                        tokens
-                      </span>
-                    </span>
-                  </div>
-                  <div
-                    v-if="currentAttempt.extra_data?.pool_skip"
-                    class="info-item"
-                  >
-                    <span class="info-label">号池跳过</span>
-                    <span class="info-value info-value-stacked">
-                      <span class="pool-skip-type">
-                        {{ poolSkipLabel(currentAttempt.extra_data.pool_skip.type) }}
-                      </span>
-                      <span
-                        v-if="currentAttempt.extra_data.pool_skip.cooldown_reason"
-                        class="text-xs text-muted-foreground"
-                      >
-                        {{ currentAttempt.extra_data.pool_skip.cooldown_reason }}
-                        <template v-if="currentAttempt.extra_data.pool_skip.cooldown_ttl != null">
-                          ({{ currentAttempt.extra_data.pool_skip.cooldown_ttl }}s)
-                        </template>
-                      </span>
-                      <span
-                        v-if="currentAttempt.extra_data.pool_skip.cost_window_usage"
-                        class="text-xs text-muted-foreground"
-                      >
-                        {{ formatNumber(currentAttempt.extra_data.pool_skip.cost_window_usage) }} tokens
                       </span>
                     </span>
                   </div>
@@ -558,13 +470,47 @@ import { formatTokens } from '@/utils/format'
 import { formatApiFormat } from '@/api/endpoints/types/api-format'
 import { useDarkMode } from '@/composables/useDarkMode'
 import { resolveTimelineFinalStatus } from '../utils/status'
-import {
-  buildPoolGroupVisibleAttempts,
-  buildPoolParticipatedCandidates,
-  extractPoolGroupId,
-  makeAttemptKey,
-  TIMELINE_STATUS,
-} from '../utils/poolTrace'
+
+const props = defineProps<{
+  requestId?: string | null
+  /** 外部传入的状态码，用于覆盖 trace.final_status 的判断 */
+  overrideStatusCode?: number
+  /** 外部传入的请求状态，用于识别已失败/取消的终态请求 */
+  requestStatus?: string | null
+  /** 请求侧 API 格式（客户端入口格式） */
+  requestApiFormat?: string | null
+  /** 用量和费用数据 */
+  usageData?: UsageData | null
+  /** 请求元数据 */
+  requestMetadata?: Record<string, unknown> | null
+  /** 已获取的追踪数据；传入时不再内部拉取 */
+  traceData?: RequestTrace | null
+}>()
+
+const emit = defineEmits<{
+  selectAttempt: [attempt: CandidateRecord | null]
+  traceState: [state: {
+    loaded: boolean
+    hasTrace: boolean
+    finalStatus?: RequestTrace['final_status'] | null
+    statusCode?: number | null
+    latencyMs?: number | null
+    imageProgress?: ImageProgress | null
+    errorMessage?: string | null
+  }]
+}>()
+
+const TIMELINE_STATUS: CandidateRecord['status'][] = [
+  'success',
+  'failed',
+  'skipped',
+  'cancelled',
+  'pending',
+  'streaming',
+  'available',
+  'unused',
+  'stream_interrupted',
+]
 
 // 节点组类型
 interface NodeGroup {
@@ -577,9 +523,7 @@ interface NodeGroup {
   totalLatency: number  // 所有尝试的总延迟
   startIndex: number
   endIndex: number
-  hasConversion: boolean  // 组内是否有格式转换候选
   providerApiFormat: string | null  // 提供商 API 格式（如 openai:responses）
-  isPoolGroup?: boolean
 }
 
 interface AttemptTimeRange {
@@ -613,35 +557,6 @@ interface UsageData {
     per_request?: number
   }
 }
-
-const props = defineProps<{
-  requestId?: string | null
-  /** 外部传入的状态码，用于覆盖 trace.final_status 的判断 */
-  overrideStatusCode?: number
-  /** 外部传入的请求状态，用于识别已失败/取消的终态请求 */
-  requestStatus?: string | null
-  /** 请求侧 API 格式（客户端入口格式） */
-  requestApiFormat?: string | null
-  /** 用量和费用数据 */
-  usageData?: UsageData | null
-  /** 请求元数据（用于号池调度组装） */
-  requestMetadata?: Record<string, unknown> | null
-  /** 已获取的追踪数据；传入时不再内部拉取 */
-  traceData?: RequestTrace | null
-}>()
-
-const emit = defineEmits<{
-  selectAttempt: [attempt: CandidateRecord | null]
-  traceState: [state: {
-    loaded: boolean
-    hasTrace: boolean
-    finalStatus?: RequestTrace['final_status'] | null
-    statusCode?: number | null
-    latencyMs?: number | null
-    imageProgress?: ImageProgress | null
-    errorMessage?: string | null
-  }]
-}>()
 
 // 用量数据（从 props 获取）
 const usageData = computed(() => props.usageData)
@@ -700,76 +615,6 @@ const formatLatency = (ms: number | undefined | null): string => {
   return `${ms}ms`
 }
 
-// 格式化字节大小
-const formatSize = (bytes: number): string => {
-  if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(1)}MB`
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)}KB`
-  return `${bytes}B`
-}
-
-// 代理 timing 分阶段展示
-const proxyTimingBreakdown = (proxy: Record<string, unknown>): string => {
-  const t = proxy.timing as Record<string, number | null | undefined> | undefined
-  if (!t) return ''
-
-  const parts: string[] = []
-
-  // 兼容旧版 timing（含 body_read_ms/decompress_ms）
-  const readDecompress = ((t.body_read_ms as number) || 0) + ((t.decompress_ms as number) || 0)
-  if (readDecompress > 0) {
-    let label = `读取 ${formatLatency(readDecompress)}`
-    if (t.decompress_ms != null && t.decompress_ms > 0 && t.wire_size != null && t.body_size != null && (t.body_size as number) > 0) {
-      const ratio = Math.round((1 - (t.wire_size as number) / (t.body_size as number)) * 100)
-      label += ` ${formatSize(t.wire_size as number)}→${formatSize(t.body_size as number)}`
-      if (ratio > 0) label += ` -${ratio}%`
-    }
-    parts.push(label)
-  }
-
-  const ttfbMs = t.ttfb_ms ?? t.upstream_ms
-  const responseWaitMs = t.response_wait_ms ?? (
-    t.connection_acquire_ms != null && ttfbMs != null
-      ? Math.max(0, (ttfbMs as number) - (t.connection_acquire_ms as number))
-      : null
-  )
-  const legacyWaitMs = t.upstream_processing_ms ?? (
-    ttfbMs != null && t.connect_ms != null && t.tls_ms != null
-      ? Math.max(0, (ttfbMs as number) - (t.connect_ms as number) - (t.tls_ms as number))
-      : null
-  )
-
-  if (t.dns_ms != null && (t.dns_ms as number) > 0) {
-    parts.push(`DNS ${formatLatency(t.dns_ms as number)}`)
-  }
-  if (t.connection_reused === true) {
-    parts.push('复用连接')
-  }
-  if (t.connect_ms != null && (t.connect_ms as number) > 0) {
-    parts.push(`连接 ${formatLatency(t.connect_ms as number)}`)
-  }
-  if (t.tls_ms != null && (t.tls_ms as number) > 0) {
-    parts.push(`TLS ${formatLatency(t.tls_ms as number)}`)
-  }
-  if (ttfbMs != null && (ttfbMs as number) > 0) {
-    parts.push(`TTFB ${formatLatency(ttfbMs as number)}`)
-  }
-  if (responseWaitMs != null && (responseWaitMs as number) > 0) {
-    parts.push(`等待响应头 ${formatLatency(Math.round(responseWaitMs as number))}`)
-  } else if (legacyWaitMs != null && (legacyWaitMs as number) > 0) {
-    parts.push(`等待响应头(旧版估算) ${formatLatency(Math.round(legacyWaitMs as number))}`)
-  }
-
-  // 计算 Aether→代理 之间无法解释的耗时差
-  if (proxy.ttfb_ms != null && t.total_ms != null) {
-    const gap = (proxy.ttfb_ms as number) - (t.total_ms as number)
-    if (gap > 500) {
-      parts.push(`传输 ${formatLatency(Math.round(gap))}`)
-    }
-  }
-
-  return parts.join(' / ')
-}
-
 const STATUS_PRIORITY: Record<string, number> = {
   available: 0,
   unused: 0,
@@ -821,81 +666,13 @@ const rawTimeline = computed<CandidateRecord[]>(() => {
 })
 
 
-const schedulingAudit = computed<Record<string, unknown> | null>(() => {
-  const metadata = props.requestMetadata
-  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null
-  const raw = metadata.scheduling_audit
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
-  return raw as Record<string, unknown>
-})
+const timeline = rawTimeline
 
-const poolAttemptCandidates = computed<CandidateRecord[]>(() => {
-  const auditAttempts = schedulingAudit.value?.attempts
-  return buildPoolParticipatedCandidates(
-    rawTimeline.value,
-    auditAttempts,
-    props.requestId,
-  )
-})
-
-const poolAttemptsByGroup = computed<Map<string, CandidateRecord[]>>(() => {
-  const grouped = new Map<string, CandidateRecord[]>()
-  for (const attempt of poolAttemptCandidates.value) {
-    const groupId =
-      extractPoolGroupId(attempt)
-      || String(attempt.provider_id || '').trim()
-      || '__pool_group__'
-    const existing = grouped.get(groupId)
-    if (existing) {
-      existing.push(attempt)
-    } else {
-      grouped.set(groupId, [attempt])
-    }
-  }
-  return grouped
-})
-
-const poolAttemptKeySet = computed<Set<string>>(() => {
-  return new Set(
-    poolAttemptCandidates.value.map((item) => makeAttemptKey(item.candidate_index, item.retry_index)),
-  )
-})
-
-const timeline = computed<CandidateRecord[]>(() => {
-  if (poolAttemptCandidates.value.length === 0) return rawTimeline.value
-  return rawTimeline.value.filter(
-    (candidate) => !poolAttemptKeySet.value.has(makeAttemptKey(candidate.candidate_index, candidate.retry_index)),
-  )
-})
-
-const AUTH_TYPE_PROVIDER_LABEL_MAP: Record<string, string> = {
-  codex: 'Codex',
-  kiro: 'Kiro',
-  antigravity: 'Antigravity',
-  claude_code: 'Claude Code',
-  gemini_cli: 'Gemini CLI',
-}
-
-const getProviderDisplayName = (
-  attempt: CandidateRecord | null | undefined,
-  options: { allowAuthTypeFallback?: boolean } = {},
-): string => {
-  const allowAuthTypeFallback = options.allowAuthTypeFallback ?? true
+const getProviderDisplayName = (attempt: CandidateRecord | null | undefined): string => {
   if (!attempt) return '未知'
   const providerName = String(attempt.provider_name || '').trim()
   if (providerName) return providerName
-  if (allowAuthTypeFallback) {
-    const authType = String(attempt.key_auth_type || '').trim().toLowerCase()
-    if (authType && AUTH_TYPE_PROVIDER_LABEL_MAP[authType]) {
-      return AUTH_TYPE_PROVIDER_LABEL_MAP[authType]
-    }
-  }
   return '未知'
-}
-
-const normalizeProviderIdentity = (value: unknown): string => {
-  if (typeof value !== 'string') return ''
-  return value.trim().toLowerCase()
 }
 
 const buildProviderGroups = (items: CandidateRecord[]): NodeGroup[] => {
@@ -910,9 +687,6 @@ const buildProviderGroups = (items: CandidateRecord[]): NodeGroup[] => {
       currentGroup.retryCount++
       currentGroup.endIndex = candidate.candidate_index
       currentGroup.totalLatency += candidate.latency_ms || 0
-      if (candidate.extra_data?.needs_conversion) {
-        currentGroup.hasConversion = true
-      }
       const currentPriority = STATUS_PRIORITY[currentGroup.primaryStatus] ?? 0
       const newPriority = STATUS_PRIORITY[getDisplayStatus(candidate)] ?? 0
       if (newPriority > currentPriority) {
@@ -931,9 +705,7 @@ const buildProviderGroups = (items: CandidateRecord[]): NodeGroup[] => {
       totalLatency: candidate.latency_ms || 0,
       startIndex: candidate.candidate_index,
       endIndex: candidate.candidate_index,
-      hasConversion: candidate.extra_data?.needs_conversion === true,
       providerApiFormat: candidate.extra_data?.provider_api_format || null,
-      isPoolGroup: false,
     }
     groups.push(currentGroup)
   })
@@ -942,86 +714,9 @@ const buildProviderGroups = (items: CandidateRecord[]): NodeGroup[] => {
 }
 
 // 将相同 Provider 的所有请求合并为组（同提供商的 Key 放在子节点）
-const groupedTimeline = computed<NodeGroup[]>(() => {
-  const providerGroups = buildProviderGroups(timeline.value.filter(isParticipatedCandidate))
-  if (poolAttemptsByGroup.value.size === 0) {
-    return providerGroups
-  }
-
-  const poolProviderIds = new Set<string>()
-  const poolProviderNames = new Set<string>()
-  const poolGroups: NodeGroup[] = []
-
-  for (const [groupId, attemptsRaw] of poolAttemptsByGroup.value.entries()) {
-    const attempts = [...attemptsRaw].sort(compareBySchedulingOrder)
-    if (attempts.length === 0) continue
-
-    const visibleAttempts = buildPoolGroupVisibleAttempts(attempts)
-    if (visibleAttempts.length === 0) continue
-
-    const poolPrimaryStatus = visibleAttempts.reduce((best, current) => {
-      const bestPriority = STATUS_PRIORITY[best] ?? 0
-      const currentStatus = getDisplayStatus(current)
-      const currentPriority = STATUS_PRIORITY[currentStatus] ?? 0
-      return currentPriority > bestPriority ? currentStatus : best
-    }, getDisplayStatus(visibleAttempts[0]))
-
-    const successAttempt = visibleAttempts.find((item) => item.status === 'success')
-    const poolPrimary =
-      successAttempt || visibleAttempts[visibleAttempts.length - 1] || visibleAttempts[0]
-    const startIndex = Math.min(...attempts.map(item => item.candidate_index))
-    const endIndex = Math.max(...attempts.map(item => item.candidate_index))
-
-    poolGroups.push({
-      id: `pool:${groupId}`,
-      providerName: getProviderDisplayName(poolPrimary, { allowAuthTypeFallback: false }),
-      primary: poolPrimary,
-      primaryStatus: poolPrimaryStatus,
-      allAttempts: visibleAttempts,
-      retryCount: Math.max(0, visibleAttempts.length - 1),
-      totalLatency: visibleAttempts.reduce((sum, item) => sum + (item.latency_ms || 0), 0),
-      startIndex,
-      endIndex,
-      hasConversion: visibleAttempts.some((item) => item.extra_data?.needs_conversion === true),
-      providerApiFormat: null,
-      isPoolGroup: true,
-    })
-
-    for (const attempt of attempts) {
-      const providerId = String(attempt.provider_id || '').trim()
-      if (providerId) poolProviderIds.add(providerId)
-      const providerName = normalizeProviderIdentity(attempt.provider_name)
-      if (providerName) poolProviderNames.add(providerName)
-    }
-  }
-
-  const dedupedProviderGroups = providerGroups.filter((group) => {
-    const sameProviderById = group.allAttempts.some((attempt) => {
-      const providerId = String(attempt.provider_id || '').trim()
-      return providerId !== '' && poolProviderIds.has(providerId)
-    })
-    if (sameProviderById) return false
-
-    const groupName = normalizeProviderIdentity(group.primary.provider_name || group.providerName)
-    if (groupName && poolProviderNames.has(groupName)) return false
-
-    return true
-  })
-
-  const allGroups = [...poolGroups, ...dedupedProviderGroups]
-  allGroups.sort((a, b) => a.startIndex - b.startIndex)
-  return allGroups
-})
-
-// 格式转换分界点索引（首个 hasConversion=true 的 group index）
-const conversionBoundaryIndex = computed(() => {
-  const groups = groupedTimeline.value
-  if (!groups || groups.length === 0) return -1
-  const idx = groups.findIndex(g => g.hasConversion)
-  // 只有当分界点不在最开头时才有意义（前面有 exact 候选）
-  if (idx <= 0) return -1
-  return idx
-})
+const groupedTimeline = computed<NodeGroup[]>(() =>
+  buildProviderGroups(timeline.value.filter(isParticipatedCandidate)),
+)
 
 // The trace aggregate includes every attempted candidate, including failed
 // failover attempts. Per-candidate latency remains provider-scoped.
@@ -1091,15 +786,8 @@ watch(currentAttempt, (attempt) => {
 
 const currentGroupTitle = computed(() => {
   if (!selectedGroup.value || !currentAttempt.value) return ''
-  if (selectedGroup.value.isPoolGroup) {
-    return getProviderDisplayName(currentAttempt.value)
-  }
   return selectedGroup.value.providerName
 })
-
-const normalizeFormatSignature = (value: string): string => {
-  return value.trim().toLowerCase()
-}
 
 const extractObject = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -1297,25 +985,8 @@ const currentAttemptFormatDisplay = computed(() => {
   const extra = extractObject(attempt.extra_data) ?? {}
 
   const providerRaw = typeof extra.provider_api_format === 'string' ? extra.provider_api_format : ''
-  const clientRawFromExtra = typeof extra.client_api_format === 'string' ? extra.client_api_format : ''
-  const requestRaw = clientRawFromExtra || (typeof props.requestApiFormat === 'string' ? props.requestApiFormat : '')
-
-  if (!providerRaw && !requestRaw) return ''
-
-  const providerText = providerRaw ? formatApiFormat(providerRaw) : ''
-  const requestText = requestRaw ? formatApiFormat(requestRaw) : ''
-  const convertedByFlag = extra.needs_conversion === true
-  const convertedByDiff = Boolean(
-    providerRaw &&
-      requestRaw &&
-      normalizeFormatSignature(providerRaw) !== normalizeFormatSignature(requestRaw),
-  )
-
-  if ((convertedByFlag || convertedByDiff) && requestText && providerText) {
-    return `${requestText} -> ${providerText}`
-  }
-
-  return providerText || requestText
+  const requestRaw = typeof props.requestApiFormat === 'string' ? props.requestApiFormat : ''
+  return providerRaw || requestRaw ? formatApiFormat(providerRaw || requestRaw) : ''
 })
 
 const normalizeQueryString = (value: string): string => {
@@ -1389,10 +1060,9 @@ const currentAttemptKeyFormatsDisplay = computed(() => {
 const SKIP_REASON_LABELS: Record<string, string> = {
   auth_api_key_concurrency_limit_reached: '调用方 API Key 并发已达上限',
   api_key_concurrency_limit_reached: '调用方 API Key 并发已达上限',
-  pool_key_lease_busy: '池内账号正被其他请求占用',
   provider_concurrency_limit_reached: '上游提供商并发已达上限',
   provider_key_concurrency_limit_reached: '上游账号并发已达上限',
-  provider_request_body_build_failed: '上游请求体转换失败',
+  provider_request_body_build_failed: '上游请求体构建失败',
   provider_request_body_missing: '无法构建上游请求体',
 }
 const currentAttemptSkipReasonDisplay = computed(() => {
@@ -1437,7 +1107,7 @@ const currentAttemptFailureDiagnostic = computed<{
   if (!path && !message) return null
   return {
     path: path || '$',
-    message: formatAttemptErrorMessage(message) || message || '请求体转换失败',
+    message: formatAttemptErrorMessage(message) || message || '请求体构建失败',
   }
 })
 
@@ -1446,10 +1116,9 @@ const isGenericExecutionRuntimeStatusMessage = (message: string): boolean =>
 
 const isLocalSyncFinalizeDiagnostic = (message: string): boolean =>
   /local sync attempt failed before terminal finalization/i.test(message)
-  || /unsupported provider stream (event|finish reason)/i.test(message)
 
 const isActionableDiagnosticMessage = (message: string): boolean =>
-  isLocalSyncFinalizeDiagnostic(message) || isConversionDiagnosticMessage(message)
+  isLocalSyncFinalizeDiagnostic(message)
 
 const extractVisibleFailureDiagnostic = (
   extra: Record<string, unknown> | null | undefined,
@@ -1463,7 +1132,6 @@ const extractVisibleDiagnosticObjects = (
   extra: Record<string, unknown> | null | undefined,
 ): Array<Record<string, unknown>> => [
   extractVisibleFailureDiagnostic(extra),
-  extractObject(extra?.request_conversion_error),
   extractObject(extra?.request_body_build_error),
 ].filter((value): value is Record<string, unknown> => Boolean(value))
 
@@ -1515,84 +1183,6 @@ const normalizeDiagnosticFieldPath = (field: string): string => {
   return `$.${trimmed}`
 }
 
-const formatConversionPair = (source: string, target: string): string =>
-  `${formatApiFormat(source.trim())} → ${formatApiFormat(target.trim())}`
-
-const extractFieldDetail = (message: string): string => {
-  const fieldMatch = message.match(/field\s+([^;=]+?)\s*=\s*("(?:\\.|[^"\\])*"|[^;]+)/i)
-  const unsupportedFieldMatch = message.match(/field\s+([^;]+?)\s+is unsupported/i)
-  if (fieldMatch?.[1]) {
-    return `字段 ${normalizeDiagnosticFieldPath(fieldMatch[1])} = ${fieldMatch[2].trim()}`
-  }
-  if (unsupportedFieldMatch?.[1]) {
-    return `字段 ${normalizeDiagnosticFieldPath(unsupportedFieldMatch[1])} 不支持`
-  }
-  return ''
-}
-
-const formatUnsupportedStreamEventMessage = (message: string): string => {
-  const detail = extractFieldDetail(message)
-  const fieldDetail = detail ? `（${detail}）` : ''
-  return `流式格式转换失败：上游返回了当前不支持的 stream event${fieldDetail}，无法无损转换到客户端请求格式`
-}
-
-const formatUnsupportedFinishReasonMessage = (message: string): string => {
-  const fieldDetail = extractFieldDetail(message)
-  const legacyMatch = message.match(/unsupported provider stream finish reason\s+(.+?)\s+cannot be converted losslessly/i)
-  const detail = fieldDetail || (legacyMatch?.[1]
-    ? `字段 $.finish_reason = ${legacyMatch[1].trim()}`
-    : '')
-  return `流式格式转换失败：上游返回了当前不支持的 finish reason${detail ? `（${detail}）` : ''}，无法无损转换到客户端请求格式`
-}
-
-const formatKnownConversionErrorMessage = (message: string): string => {
-  const lossy = message.match(/^lossy conversion blocked from\s+(\S+)\s+to\s+(\S+)\s+at\s+([^:]+):\s*(.+)$/i)
-  if (lossy) {
-    return `格式转换失败：${formatConversionPair(lossy[1], lossy[2])} 在字段 ${normalizeDiagnosticFieldPath(lossy[3])} 会丢失信息：${lossy[4].trim()}`
-  }
-
-  const unaudited = message.match(/^unaudited field\s+(.+?)\s+in\s+(.+?)\s+cannot be converted to\s+([^:]+):\s*(.+)$/i)
-  if (unaudited) {
-    return `格式转换失败：${formatConversionPair(unaudited[2], unaudited[3])} 的字段 ${normalizeDiagnosticFieldPath(unaudited[1])} 尚未审计，不能安全转换：${unaudited[4].trim()}`
-  }
-
-  const unsupportedField = message.match(/^unsupported field\s+(.+?)\s+in\s+([^:]+(?::[^:]+)?):\s*(.+)$/i)
-  if (unsupportedField) {
-    return `格式转换失败：${formatApiFormat(unsupportedField[2])} 不支持字段 ${normalizeDiagnosticFieldPath(unsupportedField[1])}：${unsupportedField[3].trim()}`
-  }
-
-  const invalidEnum = message.match(/^invalid enum value\s+(.+?)\s+for\s+(.+)\.([^.\s]+)$/i)
-  if (invalidEnum) {
-    return `格式转换失败：${formatApiFormat(invalidEnum[2])} 字段 ${normalizeDiagnosticFieldPath(invalidEnum[3])} 的枚举值 ${invalidEnum[1].trim()} 无效`
-  }
-
-  const invalidTarget = message.match(/^invalid target field\s+(.+?)\s+for\s+(.+?):\s*(.+)$/i)
-  if (invalidTarget) {
-    return `格式转换失败：目标格式 ${formatApiFormat(invalidTarget[2])} 字段 ${normalizeDiagnosticFieldPath(invalidTarget[1])} 无效：${invalidTarget[3].trim()}`
-  }
-
-  const unsupportedFormat = message.match(/^unsupported AI format:\s*(.+)$/i)
-  if (unsupportedFormat) {
-    return `格式转换失败：不支持的 API 格式 ${unsupportedFormat[1].trim()}`
-  }
-
-  const parseEmit = message.match(/^failed to\s+(parse|emit)\s+(.+?)\s+(request|response)$/i)
-  if (parseEmit) {
-    const action = parseEmit[1].toLowerCase() === 'parse' ? '解析' : '生成'
-    const subject = parseEmit[3].toLowerCase() === 'request' ? '请求体' : '响应体'
-    return `格式转换失败：无法${action} ${formatApiFormat(parseEmit[2])} ${subject}`
-  }
-
-  return ''
-}
-
-const isConversionDiagnosticMessage = (message: string): boolean => {
-  const normalized = message.trim()
-  if (!normalized) return false
-  return /conversion|converted|convertible|cannot be converted|lossy conversion|unsupported field|unaudited field|invalid enum value|invalid target field|unsupported ai format|failed to (parse|emit) .+ (request|response)|unsupported provider stream (event|finish reason)|转换|无损|字段 .*不支持/i
-    .test(normalized)
-}
-
 const formatAttemptErrorMessage = (message: string, statusCode?: number): string => {
   const normalized = message.trim()
   if (!normalized) return ''
@@ -1603,16 +1193,6 @@ const formatAttemptErrorMessage = (message: string, statusCode?: number): string
   const localSyncInternal = normalized.match(/local sync attempt failed before terminal finalization:\s*Internal\("((?:\\.|[^"\\])*)"\)/i)
   if (localSyncInternal?.[1]) {
     return formatAttemptErrorMessage(decodeRustDebugString(localSyncInternal[1]), statusCode)
-  }
-  if (/unsupported provider stream event cannot be converted losslessly/i.test(normalized)) {
-    return formatUnsupportedStreamEventMessage(normalized)
-  }
-  if (/unsupported provider stream finish reason/i.test(normalized)) {
-    return formatUnsupportedFinishReasonMessage(normalized)
-  }
-  const conversionMessage = formatKnownConversionErrorMessage(normalized)
-  if (conversionMessage) {
-    return conversionMessage
   }
   if (isGenericExecutionRuntimeStatusMessage(normalized)) {
     return statusCode != null ? `上游返回非成功状态 ${statusCode}` : '上游返回非成功状态'
@@ -1628,7 +1208,6 @@ const shouldShowAttemptMessageWithUpstreamResponse = (
   const normalized = rawMessage.trim()
   if (!normalized) return false
   if (isLocalSyncFinalizeDiagnostic(normalized)) return true
-  if (isConversionDiagnosticMessage(normalized)) return true
   if (isGenericExecutionRuntimeStatusMessage(normalized)) return false
 
   const hasBody = hasRenderableValue(upstreamResponse.body)
@@ -1669,8 +1248,7 @@ const currentAttemptRequestError = computed<{
   const visibleDiagnosticObjects = extractVisibleDiagnosticObjects(extra)
   const shouldAttachDiagnostic = Boolean(
     visibleDiagnosticObjects.length
-      || isLocalSyncFinalizeDiagnostic(rawMessage)
-      || isConversionDiagnosticMessage(rawMessage),
+      || isLocalSyncFinalizeDiagnostic(rawMessage),
   )
   const diagnostic = shouldAttachDiagnostic
     ? buildAttemptDiagnosticPayload(
@@ -1723,34 +1301,23 @@ const diagnosticFieldPathFromMessage = (message: string): string => {
   if (!normalized) return ''
   const fieldMatch = normalized.match(/field\s+([^;=]+?)\s*(?:=|is unsupported|不支持)/i)
   if (fieldMatch?.[1]) return normalizeDiagnosticFieldPath(fieldMatch[1])
-  const lossyMatch = normalized.match(/lossy conversion blocked from\s+\S+\s+to\s+\S+\s+at\s+([^:]+):/i)
-  if (lossyMatch?.[1]) return normalizeDiagnosticFieldPath(lossyMatch[1])
-  const invalidTargetMatch = normalized.match(/invalid target field\s+(.+?)\s+for\s+/i)
-  if (invalidTargetMatch?.[1]) return normalizeDiagnosticFieldPath(invalidTargetMatch[1])
-  const unsupportedFieldMatch = normalized.match(/unsupported field\s+(.+?)\s+in\s+/i)
-  if (unsupportedFieldMatch?.[1]) return normalizeDiagnosticFieldPath(unsupportedFieldMatch[1])
-  const invalidEnumMatch = normalized.match(/invalid enum value\s+.+?\s+for\s+.+\.([^.\s]+)$/i)
-  if (invalidEnumMatch?.[1]) return normalizeDiagnosticFieldPath(invalidEnumMatch[1])
   return ''
 }
 
 function resolveAttemptDiagnosticBreakpoint(attempt: CandidateRecord, rawMessageOverride = ''): string {
   const extra = extractObject(attempt.extra_data)
   const failureDiagnostic = extractVisibleFailureDiagnostic(extra)
-  const requestConversionError = extractObject(extra?.request_conversion_error)
   const requestBodyBuildError = extractObject(extra?.request_body_build_error)
   const errorFlow = extractObject(extra?.error_flow)
   const rawMessage = [
     rawMessageOverride,
     readStringField(errorFlow ?? {}, 'message') ?? '',
     readStringField(failureDiagnostic ?? {}, 'message') ?? '',
-    readStringField(requestConversionError ?? {}, 'message') ?? '',
     readStringField(requestBodyBuildError ?? {}, 'message') ?? '',
     typeof attempt.error_message === 'string' ? attempt.error_message : '',
   ].find(item => item.trim()) ?? ''
 
   return diagnosticPathFromObject(failureDiagnostic)
-    || diagnosticPathFromObject(requestConversionError)
     || diagnosticPathFromObject(requestBodyBuildError)
     || diagnosticFieldPathFromMessage(rawMessage)
     || '$'
@@ -1765,12 +1332,10 @@ function buildAttemptDiagnosticPayload(
 ): Record<string, unknown> | null {
   const extra = extractObject(attempt.extra_data)
   const rawFailureDiagnostic = extractVisibleFailureDiagnostic(extra)
-  const rawRequestConversionError = extractObject(extra?.request_conversion_error)
   const rawRequestBodyBuildError = extractObject(extra?.request_body_build_error)
   const hasDiagnostic = Boolean(
     summaryInput
       || rawFailureDiagnostic
-      || rawRequestConversionError
       || rawRequestBodyBuildError
       || attempt.error_message
       || attempt.error_type
@@ -1781,30 +1346,13 @@ function buildAttemptDiagnosticPayload(
 
   const summary = summaryInput
     || readStringField(rawFailureDiagnostic ?? {}, 'message')
-    || readStringField(rawRequestConversionError ?? {}, 'message')
     || readStringField(rawRequestBodyBuildError ?? {}, 'message')
     || (typeof attempt.error_message === 'string' ? formatAttemptErrorMessage(attempt.error_message, attempt.status_code) : '')
     || attempt.error_type
     || currentAttemptSkipReasonDisplay.value
     || '未知失败'
   const breakpoint = resolveAttemptDiagnosticBreakpoint(attempt, rawMessageForBreakpoint)
-  const providerFormat = readStringField(extra ?? {}, 'provider_api_format')
-  const clientFormat = readStringField(extra ?? {}, 'client_api_format')
-    || (typeof props.requestApiFormat === 'string' ? props.requestApiFormat : '')
-  const conversionDisplay = clientFormat || providerFormat
-    ? `${clientFormat ? formatApiFormat(clientFormat) : '未知请求格式'} → ${providerFormat ? formatApiFormat(providerFormat) : '未知上游格式'}`
-    : currentAttemptFormatDisplay.value
   const analysisHint = (() => {
-    const raw = `${summary}\n${rawMessageForBreakpoint}\n${attempt.error_message ?? ''}`.toLowerCase()
-    if (raw.includes('unsupported provider stream event')) {
-      return '断点在上游流式事件解析/转换矩阵：先按 breakpoint 对应字段确认 event type，再决定是补 canonical mapping 还是加入 known noop。'
-    }
-    if (raw.includes('finish reason')) {
-      return '断点在 finish_reason 映射：确认该结束原因是否可等价映射；不能无损映射时保持失败闭合。'
-    }
-    if (raw.includes('lossy conversion') || raw.includes('无损') || raw.includes('丢失信息') || raw.includes('request_conversion')) {
-      return '断点在请求/响应格式转换器：检查 breakpoint 字段是否能被目标格式表达，不能表达就需要拒绝、降级或新增显式映射策略。'
-    }
     return '先从 breakpoint 字段开始回放；若 breakpoint 为 $，优先查看 raw.failure_diagnostic / raw.error_message 和 upstream_response。'
   })()
 
@@ -1815,11 +1363,7 @@ function buildAttemptDiagnosticPayload(
     request: {
       request_id: trace.value?.request_id ?? attempt.request_id,
       path: currentAttemptRequestPathDisplay.value || null,
-      format_conversion: conversionDisplay || null,
-      client_api_format: clientFormat || null,
-      provider_api_format: providerFormat || null,
-      needs_conversion: extra?.needs_conversion ?? null,
-      conversion_mode: readStringField(extra ?? {}, 'conversion_mode') ?? null,
+      api_format: currentAttemptFormatDisplay.value || null,
     },
     node: {
       candidate_id: attempt.id,
@@ -1835,7 +1379,6 @@ function buildAttemptDiagnosticPayload(
     },
     raw: {
       failure_diagnostic: rawFailureDiagnostic,
-      request_conversion_error: rawRequestConversionError,
       request_body_build_error: rawRequestBodyBuildError,
       error_flow: extractObject(extra?.error_flow),
       upstream_response: upstreamResponseDisplay ?? normalizeUpstreamResponseDisplay(extra?.upstream_response),
@@ -1866,47 +1409,12 @@ const hasActiveImageProgress = computed(() => {
   })
 })
 
-// 判断是否为 OAuth 类型（provider_type 为具体值时也算 OAuth）
-const isOAuthType = (authType?: string): boolean => {
-  if (!authType) return false
-  return !['api_key', 'service_account'].includes(authType)
-}
-
-// 格式化认证类型（合并 plan 信息，避免冗余）
-const formatAuthTypeWithPlan = (authType: string, planType?: string): string => {
+const formatAuthType = (authType: string): string => {
   const labels: Record<string, string> = {
-    'oauth': 'OAuth',
     'service_account': 'Service Account',
-    'kiro': 'Kiro',
-    'codex': 'Codex',
-    'antigravity': 'Antigravity',
-    'claude_code': 'Claude Code',
-    'gemini_cli': 'Gemini CLI',
+    'bearer': 'Bearer Token',
   }
-  const typeName = labels[authType] || authType
-  if (planType) {
-    return `${typeName} ${planType}`
-  }
-  return typeName
-}
-
-const poolSelectionLabel = (reason: string): string => {
-  const labels: Record<string, string> = {
-    sticky: '粘性会话',
-    lru: 'LRU',
-    random: '随机',
-    tiebreak: '随机 (平分)',
-  }
-  return labels[reason] || reason
-}
-
-const poolSkipLabel = (type: string): string => {
-  const labels: Record<string, string> = {
-    cooldown: '冷却中',
-    cost_exhausted: '额度耗尽',
-    upstream: '上游跳过',
-  }
-  return labels[type] || type
+  return labels[authType] || authType
 }
 
 // 检查组是否被悬浮
@@ -2613,13 +2121,6 @@ function getDisplayStatus(attempt: CandidateRecord | null | undefined): string {
   background: hsl(var(--border));
 }
 
-/* 格式转换分界线 */
-.node-line.conversion-boundary {
-  background: none;
-  height: 0;
-  border-top: 2px dashed hsl(var(--muted-foreground) / 0.4);
-}
-
 /* 详情面板 */
 .detail-panel {
   margin-top: 1rem;
@@ -2904,63 +2405,6 @@ function getDisplayStatus(attempt: CandidateRecord | null | undefined): string {
   background: hsl(var(--primary) / 0.08);
   border: 1px solid hsl(var(--primary) / 0.2);
   border-radius: 3px;
-}
-
-/* 代理信息 */
-.proxy-name {
-  font-weight: 500;
-}
-
-.proxy-detail {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-}
-
-/* 号池调度 */
-.pool-reason {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-}
-
-.pool-reason-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.15rem 0.5rem;
-  font-size: 0.7rem;
-  font-weight: 500;
-  border-radius: 4px;
-  white-space: nowrap;
-  border: 1px solid hsl(var(--border));
-}
-
-.pool-reason-tag.pool-sticky {
-  color: hsl(var(--chart-4));
-  border-color: hsl(var(--chart-4) / 0.3);
-  background: hsl(var(--chart-4) / 0.08);
-}
-
-.pool-reason-tag.pool-lru {
-  color: hsl(var(--chart-2));
-  border-color: hsl(var(--chart-2) / 0.3);
-  background: hsl(var(--chart-2) / 0.08);
-}
-
-.pool-reason-tag.pool-random,
-.pool-reason-tag.pool-tiebreak {
-  color: hsl(var(--muted-foreground));
-}
-
-.pool-cost-warn {
-  font-size: 0.65rem;
-  color: hsl(var(--chart-5));
-  font-weight: 500;
-}
-
-.pool-skip-type {
-  font-weight: 500;
-  color: hsl(var(--muted-foreground));
 }
 
 .image-progress-block {

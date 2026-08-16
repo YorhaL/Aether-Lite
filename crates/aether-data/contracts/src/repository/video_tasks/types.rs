@@ -57,7 +57,6 @@ pub struct StoredVideoTask {
     pub key_id: Option<String>,
     pub client_api_format: Option<String>,
     pub provider_api_format: Option<String>,
-    pub format_converted: bool,
     pub model: Option<String>,
     pub prompt: Option<String>,
     pub original_request_body: Option<Value>,
@@ -99,7 +98,6 @@ impl StoredVideoTask {
         key_id: Option<String>,
         client_api_format: Option<String>,
         provider_api_format: Option<String>,
-        format_converted: bool,
         model: Option<String>,
         prompt: Option<String>,
         original_request_body: Option<Value>,
@@ -182,7 +180,6 @@ impl StoredVideoTask {
             key_id,
             client_api_format,
             provider_api_format,
-            format_converted,
             model,
             prompt,
             original_request_body,
@@ -225,7 +222,6 @@ pub struct UpsertVideoTask {
     pub key_id: Option<String>,
     pub client_api_format: Option<String>,
     pub provider_api_format: Option<String>,
-    pub format_converted: bool,
     pub model: Option<String>,
     pub prompt: Option<String>,
     pub original_request_body: Option<Value>,
@@ -267,7 +263,6 @@ impl UpsertVideoTask {
             key_id: self.key_id,
             client_api_format: self.client_api_format,
             provider_api_format: self.provider_api_format,
-            format_converted: self.format_converted,
             model: self.model,
             prompt: self.prompt,
             original_request_body: self.original_request_body,
@@ -311,7 +306,6 @@ impl From<StoredVideoTask> for UpsertVideoTask {
             key_id: task.key_id,
             client_api_format: task.client_api_format,
             provider_api_format: task.provider_api_format,
-            format_converted: task.format_converted,
             model: task.model,
             prompt: task.prompt,
             original_request_body: task.original_request_body,
@@ -485,7 +479,6 @@ mod tests {
         Option<String>,
         Option<String>,
         Option<String>,
-        bool,
         Option<String>,
         Option<String>,
         Option<serde_json::Value>,
@@ -524,7 +517,6 @@ mod tests {
             None,
             None,
             None,
-            false,
             None,
             None,
             None,
@@ -567,12 +559,12 @@ mod tests {
     #[test]
     fn rejects_invalid_numeric_fields() {
         let mut args = base_new_args();
-        args.22 = -1;
+        args.21 = -1;
         assert!(StoredVideoTask::new(
             args.0, args.1, args.2, args.3, args.4, args.5, args.6, args.7, args.8, args.9,
             args.10, args.11, args.12, args.13, args.14, args.15, args.16, args.17, args.18,
             args.19, args.20, args.21, args.22, args.23, args.24, args.25, args.26, args.27,
-            args.28, args.29, args.30, args.31, args.32, args.33, args.34, args.35, args.36,
+            args.28, args.29, args.30, args.31, args.32, args.33, args.34, args.35,
         )
         .is_err());
     }
@@ -580,12 +572,12 @@ mod tests {
     #[test]
     fn rejects_negative_updated_at_values() {
         let mut args = base_new_args();
-        args.32 = -1;
+        args.31 = -1;
         assert!(StoredVideoTask::new(
             args.0, args.1, args.2, args.3, args.4, args.5, args.6, args.7, args.8, args.9,
             args.10, args.11, args.12, args.13, args.14, args.15, args.16, args.17, args.18,
             args.19, args.20, args.21, args.22, args.23, args.24, args.25, args.26, args.27,
-            args.28, args.29, args.30, args.31, args.32, args.33, args.34, args.35, args.36,
+            args.28, args.29, args.30, args.31, args.32, args.33, args.34, args.35,
         )
         .is_err());
     }
@@ -593,12 +585,12 @@ mod tests {
     #[test]
     fn rejects_negative_created_at_values() {
         let mut args = base_new_args();
-        args.29 = -1;
+        args.28 = -1;
         assert!(StoredVideoTask::new(
             args.0, args.1, args.2, args.3, args.4, args.5, args.6, args.7, args.8, args.9,
             args.10, args.11, args.12, args.13, args.14, args.15, args.16, args.17, args.18,
             args.19, args.20, args.21, args.22, args.23, args.24, args.25, args.26, args.27,
-            args.28, args.29, args.30, args.31, args.32, args.33, args.34, args.35, args.36,
+            args.28, args.29, args.30, args.31, args.32, args.33, args.34, args.35,
         )
         .is_err());
     }
@@ -606,12 +598,12 @@ mod tests {
     #[test]
     fn rejects_negative_optional_completed_at_values() {
         let mut args = base_new_args();
-        args.31 = Some(-1);
+        args.30 = Some(-1);
         assert!(StoredVideoTask::new(
             args.0, args.1, args.2, args.3, args.4, args.5, args.6, args.7, args.8, args.9,
             args.10, args.11, args.12, args.13, args.14, args.15, args.16, args.17, args.18,
             args.19, args.20, args.21, args.22, args.23, args.24, args.25, args.26, args.27,
-            args.28, args.29, args.30, args.31, args.32, args.33, args.34, args.35, args.36,
+            args.28, args.29, args.30, args.31, args.32, args.33, args.34, args.35,
         )
         .is_err());
     }

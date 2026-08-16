@@ -9,7 +9,9 @@ use serde_json::json;
 use crate::control::GatewayPublicRequestContext;
 use crate::AppState;
 
-use super::super::{build_unhandled_public_support_response, resolve_authenticated_local_user};
+use super::super::{
+    build_public_support_route_not_found_response, resolve_authenticated_local_user,
+};
 use super::announcements_shared::{
     announcements_bad_request_response, announcements_internal_detail,
     announcements_internal_error_response, announcements_not_found_response,
@@ -133,7 +135,11 @@ pub(crate) async fn maybe_build_local_announcement_user_response(
             let announcement_id =
                 match read_status_announcement_id_from_path(&request_context.request_path) {
                     Some(value) => value,
-                    None => return Some(build_unhandled_public_support_response(request_context)),
+                    None => {
+                        return Some(build_public_support_route_not_found_response(
+                            request_context,
+                        ))
+                    }
                 };
             match state.find_announcement_by_id(announcement_id).await {
                 Ok(Some(_)) => {}
@@ -154,7 +160,9 @@ pub(crate) async fn maybe_build_local_announcement_user_response(
             }
             Some(Json(json!({ "message": "公告已标记为已读" })).into_response())
         }
-        _ => Some(build_unhandled_public_support_response(request_context)),
+        _ => Some(build_public_support_route_not_found_response(
+            request_context,
+        )),
     }
 }
 

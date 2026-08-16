@@ -297,8 +297,6 @@ export APP_PORT="$${APP_PORT:-8084}"
 export RUST_LOG="$${DEV_RUST_LOG}"
 RUST_SERVICE_STARTUP_TIMEOUT_SECONDS="$${RUST_SERVICE_STARTUP_TIMEOUT_SECONDS:-180}"
 GATEWAY_STARTUP_TIMEOUT_SECONDS="$${GATEWAY_STARTUP_TIMEOUT_SECONDS:-$${RUST_SERVICE_STARTUP_TIMEOUT_SECONDS}}"
-export AETHER_GATEWAY_VIDEO_TASK_TRUTH_SOURCE_MODE="$${AETHER_GATEWAY_VIDEO_TASK_TRUTH_SOURCE_MODE:-rust-authoritative}"
-
 if dev_uses_postgres_database; then
 	export DATABASE_URL="postgresql://$${DB_USER:-postgres}:$${DB_PASSWORD:-}@$${DB_HOST:-localhost}:$${DB_PORT:-5432}/$${DB_NAME:-aether}"
 	if ! dotenv_has_key "AETHER_GATEWAY_DATA_POSTGRES_URL"; then
@@ -350,7 +348,7 @@ GATEWAY_LOG_FILE=""
 STARTUP_WAIT_EARLY_EXIT=false
 create_gateway_log_file
 
-echo "=> 启动 aether-gateway (Rust frontdoor: 0.0.0.0:$${APP_PORT})..."
+echo "=> 启动 aether-gateway (0.0.0.0:$${APP_PORT})..."
 echo "=> 日志过滤: $${RUST_LOG}"
 echo "=> 执行命令: cargo run -p aether-gateway -- --app-port $${APP_PORT}"
 cargo run -p aether-gateway -- --app-port "$${APP_PORT}" > >(

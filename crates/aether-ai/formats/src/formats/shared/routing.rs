@@ -18,7 +18,6 @@ use crate::contracts::{
     OPENAI_VIDEO_CREATE_SYNC_PLAN_KIND, OPENAI_VIDEO_DELETE_SYNC_PLAN_KIND,
     OPENAI_VIDEO_REMIX_SYNC_PLAN_KIND,
 };
-use crate::formats::openai::image::request::is_openai_image_stream_request;
 
 pub fn resolve_execution_runtime_stream_plan_kind(
     route_class: Option<&str>,
@@ -98,14 +97,6 @@ pub fn resolve_execution_runtime_stream_plan_kind_with_client_surface(
         && matches!(path, "/v1/interactions" | "/v1beta/interactions")
     {
         return Some(GEMINI_INTERACTIONS_STREAM_PLAN_KIND);
-    }
-
-    if route_family == Some("antigravity")
-        && route_kind == Some("stream_generate_content")
-        && *method == Method::POST
-        && path == "/v1internal:streamGenerateContent"
-    {
-        return Some(GEMINI_CLI_STREAM_PLAN_KIND);
     }
 
     if route_family == Some("openai")
@@ -485,12 +476,8 @@ pub fn is_matching_stream_http_request(
     plan_kind: &str,
     parts: &http::request::Parts,
     body_json: &serde_json::Value,
-    body_base64: Option<&str>,
+    _body_base64: Option<&str>,
 ) -> bool {
-    if plan_kind == OPENAI_IMAGE_STREAM_PLAN_KIND {
-        return is_openai_image_stream_request(parts, body_json, body_base64);
-    }
-
     is_matching_stream_request(plan_kind, parts.uri.path(), body_json)
 }
 
@@ -813,38 +800,9 @@ mod tests {
     }
 
     #[test]
-    fn resolves_antigravity_v1internal_stream_plan_kind_as_gemini_cli_stream() {
-        assert_eq!(
-            resolve_execution_runtime_stream_plan_kind(
-                Some("ai_public"),
-                Some("antigravity"),
-                Some("stream_generate_content"),
-                Some("bearer_like"),
-                &Method::POST,
-                "/v1internal:streamGenerateContent",
-            ),
-            Some(GEMINI_CLI_STREAM_PLAN_KIND)
-        );
-        assert_eq!(
-            resolve_execution_runtime_sync_plan_kind(
-                Some("ai_public"),
-                Some("antigravity"),
-                Some("stream_generate_content"),
-                Some("bearer_like"),
-                &Method::POST,
-                "/v1internal:streamGenerateContent",
-            ),
-            None
-        );
-    }
-
-    #[test]
     fn stream_path_detection_handles_gemini_method_paths_with_query() {
         assert!(request_path_implies_stream_request(
             "/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse"
-        ));
-        assert!(request_path_implies_stream_request(
-            " /v1internal:streamGenerateContent?alt=sse "
         ));
         assert!(!request_path_implies_stream_request(
             "/v1beta/models/gemini-2.5-pro:generateContent?alt=sse"

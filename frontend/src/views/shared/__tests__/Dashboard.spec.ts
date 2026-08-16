@@ -141,7 +141,7 @@ afterEach(() => {
 })
 
 describe('Dashboard ordinary user wallet card', () => {
-  it('renders package and wallet balance split from mocked stats', async () => {
+  it('renders the available quota from mocked stats', async () => {
     dashboardApiMocks.getStats.mockResolvedValue({
       stats: [
         { name: 'API 密钥', value: '0', subValue: '活跃 0', icon: 'Activity' },
@@ -149,7 +149,7 @@ describe('Dashboard ordinary user wallet card', () => {
         {
           name: '钱包余额',
           value: '$110.00',
-          subValue: '套餐额度 $100.00 · 钱包余额 $10.00',
+          subValue: '可用额度 $110.00',
           icon: 'DollarSign',
         },
         { name: '本月 Token', value: '0', subValue: '输入 0 / 输出 0', icon: 'Zap' },
@@ -164,7 +164,7 @@ describe('Dashboard ordinary user wallet card', () => {
     await settle()
 
     expect(root.textContent).toContain('$110.00')
-    expect(root.textContent).toContain('套餐额度 $100.00 · 钱包余额 $10.00')
+    expect(root.textContent).toContain('可用额度 $110.00')
   })
 })
 

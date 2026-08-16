@@ -18,7 +18,6 @@ struct AuthRegisterRequest {
     username: String,
     password: String,
     turnstile_token: Option<String>,
-    invite_code: Option<String>,
     privacy_policy_accepted: Option<bool>,
     privacy_policy_version: Option<String>,
 }
@@ -553,8 +552,8 @@ pub(super) async fn handle_auth_register(
             );
         }
     };
-    let initial_gift = match state
-        .read_system_config_json_value("default_user_initial_gift_usd")
+    let initial_balance = match state
+        .read_system_config_json_value("default_user_initial_balance_usd")
         .await
     {
         Ok(value) => system_config_f64(value.as_ref(), 10.0),
@@ -572,7 +571,7 @@ pub(super) async fn handle_auth_register(
             require_verification && email.is_some(),
             username.clone(),
             password_hash,
-            initial_gift,
+            initial_balance,
             false,
         )
         .await
@@ -627,40 +626,6 @@ pub(super) async fn handle_auth_register(
             }
         }
     }
-    let invite_code = payload
-        .invite_code
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    if invite_code.is_some() {
-        let source = json!({
-            "channel": "registration",
-            "ip": cf_connecting_ip,
-            "user_agent": headers
-                .get(http::header::USER_AGENT)
-                .and_then(|value| value.to_str().ok()),
-        });
-        if let Err(err) = state
-            .bind_referral_invite_after_registration(
-                &user.id,
-                user.email_verified,
-                invite_code,
-                Some(source),
-            )
-            .await
-        {
-            let _ = state.delete_local_auth_user(&user.id).await;
-            let (status, detail) = match err {
-                GatewayError::Client { status, message } => (status, message),
-                other => (
-                    http::StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("auth referral binding failed: {other:?}"),
-                ),
-            };
-            return build_auth_error_response(status, detail, false);
-        }
-    }
-
     if require_verification {
         if let Some(email) = email.as_deref() {
             let _ = clear_auth_email_verification(state, email).await;

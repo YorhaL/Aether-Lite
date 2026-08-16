@@ -10,11 +10,6 @@ use self::local::{
 };
 use super::internal::resolve_local_proxy_execution_path;
 pub(crate) use super::public::matches_model_mapping_for_models;
-use crate::ai_serving::api::{
-    aggregate_claude_stream_sync_response, aggregate_gemini_stream_sync_response,
-    aggregate_openai_chat_stream_sync_response, aggregate_openai_responses_stream_sync_response,
-    maybe_bridge_standard_sync_json_to_stream,
-};
 use crate::api::response::{
     build_client_response, build_client_response_from_parts, build_local_auth_rejection_response,
     build_local_http_error_response, build_local_http_error_response_with_request_path,
@@ -28,13 +23,9 @@ use crate::constants::{
     EXECUTION_PATH_LOCAL_AUTH_DENIED, EXECUTION_PATH_LOCAL_EXECUTION_LOOP_DETECTED,
     EXECUTION_PATH_LOCAL_EXECUTION_PLANNING_TIMEOUT, EXECUTION_PATH_LOCAL_EXECUTION_RUNTIME_MISS,
     EXECUTION_PATH_LOCAL_INVALID_REQUEST, EXECUTION_PATH_LOCAL_OVERLOADED,
-    EXECUTION_PATH_LOCAL_PROXY_PASSTHROUGH_REMOVED, EXECUTION_PATH_LOCAL_RATE_LIMITED,
-    EXECUTION_PATH_LOCAL_ROUTE_NOT_FOUND, EXECUTION_PATH_PUBLIC_PROXY_PASSTHROUGH,
-    EXECUTION_RUNTIME_LOOP_GUARD_HEADER, FORWARDED_FOR_HEADER, FORWARDED_HOST_HEADER,
-    FORWARDED_PROTO_HEADER, GATEWAY_HEADER, LOCAL_EXECUTION_RUNTIME_MISS_REASON_HEADER,
-    TRACE_ID_HEADER, TRUSTED_AUTH_ACCESS_ALLOWED_HEADER, TRUSTED_AUTH_API_KEY_ID_HEADER,
-    TRUSTED_AUTH_BALANCE_HEADER, TRUSTED_AUTH_USER_ID_HEADER, TUNNEL_AFFINITY_FORWARDED_BY_HEADER,
-    TUNNEL_AFFINITY_OWNER_INSTANCE_HEADER,
+    EXECUTION_PATH_LOCAL_RATE_LIMITED, EXECUTION_PATH_LOCAL_ROUTE_NOT_FOUND,
+    EXECUTION_PATH_PUBLIC_PROXY_PASSTHROUGH, EXECUTION_RUNTIME_LOOP_GUARD_HEADER,
+    LOCAL_EXECUTION_RUNTIME_MISS_REASON_HEADER,
 };
 use crate::control::{
     allows_control_execute_emergency, management_token_permission_keys_from_value,
@@ -51,7 +42,7 @@ use crate::frontdoor_loop_guard::{
     frontdoor_self_loop_public_ai_path, request_has_execution_runtime_loop_guard,
 };
 use crate::handlers::shared::{
-    build_admin_proxy_auth_required_response, build_unhandled_admin_proxy_response, ip_rules_allow,
+    build_admin_proxy_auth_required_response, build_admin_route_not_found_response, ip_rules_allow,
     json_ip_rules_allow, local_proxy_route_requires_buffered_body, request_enables_control_execute,
     should_strip_forwarded_provider_credential_header, should_strip_forwarded_trusted_admin_header,
 };
@@ -95,17 +86,15 @@ const GEMINI_PUBLIC_LOCAL_EXECUTION_RUNTIME_MISS_DETAIL: &str =
 const GEMINI_FILES_LOCAL_EXECUTION_RUNTIME_MISS_DETAIL: &str =
     "当前 Gemini Files 请求无法在本地执行：没有匹配到可用的执行路径";
 const LOCAL_ROUTE_NOT_FOUND_DETAIL: &str = "Route not found";
-const LOCAL_PROXY_PASSTHROUGH_REMOVED_DETAIL: &str =
-    "Route matched a removed compatibility passthrough; implement it in Rust or retire the route";
 const LOCAL_EXECUTION_LOOP_DETECTED_DETAIL: &str =
     "Gateway detected an execution runtime request loop back into the local frontdoor";
 const AUTH_API_KEY_CONCURRENCY_LIMIT_REACHED_DETAIL: &str =
     "当前调用方 API Key 并发请求数已达上限，请稍后重试";
 const LOCAL_EXECUTION_PLANNING_TIMEOUT_DETAIL: &str =
     "当前 AI 请求在本地执行规划阶段超时，请稍后重试";
-const EXECUTION_PATH_TUNNEL_AFFINITY_FORWARD: &str = "tunnel_affinity_forward";
 const MANAGEMENT_TOKEN_PREFIX: &str = "ae-";
 const LEGACY_MANAGEMENT_TOKEN_PREFIX: &str = "ae_";
+
 fn finalize_request_body_buffer_rejection(
     state: &AppState,
     request_context: &GatewayPublicRequestContext,
@@ -331,279 +320,7 @@ async fn maybe_promote_management_token_admin_principal(
     Ok(())
 }
 
-async fn maybe_forward_public_request_to_tunnel_owner(
-    state: &AppState,
-    remote_addr: &std::net::SocketAddr,
-    request_context: &GatewayPublicRequestContext,
-    parts: &http::request::Parts,
-    buffered_body: Option<&Bytes>,
-) -> Result<Option<Response<Body>>, GatewayError> {
-    let Some(decision) = request_context.control_decision.as_ref() else {
-        return Ok(None);
-    };
-    if decision.route_class.as_deref() != Some("ai_public")
-        || !decision.is_execution_runtime_candidate()
-    {
-        return Ok(None);
-    }
-    if parts
-        .headers
-        .get(TUNNEL_AFFINITY_FORWARDED_BY_HEADER)
-        .and_then(|value| value.to_str().ok())
-        .map(str::trim)
-        .is_some_and(|value| !value.is_empty())
-    {
-        return Ok(None);
-    }
-
-    let Some(auth_context) = decision.auth_context.as_ref().filter(|auth_context| {
-        auth_context.access_allowed && !auth_context.api_key_id.trim().is_empty()
-    }) else {
-        return Ok(None);
-    };
-    let Some(api_format) = decision
-        .auth_endpoint_signature
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
-        return Ok(None);
-    };
-    let empty_body = Bytes::new();
-    let Some(requested_model) = crate::control::extract_requested_model(
-        decision,
-        &parts.uri,
-        &parts.headers,
-        buffered_body.unwrap_or(&empty_body),
-    ) else {
-        return Ok(None);
-    };
-    let body_json = buffered_body.and_then(|body| {
-        let body =
-            crate::headers::decoded_request_body_bytes(&parts.headers, body.as_ref()).ok()?;
-        serde_json::from_slice::<serde_json::Value>(body.as_ref()).ok()
-    });
-    let empty_body_json = serde_json::Value::Null;
-    let affinity_context = match crate::ai_serving::resolve_tunnel_scheduler_affinity_context(
-        state,
-        parts,
-        decision,
-        requested_model,
-        body_json.as_ref().unwrap_or(&empty_body_json),
-        api_format,
-    )
-    .await
-    {
-        Ok(Some(context)) => context,
-        Ok(None) => return Ok(None),
-        Err(err) => {
-            warn!(
-                trace_id = %request_context.trace_id,
-                error = ?err,
-                "gateway failed to resolve routing policy while checking tunnel affinity forwarding"
-            );
-            return Ok(None);
-        }
-    };
-    let target = if let Some(policy_context) = affinity_context.policy_context.as_ref() {
-        crate::scheduler::affinity::read_cached_scheduler_affinity_target_with_policy_context(
-            state,
-            &auth_context.api_key_id,
-            affinity_context.client_session_affinity.as_ref(),
-            api_format,
-            &affinity_context.requested_model,
-            policy_context,
-        )
-    } else {
-        let cache_affinity_enabled = match read_scheduler_ordering_config(state).await {
-            Ok(config) => config.scheduling_mode == SchedulerSchedulingMode::CacheAffinity,
-            Err(err) => {
-                warn!(
-                    trace_id = %request_context.trace_id,
-                    error = ?err,
-                    "gateway failed to load scheduler config while checking tunnel affinity forwarding mode"
-                );
-                SchedulerSchedulingMode::default() == SchedulerSchedulingMode::CacheAffinity
-            }
-        };
-        if !cache_affinity_enabled {
-            return Ok(None);
-        }
-        crate::scheduler::affinity::read_cached_scheduler_affinity_target(
-            state,
-            &auth_context.api_key_id,
-            affinity_context.client_session_affinity.as_ref(),
-            api_format,
-            &affinity_context.requested_model,
-        )
-    };
-    let Some(target) = target else {
-        return Ok(None);
-    };
-    if !routing_overlay_allows_affinity_target(affinity_context.routing_overlay.as_ref(), &target) {
-        return Ok(None);
-    }
-
-    let transport = match state
-        .read_provider_transport_snapshot(&target.provider_id, &target.endpoint_id, &target.key_id)
-        .await
-    {
-        Ok(Some(transport)) => transport,
-        Ok(None) => return Ok(None),
-        Err(err) => {
-            warn!(
-                trace_id = %request_context.trace_id,
-                provider_id = %target.provider_id,
-                endpoint_id = %target.endpoint_id,
-                key_id = %target.key_id,
-                error = ?err,
-                "gateway failed to read provider transport for tunnel affinity forward"
-            );
-            return Ok(None);
-        }
-    };
-
-    let Some(proxy) = state
-        .resolve_transport_proxy_snapshot_with_tunnel_affinity(&transport)
-        .await
-    else {
-        return Ok(None);
-    };
-    if proxy.enabled == Some(false) {
-        return Ok(None);
-    }
-    let Some(node_id) = proxy
-        .node_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
-        return Ok(None);
-    };
-    if state.tunnel.has_local_proxy(node_id) {
-        return Ok(None);
-    }
-
-    let Some(owner) = state
-        .tunnel
-        .lookup_attachment_owner(state.data.as_ref(), node_id)
-        .await
-        .map_err(GatewayError::Internal)?
-    else {
-        return Ok(None);
-    };
-    if owner.gateway_instance_id == state.tunnel.local_instance_id() {
-        return Ok(None);
-    }
-
-    let owner_url = format!(
-        "{}{}",
-        owner.relay_base_url.trim_end_matches('/'),
-        request_context.request_path_and_query()
-    );
-    let is_stream =
-        owner_forward_request_is_stream(parts, decision, buffered_body.unwrap_or(&empty_body));
-    let transport_timeouts =
-        crate::provider_transport::resolve_transport_execution_timeouts(&transport);
-    let non_stream_timeout =
-        crate::execution_runtime::transport::resolve_non_stream_total_timeout_for_request(
-            is_stream,
-            &transport.endpoint.api_format,
-            transport_timeouts.as_ref(),
-        );
-    let stream_first_byte_timeout =
-        crate::execution_runtime::transport::resolve_stream_first_byte_timeout_for_request(
-            is_stream,
-            transport_timeouts.as_ref(),
-        );
-    let mut upstream_request = state
-        .owner_forward_client
-        .request(parts.method.clone(), owner_url);
-    if let Some(timeout) = non_stream_timeout {
-        upstream_request = upstream_request.timeout(timeout);
-    }
-    for (name, value) in &parts.headers {
-        if should_skip_request_header(name.as_str()) || name == http::header::HOST {
-            continue;
-        }
-        if should_strip_forwarded_provider_credential_header(Some(decision), name) {
-            continue;
-        }
-        if should_strip_forwarded_trusted_admin_header(Some(decision), name) {
-            continue;
-        }
-        upstream_request = upstream_request.header(name, value);
-    }
-    if let Some(host) = request_context.host_header.as_deref() {
-        if !parts.headers.contains_key(FORWARDED_HOST_HEADER) {
-            upstream_request = upstream_request.header(FORWARDED_HOST_HEADER, host);
-        }
-    }
-    if !parts.headers.contains_key(FORWARDED_FOR_HEADER) {
-        upstream_request =
-            upstream_request.header(FORWARDED_FOR_HEADER, remote_addr.ip().to_string());
-    }
-    if !parts.headers.contains_key(FORWARDED_PROTO_HEADER) {
-        upstream_request = upstream_request.header(FORWARDED_PROTO_HEADER, "http");
-    }
-    if !parts.headers.contains_key(TRACE_ID_HEADER) {
-        upstream_request = upstream_request.header(TRACE_ID_HEADER, &request_context.trace_id);
-    }
-    upstream_request = upstream_request
-        .header(GATEWAY_HEADER, "rust-phase3b-affinity")
-        .header(
-            TUNNEL_AFFINITY_FORWARDED_BY_HEADER,
-            state.tunnel.local_instance_id(),
-        )
-        .header(
-            TUNNEL_AFFINITY_OWNER_INSTANCE_HEADER,
-            owner.gateway_instance_id.as_str(),
-        )
-        .header(TRUSTED_AUTH_USER_ID_HEADER, &auth_context.user_id)
-        .header(TRUSTED_AUTH_API_KEY_ID_HEADER, &auth_context.api_key_id)
-        .header(TRUSTED_AUTH_ACCESS_ALLOWED_HEADER, "true");
-    if let Some(balance_remaining) = auth_context.balance_remaining {
-        upstream_request =
-            upstream_request.header(TRUSTED_AUTH_BALANCE_HEADER, balance_remaining.to_string());
-    }
-
-    let upstream_response = crate::tunnel::send_owner_forward_request(
-        upstream_request.body(buffered_body.cloned().unwrap_or_default()),
-        stream_first_byte_timeout,
-    )
-    .await
-    .map_err(|message| GatewayError::UpstreamUnavailable {
-        trace_id: request_context.trace_id.clone(),
-        message: format!("owner gateway affinity forward failed: {message}"),
-    })?;
-
-    let mut response = build_sync_aware_affinity_forward_response(
-        request_context,
-        &parts.headers,
-        buffered_body,
-        decision,
-        upstream_response,
-    )
-    .await?;
-    response.headers_mut().insert(
-        HeaderName::from_static(TUNNEL_AFFINITY_OWNER_INSTANCE_HEADER),
-        HeaderValue::from_str(owner.gateway_instance_id.as_str())
-            .map_err(|err| GatewayError::Internal(err.to_string()))?,
-    );
-    Ok(Some(response))
-}
-
-fn routing_overlay_allows_affinity_target(
-    routing_overlay: Option<&aether_routing_core::RankingOverlay>,
-    target: &aether_scheduler_core::SchedulerAffinityTarget,
-) -> bool {
-    routing_overlay.is_none_or(|overlay| {
-        overlay.provider_allowed(target.provider_id.as_str())
-            && overlay.key_allowed(target.key_id.as_str())
-    })
-}
-
-fn owner_forward_request_is_stream(
+fn request_is_stream(
     parts: &http::request::Parts,
     decision: &GatewayControlDecision,
     body_bytes: &Bytes,
@@ -624,27 +341,6 @@ fn owner_forward_request_is_stream(
         &body_json,
         body_base64.as_deref(),
     )
-}
-
-fn upstream_response_is_sse(headers: &reqwest::header::HeaderMap) -> bool {
-    headers
-        .get(http::header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .is_some_and(|value| value.to_ascii_lowercase().contains("text/event-stream"))
-}
-
-fn collect_upstream_response_headers(
-    headers: &reqwest::header::HeaderMap,
-) -> BTreeMap<String, String> {
-    headers
-        .iter()
-        .map(|(name, value)| {
-            (
-                name.as_str().to_string(),
-                value.to_str().unwrap_or_default().to_string(),
-            )
-        })
-        .collect()
 }
 
 fn collect_response_headers(headers: &http::HeaderMap) -> BTreeMap<String, String> {
@@ -758,195 +454,6 @@ fn restore_redacted_stream_execution_response(
     Ok(Response::from_parts(parts, Body::from_stream(stream)))
 }
 
-fn aggregate_sync_sse_response_for_client(
-    decision: &GatewayControlDecision,
-    public_path: &str,
-    body: &[u8],
-) -> Option<serde_json::Value> {
-    let api_format = decision
-        .auth_endpoint_signature
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    match api_format.map(crate::ai_serving::normalize_api_format_alias) {
-        Some(value) if value.eq_ignore_ascii_case("openai:chat") => {
-            aggregate_openai_chat_stream_sync_response(body)
-        }
-        Some(value)
-            if value.eq_ignore_ascii_case("openai:responses")
-                || value.eq_ignore_ascii_case("openai:responses:compact") =>
-        {
-            aggregate_openai_responses_stream_sync_response(body)
-        }
-        Some(value) if value.eq_ignore_ascii_case("claude:messages") => {
-            aggregate_claude_stream_sync_response(body)
-        }
-        Some(value) if value.eq_ignore_ascii_case("gemini:generate_content") => {
-            aggregate_gemini_stream_sync_response(body)
-        }
-        _ if public_path == "/v1/chat/completions" => {
-            aggregate_openai_chat_stream_sync_response(body)
-        }
-        _ if public_path == "/v1/responses" || public_path == "/v1/responses/compact" => {
-            aggregate_openai_responses_stream_sync_response(body)
-        }
-        _ if public_path == "/v1/messages" => aggregate_claude_stream_sync_response(body),
-        _ if decision.route_family.as_deref() == Some("gemini")
-            && (public_path.contains(":generateContent")
-                || public_path.contains(":streamGenerateContent")) =>
-        {
-            aggregate_gemini_stream_sync_response(body)
-        }
-        _ => None,
-    }
-}
-
-fn build_sync_json_proxy_response(
-    status_code: u16,
-    upstream_headers: &BTreeMap<String, String>,
-    body_json: &serde_json::Value,
-    trace_id: &str,
-    decision: &GatewayControlDecision,
-) -> Result<Response<Body>, GatewayError> {
-    let mut headers = upstream_headers.clone();
-    headers.remove("content-encoding");
-    headers.remove("content-length");
-    headers.insert("content-type".to_string(), "application/json".to_string());
-    let body_bytes =
-        serde_json::to_vec(body_json).map_err(|err| GatewayError::Internal(err.to_string()))?;
-    headers.insert("content-length".to_string(), body_bytes.len().to_string());
-    build_client_response_from_parts(
-        status_code,
-        &headers,
-        Body::from(body_bytes),
-        trace_id,
-        Some(decision),
-    )
-}
-
-fn resolve_affinity_forward_client_api_format(
-    decision: &GatewayControlDecision,
-    public_path: &str,
-) -> Option<&'static str> {
-    let api_format = decision
-        .auth_endpoint_signature
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    match api_format.map(crate::ai_serving::normalize_api_format_alias) {
-        Some(value) if value.eq_ignore_ascii_case("openai:chat") => Some("openai:chat"),
-        Some(value) if value.eq_ignore_ascii_case("openai:responses") => Some("openai:responses"),
-        Some(value) if value.eq_ignore_ascii_case("openai:responses:compact") => {
-            Some("openai:responses:compact")
-        }
-        Some(value) if value.eq_ignore_ascii_case("claude:messages") => Some("claude:messages"),
-        Some(value) if value.eq_ignore_ascii_case("gemini:generate_content") => {
-            Some("gemini:generate_content")
-        }
-        _ if public_path == "/v1/chat/completions" => Some("openai:chat"),
-        _ if public_path == "/v1/responses" => Some("openai:responses"),
-        _ if public_path == "/v1/responses/compact" => Some("openai:responses:compact"),
-        _ if public_path == "/v1/messages" => Some("claude:messages"),
-        _ if decision.route_family.as_deref() == Some("gemini")
-            && (public_path.contains(":generateContent")
-                || public_path.contains(":streamGenerateContent")) =>
-        {
-            Some("gemini:generate_content")
-        }
-        _ => None,
-    }
-}
-
-fn build_stream_sse_proxy_response(
-    status_code: u16,
-    upstream_headers: &BTreeMap<String, String>,
-    sse_body: &[u8],
-    trace_id: &str,
-    decision: &GatewayControlDecision,
-) -> Result<Response<Body>, GatewayError> {
-    let mut headers = upstream_headers.clone();
-    headers.remove("content-encoding");
-    headers.remove("content-length");
-    headers.insert("content-type".to_string(), "text/event-stream".to_string());
-    headers.insert("content-length".to_string(), sse_body.len().to_string());
-    build_client_response_from_parts(
-        status_code,
-        &headers,
-        Body::from(sse_body.to_vec()),
-        trace_id,
-        Some(decision),
-    )
-}
-
-async fn build_sync_aware_affinity_forward_response(
-    request_context: &GatewayPublicRequestContext,
-    request_headers: &http::HeaderMap,
-    buffered_body: Option<&Bytes>,
-    decision: &GatewayControlDecision,
-    upstream_response: reqwest::Response,
-) -> Result<Response<Body>, GatewayError> {
-    let Some(buffered_body) = buffered_body else {
-        return build_client_response(upstream_response, &request_context.trace_id, Some(decision));
-    };
-    let stream_request = request_wants_stream(request_context, request_headers, buffered_body);
-    let upstream_is_sse = upstream_response_is_sse(upstream_response.headers());
-    if (!stream_request && !upstream_is_sse) || (stream_request && upstream_is_sse) {
-        return build_client_response(upstream_response, &request_context.trace_id, Some(decision));
-    }
-
-    let status_code = upstream_response.status().as_u16();
-    let headers = collect_upstream_response_headers(upstream_response.headers());
-    let body_bytes = upstream_response
-        .bytes()
-        .await
-        .map_err(|err| GatewayError::Internal(err.to_string()))?;
-    if stream_request {
-        if (200..300).contains(&status_code) {
-            if let Some(client_api_format) = resolve_affinity_forward_client_api_format(
-                decision,
-                request_context.request_path.as_str(),
-            ) {
-                if let Ok(body_json) = serde_json::from_slice::<serde_json::Value>(&body_bytes) {
-                    if let Some(outcome) = maybe_bridge_standard_sync_json_to_stream(
-                        &body_json,
-                        client_api_format,
-                        client_api_format,
-                        None,
-                    )? {
-                        return build_stream_sse_proxy_response(
-                            status_code,
-                            &headers,
-                            &outcome.sse_body,
-                            &request_context.trace_id,
-                            decision,
-                        );
-                    }
-                }
-            }
-        }
-    } else if let Some(body_json) = aggregate_sync_sse_response_for_client(
-        decision,
-        request_context.request_path.as_str(),
-        &body_bytes,
-    ) {
-        return build_sync_json_proxy_response(
-            status_code,
-            &headers,
-            &body_json,
-            &request_context.trace_id,
-            decision,
-        );
-    }
-
-    build_client_response_from_parts(
-        status_code,
-        &headers,
-        Body::from(body_bytes),
-        &request_context.trace_id,
-        Some(decision),
-    )
-}
-
 pub(crate) async fn proxy_request(
     State(state): State<AppState>,
     ConnectInfo(remote_addr): ConnectInfo<std::net::SocketAddr>,
@@ -970,13 +477,13 @@ async fn proxy_request_inner(
     let trace_id = extract_or_generate_trace_id(request.headers());
     let accepted_at = request
         .extensions()
-        .get::<crate::middleware::GatewayRequestAcceptedAt>()
+        .get::<aether_gateway_frontdoor::GatewayRequestAcceptedAt>()
         .map(|accepted_at| accepted_at.0)
         .unwrap_or(started_at);
     crate::request_diagnostics::record_request_accepted_at(accepted_at);
     if request
         .extensions()
-        .get::<crate::middleware::GatewayRequestAcceptedAt>()
+        .get::<aether_gateway_frontdoor::GatewayRequestAcceptedAt>()
         .is_some()
     {
         observe_gateway_stage_ms(
@@ -1324,7 +831,7 @@ async fn proxy_request_inner(
                 && decision.admin_principal.is_some()
         })
     {
-        let response = build_unhandled_admin_proxy_response(&request_context);
+        let response = build_admin_route_not_found_response(&request_context);
         return Ok(finalize_gateway_response_with_context(
             &state,
             response,
@@ -1336,7 +843,7 @@ async fn proxy_request_inner(
         ));
     }
     if request_context.request_path.starts_with("/api/admin/") {
-        let response = build_unhandled_admin_proxy_response(&request_context);
+        let response = build_admin_route_not_found_response(&request_context);
         return Ok(finalize_gateway_response_with_context(
             &state,
             response,
@@ -1377,7 +884,8 @@ async fn proxy_request_inner(
         .and_then(|decision| decision.route_class.as_deref())
         == Some("public_support")
     {
-        let response = super::public::build_unhandled_public_support_response(&request_context);
+        let response =
+            super::public::build_public_support_route_not_found_response(&request_context);
         return Ok(finalize_gateway_response_with_context(
             &state,
             response,
@@ -1444,31 +952,6 @@ async fn proxy_request_inner(
     } else {
         None
     };
-
-    let owner_forward_started_at = Instant::now();
-    let owner_forward_response = maybe_forward_public_request_to_tunnel_owner(
-        &state,
-        &remote_addr,
-        &request_context,
-        &parts,
-        buffered_body.as_ref(),
-    )
-    .await?;
-    observe_gateway_stage_ms(
-        "frontdoor_owner_forward",
-        owner_forward_started_at.elapsed().as_millis() as u64,
-    );
-    if let Some(response) = owner_forward_response {
-        return Ok(finalize_gateway_response_with_context(
-            &state,
-            response,
-            &remote_addr,
-            &request_context,
-            EXECUTION_PATH_TUNNEL_AFFINITY_FORWARD,
-            &started_at,
-            request_permit.take(),
-        ));
-    }
 
     if let Some(rejection) = trusted_auth_local_rejection(control_decision, &parts.headers) {
         let response =
@@ -1639,9 +1122,8 @@ async fn proxy_request_inner(
         let buffered_body = buffered_body
             .as_ref()
             .expect("execution runtime/control auth gate should have buffered request body");
-        let stream_request = control_decision.is_some_and(|decision| {
-            owner_forward_request_is_stream(&parts, decision, buffered_body)
-        });
+        let stream_request = control_decision
+            .is_some_and(|decision| request_is_stream(&parts, decision, buffered_body));
         let mut local_execution_exhaustion = None;
         if stream_request {
             let execute_stream_started_at = Instant::now();
@@ -2077,18 +1559,19 @@ async fn proxy_request_inner(
         ));
     }
 
-    let response = build_local_http_error_response(
+    let response = build_local_http_error_response_with_request_path(
         &trace_id,
         control_decision,
-        http::StatusCode::NOT_IMPLEMENTED,
-        LOCAL_PROXY_PASSTHROUGH_REMOVED_DETAIL,
+        Some(request_context.request_path.as_str()),
+        http::StatusCode::NOT_FOUND,
+        LOCAL_ROUTE_NOT_FOUND_DETAIL,
     )?;
     Ok(finalize_gateway_response_with_context(
         &state,
         response,
         &remote_addr,
         &request_context,
-        EXECUTION_PATH_LOCAL_PROXY_PASSTHROUGH_REMOVED,
+        EXECUTION_PATH_LOCAL_ROUTE_NOT_FOUND,
         &started_at,
         request_permit.take(),
     ))
@@ -2178,7 +1661,7 @@ fn local_execution_runtime_miss_diagnostic_detail(
         }
         "no_local_sync_plans" | "no_local_stream_plans" => {
             return Some(format!(
-                "找到了候选提供商，但无法为本次{request_mode}请求构建本地执行计划。请检查端点路径、认证方式、Header/Body 规则和格式转换配置（{route_label}，原因代码: {}）",
+                "找到了候选提供商，但无法为本次{request_mode}请求构建本地执行计划。请检查端点路径、认证方式和 Header/Body 规则（{route_label}，原因代码: {}）",
                 diagnostic.reason
             ));
         }
@@ -2289,34 +1772,22 @@ fn local_execution_runtime_miss_skip_reason_label(reason: &str) -> &str {
         "auth_snapshot_missing" => "API Key 本地执行配置缺失",
         "endpoint_api_format_changed" => "端点 API 格式已变更",
         "endpoint_inactive" => "端点未启用",
-        "format_conversion_disabled" => "格式转换未启用",
         "key_api_format_disabled" => "API Key 未启用该 API 格式",
         "key_inactive" => "API Key 未启用",
         "key_model_disabled" => "API Key 未允许该模型",
         "mapped_model_missing" => "模型映射缺失",
-        "pool_active_probe_sealed" => "池内账号未进入主动探测热池",
-        "pool_cooldown" => "池内账号处于冷却中",
-        "pool_cost_limit_reached" => "池内账号成本额度已用尽",
-        "pool_group_exhausted" => "池化提供商没有可调度账号",
-        "pool_key_lease_busy" => "池内账号正被其他请求占用",
         "provider_concurrency_limit_reached" => "上游提供商并发已达上限",
         "provider_inactive" => "提供商未启用",
         "provider_key_concurrency_limit_reached" => "上游账号并发已达上限",
         "provider_request_body_missing" => "无法构建上游请求体",
-        "provider_request_body_build_failed" => "上游请求体转换失败",
+        "provider_request_body_build_failed" => "上游请求体构建失败",
         "transport_api_format_mismatch" => "传输层 API 格式不匹配",
-        "transport_api_format_unsupported" => "传输层不支持该 API 格式",
         "transport_auth_unavailable" => "上游认证信息不可用",
         "transport_body_rules_unsupported" => "Body 规则不支持本地执行",
         "transport_custom_path_unsupported" => "自定义路径不支持本地执行",
         "transport_header_rules_unsupported" => "Header 规则不支持本地执行",
         "transport_header_rules_apply_failed" => "Header 规则应用失败",
-        "transport_oauth_resolution_unsupported" => "OAuth 认证解析不支持本地执行",
-        "transport_provider_type_unsupported" => "提供商类型不支持本地执行",
-        "transport_proxy_or_profile_unsupported" => "代理或传输指纹配置不支持本地执行",
-        "transport_proxy_unsupported" => "代理配置不支持本地执行",
         "transport_snapshot_missing" => "提供商传输配置缺失",
-        "transport_profile_unsupported" => "传输指纹配置不支持本地执行",
         "transport_unsupported" => "传输配置不支持本地执行",
         "upstream_url_missing" => "无法构建上游请求地址",
         other => other,
@@ -2409,10 +1880,9 @@ mod tests {
     use super::{
         api_key_remote_ip_allowed, buffer_and_normalize_request_body,
         diagnostic_is_auth_api_key_concurrency_limited, local_execution_runtime_miss_detail,
-        owner_forward_request_is_stream, restore_redacted_stream_execution_response,
-        restore_redacted_sync_execution_response, routing_overlay_allows_affinity_target,
-        GatewayControlDecision, LocalExecutionRuntimeMissDiagnostic, RequestBodyBufferError,
-        RequestBodyBufferPolicy,
+        request_is_stream, restore_redacted_stream_execution_response,
+        restore_redacted_sync_execution_response, GatewayControlDecision,
+        LocalExecutionRuntimeMissDiagnostic, RequestBodyBufferError, RequestBodyBufferPolicy,
     };
     use axum::body::{to_bytes, Body, Bytes};
     use axum::http::{header, HeaderMap, HeaderValue, Method, Response};
@@ -2420,43 +1890,7 @@ mod tests {
     use tokio::sync::Semaphore;
 
     #[test]
-    fn routing_overlay_blocks_disallowed_tunnel_affinity_target() {
-        let target = aether_scheduler_core::SchedulerAffinityTarget {
-            provider_id: "provider-allowed".to_string(),
-            endpoint_id: "endpoint-1".to_string(),
-            key_id: "key-allowed".to_string(),
-        };
-        let matching = aether_routing_core::RankingOverlay {
-            allowed_providers: vec!["provider-allowed".to_string()],
-            allowed_keys: vec!["key-allowed".to_string()],
-            ..aether_routing_core::RankingOverlay::default()
-        };
-        let wrong_provider = aether_routing_core::RankingOverlay {
-            allowed_providers: vec!["provider-other".to_string()],
-            ..matching.clone()
-        };
-        let wrong_key = aether_routing_core::RankingOverlay {
-            allowed_keys: vec!["key-other".to_string()],
-            ..matching.clone()
-        };
-
-        assert!(routing_overlay_allows_affinity_target(None, &target));
-        assert!(routing_overlay_allows_affinity_target(
-            Some(&matching),
-            &target
-        ));
-        assert!(!routing_overlay_allows_affinity_target(
-            Some(&wrong_provider),
-            &target
-        ));
-        assert!(!routing_overlay_allows_affinity_target(
-            Some(&wrong_key),
-            &target
-        ));
-    }
-
-    #[test]
-    fn owner_forward_uses_search_protocol_timeout_semantics() {
+    fn search_requests_use_non_stream_timeout_semantics() {
         let request = http::Request::builder()
             .method(Method::POST)
             .uri("/v1/alpha/search")
@@ -2473,7 +1907,7 @@ mod tests {
         );
         let body =
             Bytes::from_static(br#"{"model":"gpt-5.6-sol","input":"find docs","stream":true}"#);
-        let is_stream = owner_forward_request_is_stream(&parts, &decision, &body);
+        let is_stream = request_is_stream(&parts, &decision, &body);
         let timeouts = aether_contracts::ExecutionTimeouts {
             total_ms: Some(aether_contracts::MAX_EXECUTION_REQUEST_TIMEOUT_MS),
             first_byte_ms: Some(10),
@@ -2501,7 +1935,7 @@ mod tests {
     }
 
     #[test]
-    fn owner_forward_keeps_streaming_for_stream_capable_protocols() {
+    fn detects_streaming_for_stream_capable_protocols() {
         let chat_request = http::Request::builder()
             .method(Method::POST)
             .uri("/v1/chat/completions")
@@ -2517,12 +1951,12 @@ mod tests {
             Some("openai:chat".to_string()),
         );
 
-        assert!(owner_forward_request_is_stream(
+        assert!(request_is_stream(
             &chat_parts,
             &chat_decision,
             &Bytes::from_static(br#"{"model":"gpt-5.6-sol","stream":true}"#),
         ));
-        assert!(!owner_forward_request_is_stream(
+        assert!(!request_is_stream(
             &chat_parts,
             &chat_decision,
             &Bytes::from_static(br#"{"model":"gpt-5.6-sol","stream":false}"#),
@@ -2542,7 +1976,7 @@ mod tests {
             Some("image".to_string()),
             Some("openai:image".to_string()),
         );
-        assert!(owner_forward_request_is_stream(
+        assert!(request_is_stream(
             &image_parts,
             &image_decision,
             &Bytes::from_static(br#"{"model":"gpt-image-1","stream":true}"#),
@@ -2562,7 +1996,7 @@ mod tests {
             Some("responses:compact".to_string()),
             Some("openai:responses:compact".to_string()),
         );
-        assert!(!owner_forward_request_is_stream(
+        assert!(!request_is_stream(
             &compact_parts,
             &compact_decision,
             &Bytes::from_static(br#"{"model":"gpt-5.6-sol","stream":true}"#),
@@ -2866,34 +2300,6 @@ mod tests {
         assert!(diagnostic_is_auth_api_key_concurrency_limited(Some(
             &diagnostic
         )));
-    }
-
-    #[test]
-    fn runtime_miss_detail_prefers_api_key_concurrency_message_when_classified_from_context() {
-        let decision = GatewayControlDecision::synthetic(
-            "/v1/responses",
-            Some("ai_public".to_string()),
-            Some("openai".to_string()),
-            Some("responses".to_string()),
-            Some("openai:responses".to_string()),
-        );
-        let diagnostic = LocalExecutionRuntimeMissDiagnostic {
-            reason: "all_candidates_skipped".to_string(),
-            skip_reasons: std::collections::BTreeMap::from([(
-                "format_conversion_disabled".to_string(),
-                1,
-            )]),
-            requested_model: Some("gpt-5.4".to_string()),
-            ..LocalExecutionRuntimeMissDiagnostic::default()
-        };
-
-        let detail =
-            local_execution_runtime_miss_detail(Some(&decision), Some(&diagnostic), true, false);
-
-        assert_eq!(
-            detail.as_deref(),
-            Some("当前调用方 API Key 并发请求数已达上限，请稍后重试")
-        );
     }
 }
 

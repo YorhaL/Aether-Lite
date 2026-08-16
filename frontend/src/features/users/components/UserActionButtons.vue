@@ -16,22 +16,11 @@
       :variant="mobile ? 'outline' : 'ghost'"
       :size="mobile ? 'sm' : 'icon'"
       :class="mobile ? 'h-8 text-xs' : 'h-8 w-8'"
-      :title="legacyT('资金操作')"
+      :title="legacyT('额度操作')"
       @click="$emit('wallet')"
     >
       <DollarSign :class="iconClass" />
-      <span v-if="mobile">{{ legacyT('资金') }}</span>
-    </Button>
-    <Button
-      v-if="canOperateAdmin"
-      :variant="mobile ? 'outline' : 'ghost'"
-      :size="mobile ? 'sm' : 'icon'"
-      :class="mobile ? 'h-8 text-xs' : 'h-8 w-8'"
-      :title="legacyT('套餐')"
-      @click="$emit('plans')"
-    >
-      <PackageCheck :class="iconClass" />
-      <span v-if="mobile">{{ legacyT('套餐') }}</span>
+      <span v-if="mobile">{{ legacyT('额度') }}</span>
     </Button>
     <Button
       :variant="mobile ? 'outline' : 'ghost'"
@@ -90,7 +79,6 @@ import {
   DollarSign,
   Key,
   MonitorSmartphone,
-  PackageCheck,
   PauseCircle,
   PlayCircle,
   SquarePen,
@@ -110,7 +98,6 @@ const props = withDefaults(defineProps<{
 defineEmits<{
   edit: []
   wallet: []
-  plans: []
   'api-keys': []
   sessions: []
   'toggle-status': []

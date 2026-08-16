@@ -2,12 +2,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::Weekday;
 
-use crate::admin_api::admin_provider_ops_local_action_response;
 use crate::data::GatewayDataState;
 use crate::{AppState, GatewayError};
 
-#[path = "runtime/account_self_check.rs"]
-mod account_self_check;
 #[path = "runtime/audit_cleanup.rs"]
 mod audit_cleanup;
 #[path = "runtime/cleanup_runs.rs"]
@@ -16,26 +13,8 @@ mod cleanup_runs;
 mod config;
 #[path = "runtime/db_maintenance.rs"]
 mod db_maintenance;
-#[path = "runtime/fixed_provider_reconciliation.rs"]
-mod fixed_provider_reconciliation;
-#[path = "runtime/oauth_token_refresh.rs"]
-mod oauth_token_refresh;
 #[path = "runtime/pending_cleanup.rs"]
 mod pending_cleanup;
-#[path = "runtime/pool_quota_probe.rs"]
-mod pool_quota_probe;
-#[path = "runtime/pool_score_rebuild.rs"]
-mod pool_score_rebuild;
-#[path = "runtime/provider_checkin.rs"]
-mod provider_checkin;
-#[path = "runtime/provider_quota_alert.rs"]
-mod provider_quota_alert;
-#[path = "runtime/proxy_node_metrics_cleanup.rs"]
-mod proxy_node_metrics_cleanup;
-#[path = "runtime/proxy_node_staleness.rs"]
-mod proxy_node_staleness;
-#[path = "runtime/proxy_upgrade_rollout.rs"]
-mod proxy_upgrade_rollout;
 #[path = "runtime/request_candidate_cleanup.rs"]
 mod request_candidate_cleanup;
 #[path = "runtime/runners.rs"]
@@ -46,22 +25,12 @@ mod schedule;
 mod stats_daily;
 #[path = "runtime/stats_hourly.rs"]
 mod stats_hourly;
-#[cfg(test)]
-#[path = "runtime/tests.rs"]
-mod tests;
 #[path = "runtime/usage_cleanup.rs"]
 mod usage_cleanup;
 #[path = "runtime/usage_counter_flush.rs"]
 mod usage_counter_flush;
-#[path = "runtime/wallet_daily_usage.rs"]
-mod wallet_daily_usage;
 #[path = "runtime/workers.rs"]
 mod workers;
-pub(crate) use account_self_check::{
-    perform_account_self_check_once, perform_account_self_check_once_with_config,
-    select_account_self_check_key_ids, spawn_account_self_check_worker, AccountSelfCheckRunSummary,
-    AccountSelfCheckWorkerConfig,
-};
 pub(crate) use aether_data_contracts::repository::usage::{
     UsageCleanupSummary, UsageCleanupWindow,
 };
@@ -73,41 +42,7 @@ pub(crate) use cleanup_runs::{
 };
 use config::*;
 use db_maintenance::*;
-pub(crate) use fixed_provider_reconciliation::{
-    perform_fixed_provider_reconciliation_once, spawn_fixed_provider_reconciliation_task,
-};
-pub(crate) use oauth_token_refresh::{
-    perform_oauth_token_refresh_once, OAuthTokenRefreshRunSummary,
-};
 use pending_cleanup::*;
-pub(crate) use pool_quota_probe::{
-    perform_pool_quota_probe_once, perform_pool_quota_probe_once_for_provider_with_config,
-    perform_pool_quota_probe_once_with_config, pool_quota_probe_target_count,
-    select_pool_quota_probe_key_ids, spawn_pool_quota_probe_replenish_for_request,
-    spawn_pool_quota_probe_worker, PoolQuotaProbeRunSummary, PoolQuotaProbeWorkerConfig,
-};
-pub(crate) use pool_score_rebuild::{
-    ensure_provider_key_pool_scores_for_keys, perform_pool_score_rebuild_once,
-    perform_pool_score_rebuild_once_with_config, spawn_pool_score_rebuild_worker,
-    PoolScoreRebuildRunSummary, PoolScoreRebuildWorkerConfig,
-};
-pub(crate) use provider_checkin::{perform_provider_checkin_once, ProviderCheckinRunSummary};
-pub(crate) use provider_quota_alert::{
-    perform_provider_quota_alert_once, ProviderQuotaAlertRunSummary,
-};
-use proxy_node_metrics_cleanup::*;
-use proxy_node_staleness::*;
-use proxy_upgrade_rollout::*;
-pub(crate) use proxy_upgrade_rollout::{
-    cancel_proxy_upgrade_rollout, clear_proxy_upgrade_rollout_conflicts,
-    collect_proxy_upgrade_rollout_probes, inspect_proxy_upgrade_rollout,
-    record_proxy_upgrade_traffic_success, restore_proxy_upgrade_rollout_skipped_nodes,
-    retry_proxy_upgrade_rollout_node, skip_proxy_upgrade_rollout_node, start_proxy_upgrade_rollout,
-    ProxyUpgradeRolloutCancelSummary, ProxyUpgradeRolloutConflictClearSummary,
-    ProxyUpgradeRolloutNodeActionSummary, ProxyUpgradeRolloutPendingProbe,
-    ProxyUpgradeRolloutProbeConfig, ProxyUpgradeRolloutSkippedRestoreSummary,
-    ProxyUpgradeRolloutStatus, ProxyUpgradeRolloutSummary, ProxyUpgradeRolloutTrackedNodeState,
-};
 use request_candidate_cleanup::*;
 use runners::*;
 pub(crate) use runners::{
@@ -124,7 +59,6 @@ use usage_counter_flush::*;
 pub(crate) use usage_counter_flush::{
     UsageCounterFlushRuntimeMetrics, UsageCounterFlushWorkerConfig,
 };
-use wallet_daily_usage::*;
 pub(crate) use workers::*;
 
 pub(super) fn postgres_error(
@@ -136,26 +70,14 @@ pub(super) fn postgres_error(
 const AUDIT_LOG_CLEANUP_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 const GEMINI_FILE_MAPPING_CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 60);
 const PENDING_CLEANUP_INTERVAL: Duration = Duration::from_secs(5 * 60);
-const PROXY_NODE_STALE_SWEEP_INTERVAL: Duration = Duration::from_secs(5);
-const PROXY_NODE_METRICS_CLEANUP_HOUR: u32 = 2;
-const PROXY_NODE_METRICS_CLEANUP_MINUTE: u32 = 10;
-const PROXY_UPGRADE_ROLLOUT_INTERVAL: Duration = Duration::from_secs(15);
-const PROXY_NODE_STALE_MIN_GRACE_SECS: u64 = 15;
-const PROXY_NODE_STALE_MISSED_HEARTBEATS: u64 = 3;
 const POOL_MONITOR_INTERVAL: Duration = Duration::from_secs(5 * 60);
-const OAUTH_TOKEN_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
-const PROVIDER_CHECKIN_CONCURRENCY: usize = 3;
 const PROVIDER_QUOTA_ALERT_CONCURRENCY: usize = 3;
-const PROVIDER_QUOTA_ALERT_INTERVAL: Duration = Duration::from_secs(5);
-const PROVIDER_CHECKIN_DEFAULT_TIME: &str = "01:05";
 const REQUEST_CANDIDATE_CLEANUP_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 const STATS_DAILY_AGGREGATION_HOUR: u32 = 0;
 const STATS_DAILY_AGGREGATION_MINUTE: u32 = 5;
 const STATS_HOURLY_AGGREGATION_MINUTE: u32 = 5;
 const USAGE_CLEANUP_HOUR: u32 = 3;
 const USAGE_CLEANUP_MINUTE: u32 = 0;
-const WALLET_DAILY_USAGE_AGGREGATION_HOUR: u32 = 0;
-const WALLET_DAILY_USAGE_AGGREGATION_MINUTE: u32 = 10;
 const DB_MAINTENANCE_WEEKLY_INTERVAL: chrono::Duration = chrono::Duration::days(7);
 const DB_MAINTENANCE_WEEKDAY: Weekday = Weekday::Sun;
 const DB_MAINTENANCE_HOUR: u32 = 5;
@@ -178,8 +100,6 @@ struct UsageCleanupSettings {
 pub(crate) struct AdminSystemCleanupSummary {
     pub(crate) audit_logs_deleted: usize,
     pub(crate) request_candidates_deleted: usize,
-    pub(crate) proxy_node_metrics:
-        aether_data::repository::proxy_nodes::ProxyNodeMetricsCleanupSummary,
     pub(crate) pending_failed: usize,
     pub(crate) pending_recovered: usize,
     pub(crate) usage: UsageCleanupSummary,
@@ -197,14 +117,12 @@ pub(crate) async fn run_admin_system_cleanup_once(
 ) -> Result<AdminSystemCleanupSummary, aether_data::DataLayerError> {
     let audit_logs_deleted = cleanup_audit_logs_once(data).await?;
     let request_candidates_deleted = cleanup_request_candidates_once(data).await?;
-    let proxy_node_metrics = cleanup_proxy_node_metrics_once(data).await?;
     let pending = cleanup_stale_pending_requests_once(data).await?;
     let usage = perform_usage_cleanup_once(data).await?;
 
     Ok(AdminSystemCleanupSummary {
         audit_logs_deleted,
         request_candidates_deleted,
-        proxy_node_metrics,
         pending_failed: pending.failed,
         pending_recovered: pending.recovered,
         usage,

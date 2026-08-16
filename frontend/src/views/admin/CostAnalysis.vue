@@ -48,21 +48,14 @@
       </Card>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <Card class="p-4">
-        <CostForecastChart
-          title="成本趋势预测"
-          :history="forecastHistory"
-          :forecast="forecastFuture"
-          :loading="forecastLoading"
-        />
-      </Card>
-      <QuotaProgressCard
-        title="月卡消耗进度"
-        :providers="quotaProviders"
-        :loading="quotaLoading"
+    <Card class="p-4">
+      <CostForecastChart
+        title="成本趋势预测"
+        :history="forecastHistory"
+        :forecast="forecastFuture"
+        :loading="forecastLoading"
       />
-    </div>
+    </Card>
 
     <LeaderboardTable
       title="API Key 用量排行"
@@ -105,9 +98,9 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import Card from '@/components/ui/card.vue'
 import { Pagination } from '@/components/ui'
 import { TimeRangePicker } from '@/components/common'
-import { CostForecastChart, LeaderboardControls, LeaderboardTable, QuotaProgressCard } from '@/components/stats'
+import { CostForecastChart, LeaderboardControls, LeaderboardTable } from '@/components/stats'
 import { UsageProviderTable } from '@/features/usage/components'
-import { adminApi, type CostForecastResponse, type CostSavingsResponse, type LeaderboardItem, type QuotaUsageProvider } from '@/api/admin'
+import { adminApi, type CostForecastResponse, type CostSavingsResponse, type LeaderboardItem } from '@/api/admin'
 import { usageApi } from '@/api/usage'
 import { formatCurrency, formatTokens } from '@/utils/format'
 import { getDateRangeFromPeriod } from '@/features/usage/composables'
@@ -119,7 +112,6 @@ const timeRange = ref<DateRangeParams>(getDateRangeFromPeriod('last30days'))
 
 const forecast = ref<CostForecastResponse | null>(null)
 const costSavings = ref<CostSavingsResponse | null>(null)
-const quotaProviders = ref<QuotaUsageProvider[]>([])
 const providerStats = ref<ProviderStatsItem[]>([])
 const apiKeyLeaderboard = ref<LeaderboardItem[]>([])
 const apiKeyLeaderboardMetric = ref<'requests' | 'tokens' | 'cost'>('cost')
@@ -130,11 +122,9 @@ const apiKeyLeaderboardTotal = ref(0)
 const apiKeyLeaderboardPageSizeOptions = [10, 20, 50, 100]
 
 const forecastLoading = ref(false)
-const quotaLoading = ref(false)
 const apiKeyLeaderboardLoading = ref(false)
 let forecastRequestId = 0
 let savingsRequestId = 0
-let quotaRequestId = 0
 let providerStatsRequestId = 0
 let apiKeyLeaderboardRequestId = 0
 let loadAllPromise: Promise<void> | null = null
@@ -174,20 +164,6 @@ async function loadSavings() {
   const data = await adminApi.getCostSavings(buildTimeRangeParams())
   if (requestId !== savingsRequestId) return
   costSavings.value = data
-}
-
-async function loadQuotaUsage() {
-  const requestId = ++quotaRequestId
-  quotaLoading.value = true
-  try {
-    const response = await adminApi.getQuotaUsage()
-    if (requestId !== quotaRequestId) return
-    quotaProviders.value = response.providers
-  } finally {
-    if (requestId === quotaRequestId) {
-      quotaLoading.value = false
-    }
-  }
 }
 
 async function loadProviderStats() {
@@ -245,7 +221,6 @@ async function loadAll() {
   loadAllPromise = Promise.all([
     loadForecast(),
     loadSavings(),
-    loadQuotaUsage(),
     loadProviderStats(),
     loadApiKeyLeaderboard()
   ])
@@ -318,7 +293,6 @@ onUnmounted(() => {
   loadAllPromise = null
   forecastRequestId += 1
   savingsRequestId += 1
-  quotaRequestId += 1
   providerStatsRequestId += 1
   apiKeyLeaderboardRequestId += 1
 })

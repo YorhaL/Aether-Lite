@@ -344,9 +344,6 @@ async fn gateway_exposes_request_concurrency_metrics_impl() {
     assert!(body.contains("concurrency_available_permits{gate=\"gateway_requests\"} 3"));
     assert!(body.contains("concurrency_in_flight{gate=\"gateway_requests_distributed\"} 0"));
     assert!(body.contains("concurrency_available_permits{gate=\"gateway_requests_distributed\"} 5"));
-    assert!(body.contains("tunnel_proxy_connections 0"));
-    assert!(body.contains("tunnel_nodes 0"));
-    assert!(body.contains("tunnel_active_streams 0"));
     assert!(body.contains("gateway_process_cpu_usage_basis_points "));
     assert!(body.contains("gateway_process_memory_bytes "));
     assert!(body.contains("gateway_process_threads "));

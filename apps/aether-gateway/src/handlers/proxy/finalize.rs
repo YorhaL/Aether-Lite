@@ -7,8 +7,10 @@ use crate::constants::{
 };
 use crate::control::GatewayControlDecision;
 use crate::control::GatewayPublicRequestContext;
-use crate::middleware::{sanitize_access_log_path, should_downgrade_access_log, RequestLogEmitted};
 use crate::AppState;
+use aether_gateway_frontdoor::{
+    sanitize_access_log_path, should_downgrade_access_log, RequestLogEmitted,
+};
 use aether_runtime::{maybe_hold_axum_response_permit, AdmissionPermit};
 use axum::body::{Body, Bytes};
 use axum::http::{self, header::HeaderName, header::HeaderValue, Response};

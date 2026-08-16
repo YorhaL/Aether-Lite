@@ -62,7 +62,6 @@
         @toggle-select-current-page="toggleSelectCurrentPage"
         @edit="editUser"
         @wallet="openWalletActionDialog"
-        @plans="manageUserPlans"
         @api-keys="manageApiKeys"
         @sessions="manageUserSessions"
         @toggle-status="toggleUserStatus"
@@ -109,28 +108,6 @@
       @changed="handleUserGroupsChanged"
     />
 
-    <UserPlanDialog
-      :open="showUserPlansDialog"
-      :user-id="selectedUser?.id || null"
-      :user-name="selectedUser?.username || ''"
-      :entitlements="userPlanEntitlements"
-      :plans="grantableBillingPlans"
-      :selected-plan-id="selectedGrantPlanId"
-      :grant-reason="grantReason"
-      :loading-entitlements="loadingUserPlans"
-      :loading-plans="loadingBillingPlans"
-      :granting="grantingUserPlan"
-      :format-date-time="formatDateTime"
-      :format-plan-price="formatPlanPrice"
-      :format-plan-duration="formatPlanDuration"
-      :entitlement-labels="entitlementLabels"
-      @close="showUserPlansDialog = false"
-      @update:selected-plan-id="selectedGrantPlanId = $event"
-      @update:grant-reason="grantReason = $event"
-      @refresh-entitlements="loadUserPlanEntitlements"
-      @grant="grantPlanToSelectedUser"
-    />
-
     <UserApiKeysDialog
       :open="showApiKeysDialog"
       :api-keys="userApiKeys"
@@ -174,7 +151,6 @@
       :owner-name="walletActionTarget?.user.username || ''"
       :owner-subtitle="walletActionTarget?.user.email || legacyT('未设置邮箱')"
       :context-label="legacyT('用户钱包')"
-      accent="emerald"
       @close="closeWalletActionDrawer"
       @changed="handleWalletDrawerChanged"
     />
@@ -193,20 +169,17 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useUsersStore } from '@/stores/users'
 import { useAuthStore } from '@/stores/auth'
 import {
-  usersApi,
   type User,
   type ApiKey,
   type UserSession,
   type UserBatchActionResponse,
   type UserBatchSelectionFilters,
   type UserGroup,
-  type AdminUserPlanEntitlement,
   type AdminUserSortBy,
   type AdminUserSortOrder,
 } from '@/api/users'
 import { formatSessionMeta } from '@/types/session'
 import { adminWalletApi, type AdminWallet } from '@/api/admin-wallets'
-import { adminBillingPlansApi, type BillingEntitlement, type BillingPlan } from '@/api/billing'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { useClipboard } from '@/composables/useClipboard'
@@ -228,7 +201,6 @@ import UserBatchActionDialog from '@/features/users/components/UserBatchActionDi
 import UserGroupsDialog from '@/features/users/components/UserGroupsDialog.vue'
 import UserManagementHeader from '@/features/users/components/UserManagementHeader.vue'
 import UserManagementList from '@/features/users/components/UserManagementList.vue'
-import UserPlanDialog from '@/features/users/components/UserPlanDialog.vue'
 import UserSelectionToolbar from '@/features/users/components/UserSelectionToolbar.vue'
 import UserSessionsDialog from '@/features/users/components/UserSessionsDialog.vue'
 import {
@@ -273,22 +245,14 @@ const userFormDialogRef = ref<InstanceType<typeof UserFormDialog>>()
 // API Keys 对话框状态
 const showApiKeysDialog = ref(false)
 const showUserSessionsDialog = ref(false)
-const showUserPlansDialog = ref(false)
 const showNewApiKeyDialog = ref(false)
 const showUserApiKeyFormDialog = ref(false)
 const selectedUser = ref<User | null>(null)
 const userApiKeys = ref<ApiKey[]>([])
 const userSessions = ref<UserSession[]>([])
-const userPlanEntitlements = ref<AdminUserPlanEntitlement[]>([])
-const availableBillingPlans = ref<BillingPlan[]>([])
-const selectedGrantPlanId = ref('')
-const grantReason = ref('')
 const newApiKey = ref('')
 const creatingApiKey = ref(false)
 const loadingUserSessions = ref(false)
-const loadingUserPlans = ref(false)
-const loadingBillingPlans = ref(false)
-const grantingUserPlan = ref(false)
 const sessionDialogActionLoading = ref<string | null>(null)
 const editingUserApiKey = ref<ApiKey | null>(null)
 const userApiKeyForm = ref<UserApiKeyFormState>({
@@ -374,10 +338,6 @@ const batchSelectionFilters = computed<UserBatchSelectionFilters>(() => {
   return filters
 })
 
-const grantableBillingPlans = computed(() =>
-  availableBillingPlans.value.filter((plan) => hasPackageEntitlement(plan.entitlements))
-)
-
 const hasUserFilters = computed(() =>
   Boolean(searchQuery.value.trim())
   || filterRole.value !== 'all'
@@ -397,7 +357,6 @@ const userRows = computed<UserManagementRow[]>(() =>
       isUnlimited: isUserUnlimited(user),
       hasWallet: Boolean(getUserWallet(user.id)),
       totalBalanceLabel: formatCurrencyValue(totalBalance, '-'),
-      packageBalanceLabel: formatCurrencyValue(getUserPackageBalance(user), '$0.00'),
       walletBalanceLabel: formatCurrencyValue(getUserWalletBalance(user), '$0.00'),
       consumedLabel: `$${getUserWalletConsumed(user).toFixed(2)}`,
       isNegativeBalance: isNegativeWalletValue(totalBalance),
@@ -537,51 +496,6 @@ function formatDate(dateString: string) {
   return new Date(dateString).toLocaleDateString(locale.value)
 }
 
-function formatDateTime(value?: string | null): string {
-  if (!value) return '-'
-  return new Date(value).toLocaleString(locale.value, {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-function formatPlanPrice(plan: BillingPlan): string {
-  return `${Number(plan.price_amount || 0).toFixed(2)} ${plan.price_currency || 'CNY'}`
-}
-
-function formatPlanDuration(plan: BillingPlan): string {
-  const labels: Record<string, string> = {
-    day: legacyT('天'),
-    month: legacyT('个月'),
-    year: legacyT('年'),
-    custom: legacyT('天'),
-  }
-  const unit = labels[plan.duration_unit] || legacyT('天')
-  return `${Number(plan.duration_value || 1)}${unit}`
-}
-
-function entitlementLabels(items: BillingEntitlement[] | undefined): string[] {
-  return (items || []).map((item) => {
-    if (item.type === 'wallet_credit') {
-      return `${legacyT('附赠余额')} $${Number(item.amount_usd || 0).toFixed(2)}`
-    }
-    if (item.type === 'daily_quota') {
-      return `${legacyT('每日额度')} $${Number(item.daily_quota_usd || 0).toFixed(2)}`
-    }
-    if (item.type === 'membership_group') {
-      return legacyT('会员权益')
-    }
-    return item.type
-  })
-}
-
-function hasPackageEntitlement(items: BillingEntitlement[] | undefined): boolean {
-  return (items || []).some((item) => item.type === 'daily_quota' || item.type === 'membership_group')
-}
-
 async function loadUserWallets(options: { cacheTtlMs?: number } = {}) {
   const requestId = ++userWalletsRequestId
   try {
@@ -627,20 +541,12 @@ function getUserWalletTotalBalance(user: User): number | null {
   if (!wallet) {
     return null
   }
-  if (typeof wallet.total_available_balance === 'number' && Number.isFinite(wallet.total_available_balance)) {
-    return wallet.total_available_balance
-  }
-  return getUserWalletBalance(user) + getUserPackageBalance(user)
+  return getUserWalletBalance(user)
 }
 
 function getUserWalletBalance(user: User): number {
   const wallet = getUserWallet(user.id)
   const value = wallet?.wallet_balance ?? wallet?.balance ?? 0
-  return Number.isFinite(value) ? value : 0
-}
-
-function getUserPackageBalance(user: User): number {
-  const value = getUserWallet(user.id)?.package_balance ?? 0
   return Number.isFinite(value) ? value : 0
 }
 
@@ -789,7 +695,7 @@ async function handleUserFormSubmit(data: UserFormData & { password?: string; un
         username: data.username,
         password: data.password ?? '',
         email: data.email || undefined,
-        initial_gift_usd: data.initial_gift_usd,
+        initial_balance_usd: data.initial_balance_usd,
         unlimited: data.unlimited,
         role: data.role,
         group_ids: data.group_ids ?? [],
@@ -839,70 +745,6 @@ async function manageUserSessions(user: User) {
     error(localizedApiError(err, '加载用户设备会话失败'), legacyT('加载用户设备会话失败'))
   } finally {
     loadingUserSessions.value = false
-  }
-}
-
-async function manageUserPlans(user: User) {
-  selectedUser.value = user
-  showUserPlansDialog.value = true
-  selectedGrantPlanId.value = ''
-  grantReason.value = ''
-  await Promise.all([
-    loadUserPlanEntitlements(user.id),
-    loadAvailableBillingPlans(),
-  ])
-  if (!selectedGrantPlanId.value && grantableBillingPlans.value.length > 0) {
-    selectedGrantPlanId.value = grantableBillingPlans.value[0].id
-  }
-}
-
-async function loadUserPlanEntitlements(userId: string) {
-  loadingUserPlans.value = true
-  try {
-    const response = await usersApi.listUserPlanEntitlements(userId)
-    userPlanEntitlements.value = response.items
-  } catch (err) {
-    error(localizedApiError(err, '加载用户套餐失败'), legacyT('加载用户套餐失败'))
-    userPlanEntitlements.value = []
-  } finally {
-    loadingUserPlans.value = false
-  }
-}
-
-async function loadAvailableBillingPlans() {
-  loadingBillingPlans.value = true
-  try {
-    const response = await adminBillingPlansApi.list()
-    availableBillingPlans.value = response.items
-    if (
-      selectedGrantPlanId.value
-      && !response.items.some((plan) => plan.id === selectedGrantPlanId.value)
-    ) {
-      selectedGrantPlanId.value = ''
-    }
-  } catch (err) {
-    error(localizedApiError(err, '加载套餐列表失败'), legacyT('加载套餐列表失败'))
-    availableBillingPlans.value = []
-  } finally {
-    loadingBillingPlans.value = false
-  }
-}
-
-async function grantPlanToSelectedUser() {
-  if (!selectedUser.value || !selectedGrantPlanId.value) return
-  grantingUserPlan.value = true
-  try {
-    const response = await usersApi.grantUserPlan(selectedUser.value.id, {
-      plan_id: selectedGrantPlanId.value,
-      reason: grantReason.value.trim() || null,
-    })
-    userPlanEntitlements.value = response.items
-    grantReason.value = ''
-    success(legacyT('套餐已发放'))
-  } catch (err) {
-    error(localizedApiError(err, '发放套餐失败'), legacyT('发放套餐失败'))
-  } finally {
-    grantingUserPlan.value = false
   }
 }
 

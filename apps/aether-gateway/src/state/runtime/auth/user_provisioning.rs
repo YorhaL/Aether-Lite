@@ -119,7 +119,7 @@ impl AppState {
         ldap_dn: Option<String>,
         ldap_username: Option<String>,
         logged_in_at: chrono::DateTime<chrono::Utc>,
-        initial_gift_usd: f64,
+        initial_balance_usd: f64,
         unlimited: bool,
     ) -> Result<Option<aether_data::repository::users::StoredUserAuthRecord>, GatewayError> {
         #[cfg(test)]
@@ -195,17 +195,16 @@ impl AppState {
             users.insert(user.id.clone(), user.clone());
             drop(users);
 
-            let gift_balance = if unlimited {
+            let balance = if unlimited {
                 0.0
             } else {
-                initial_gift_usd.max(0.0)
+                initial_balance_usd.max(0.0)
             };
             let wallet = aether_data::repository::wallet::StoredWalletSnapshot::new(
                 uuid::Uuid::new_v4().to_string(),
                 Some(user.id.clone()),
                 None,
-                0.0,
-                gift_balance,
+                balance,
                 if unlimited {
                     "unlimited".to_string()
                 } else {
@@ -214,9 +213,6 @@ impl AppState {
                 "USD".to_string(),
                 "active".to_string(),
                 0.0,
-                0.0,
-                0.0,
-                gift_balance,
                 logged_in_at.timestamp(),
             )
             .map_err(|err| GatewayError::Internal(err.to_string()))?;
@@ -235,7 +231,7 @@ impl AppState {
                 ldap_dn,
                 ldap_username,
                 logged_in_at,
-                initial_gift_usd,
+                initial_balance_usd,
                 unlimited,
             )
             .await
@@ -245,15 +241,15 @@ impl AppState {
     pub(crate) async fn initialize_auth_user_wallet(
         &self,
         user_id: &str,
-        initial_gift_usd: f64,
+        initial_balance_usd: f64,
         unlimited: bool,
     ) -> Result<Option<aether_data::repository::wallet::StoredWalletSnapshot>, GatewayError> {
         #[cfg(test)]
         if let Some(store) = self.auth_wallet_store.as_ref() {
-            let gift_balance = if unlimited {
+            let balance = if unlimited {
                 0.0
             } else {
-                initial_gift_usd.max(0.0)
+                initial_balance_usd.max(0.0)
             };
             let now_unix_secs = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -263,8 +259,7 @@ impl AppState {
                 uuid::Uuid::new_v4().to_string(),
                 Some(user_id.to_string()),
                 None,
-                0.0,
-                gift_balance,
+                balance,
                 if unlimited {
                     "unlimited".to_string()
                 } else {
@@ -273,9 +268,6 @@ impl AppState {
                 "USD".to_string(),
                 "active".to_string(),
                 0.0,
-                0.0,
-                0.0,
-                gift_balance,
                 now_unix_secs,
             )
             .map_err(|err| GatewayError::Internal(err.to_string()))?;
@@ -289,7 +281,7 @@ impl AppState {
 
         let wallet = self
             .data
-            .initialize_auth_user_wallet(user_id, initial_gift_usd, unlimited)
+            .initialize_auth_user_wallet(user_id, initial_balance_usd, unlimited)
             .await
             .map_err(|err| GatewayError::Internal(err.to_string()))?;
         if wallet.is_some() {
@@ -301,15 +293,15 @@ impl AppState {
     pub(crate) async fn initialize_auth_api_key_wallet(
         &self,
         api_key_id: &str,
-        initial_gift_usd: f64,
+        initial_balance_usd: f64,
         unlimited: bool,
     ) -> Result<Option<aether_data::repository::wallet::StoredWalletSnapshot>, GatewayError> {
         #[cfg(test)]
         if let Some(store) = self.auth_wallet_store.as_ref() {
-            let gift_balance = if unlimited {
+            let balance = if unlimited {
                 0.0
             } else {
-                initial_gift_usd.max(0.0)
+                initial_balance_usd.max(0.0)
             };
             let now_unix_secs = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -319,8 +311,7 @@ impl AppState {
                 uuid::Uuid::new_v4().to_string(),
                 None,
                 Some(api_key_id.to_string()),
-                0.0,
-                gift_balance,
+                balance,
                 if unlimited {
                     "unlimited".to_string()
                 } else {
@@ -329,9 +320,6 @@ impl AppState {
                 "USD".to_string(),
                 "active".to_string(),
                 0.0,
-                0.0,
-                0.0,
-                gift_balance,
                 now_unix_secs,
             )
             .map_err(|err| GatewayError::Internal(err.to_string()))?;
@@ -345,7 +333,7 @@ impl AppState {
 
         let wallet = self
             .data
-            .initialize_auth_api_key_wallet(api_key_id, initial_gift_usd, unlimited)
+            .initialize_auth_api_key_wallet(api_key_id, initial_balance_usd, unlimited)
             .await
             .map_err(|err| GatewayError::Internal(err.to_string()))?;
         if wallet.is_some() {
@@ -427,14 +415,10 @@ impl AppState {
         &self,
         user_id: &str,
         balance: f64,
-        gift_balance: f64,
         limit_mode: &str,
         currency: &str,
         status: &str,
-        total_recharged: f64,
         total_consumed: f64,
-        total_refunded: f64,
-        total_adjusted: f64,
         updated_at_unix_secs: Option<u64>,
     ) -> Result<Option<aether_data::repository::wallet::StoredWalletSnapshot>, GatewayError> {
         #[cfg(test)]
@@ -447,14 +431,10 @@ impl AppState {
                 return Ok(None);
             };
             wallet.balance = balance;
-            wallet.gift_balance = gift_balance;
             wallet.limit_mode = limit_mode.to_string();
             wallet.currency = currency.to_string();
             wallet.status = status.to_string();
-            wallet.total_recharged = total_recharged;
             wallet.total_consumed = total_consumed;
-            wallet.total_refunded = total_refunded;
-            wallet.total_adjusted = total_adjusted;
             if let Some(updated_at_unix_secs) = updated_at_unix_secs {
                 wallet.updated_at_unix_secs = updated_at_unix_secs;
             }
@@ -469,14 +449,10 @@ impl AppState {
             .update_auth_user_wallet_snapshot(
                 user_id,
                 balance,
-                gift_balance,
                 limit_mode,
                 currency,
                 status,
-                total_recharged,
                 total_consumed,
-                total_refunded,
-                total_adjusted,
                 updated_at_unix_secs,
             )
             .await
@@ -492,14 +468,10 @@ impl AppState {
         &self,
         api_key_id: &str,
         balance: f64,
-        gift_balance: f64,
         limit_mode: &str,
         currency: &str,
         status: &str,
-        total_recharged: f64,
         total_consumed: f64,
-        total_refunded: f64,
-        total_adjusted: f64,
         updated_at_unix_secs: Option<u64>,
     ) -> Result<Option<aether_data::repository::wallet::StoredWalletSnapshot>, GatewayError> {
         #[cfg(test)]
@@ -512,14 +484,10 @@ impl AppState {
                 return Ok(None);
             };
             wallet.balance = balance;
-            wallet.gift_balance = gift_balance;
             wallet.limit_mode = limit_mode.to_string();
             wallet.currency = currency.to_string();
             wallet.status = status.to_string();
-            wallet.total_recharged = total_recharged;
             wallet.total_consumed = total_consumed;
-            wallet.total_refunded = total_refunded;
-            wallet.total_adjusted = total_adjusted;
             if let Some(updated_at_unix_secs) = updated_at_unix_secs {
                 wallet.updated_at_unix_secs = updated_at_unix_secs;
             }
@@ -534,14 +502,10 @@ impl AppState {
             .update_auth_api_key_wallet_snapshot(
                 api_key_id,
                 balance,
-                gift_balance,
                 limit_mode,
                 currency,
                 status,
-                total_recharged,
                 total_consumed,
-                total_refunded,
-                total_adjusted,
                 updated_at_unix_secs,
             )
             .await

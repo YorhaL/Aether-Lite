@@ -5,10 +5,6 @@ use crate::handlers::admin::provider::shared::paths::{
 use crate::handlers::admin::provider::shared::payloads::{
     AdminProviderCreateRequest, AdminProviderUpdatePatch,
 };
-use crate::handlers::admin::provider::write::provider::{
-    reconcile_admin_fixed_provider_template_endpoints,
-    reconcile_admin_fixed_provider_template_endpoints_after_update,
-};
 use crate::handlers::admin::request::{AdminAppState, AdminRequestContext};
 use crate::handlers::admin::shared::attach_admin_audit_response;
 use crate::GatewayError;
@@ -76,12 +72,6 @@ pub(crate) async fn maybe_build_local_admin_provider_writes_response(
             return Ok(Some(build_admin_providers_data_unavailable_response()));
         };
 
-        if state
-            .fixed_provider_template(&created_provider.provider_type)
-            .is_some()
-        {
-            reconcile_admin_fixed_provider_template_endpoints(state, &created_provider).await?;
-        }
         return Ok(Some(attach_admin_audit_response(
             Json(json!({
                 "id": created_provider.id,
@@ -157,17 +147,6 @@ pub(crate) async fn maybe_build_local_admin_provider_writes_response(
         else {
             return Ok(Some(build_admin_providers_data_unavailable_response()));
         };
-        if state
-            .fixed_provider_template(&updated_record.provider_type)
-            .is_some()
-        {
-            reconcile_admin_fixed_provider_template_endpoints_after_update(
-                state,
-                &existing_provider,
-                &updated_record,
-            )
-            .await?;
-        }
         return Ok(Some(
             match state
                 .build_admin_provider_summary_payload(&provider_id)

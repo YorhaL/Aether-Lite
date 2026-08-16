@@ -36,7 +36,7 @@ const DAY_2_UNIX_SECS: i64 = 1_711_086_400;
 
 fn admin_request(builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
     builder
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")

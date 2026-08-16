@@ -5,20 +5,14 @@ import {
   BarChart3,
   Box,
   Cog,
-  CreditCard,
-  Database,
   FileUp,
   FolderTree,
-  Gift,
   Gauge,
   Home,
   Key,
   KeyRound,
   Layers,
-  Package,
   Puzzle,
-  Send,
-  Server,
   Shield,
   SlidersHorizontal,
   Users,
@@ -47,11 +41,7 @@ const moduleIconMap: Record<string, LucideIcon> = {
   FileUp,
   Shield,
   Puzzle,
-  Server,
-  Send,
   SlidersHorizontal,
-  CreditCard,
-  Gift,
 }
 
 function activeModuleItems(modules: ModuleRecord, group: string): NavItem[] {
@@ -71,7 +61,7 @@ export function buildNavigation(options: {
   isModuleActive: (name: string) => boolean
   t?: Translate
 }): NavigationGroup[] {
-  const { canAccessAdmin, modules, isModuleActive } = options
+  const { canAccessAdmin, modules } = options
   const t = options.t ?? ((key: MessageKey) => key)
 
   if (!canAccessAdmin) {
@@ -94,8 +84,6 @@ export function buildNavigation(options: {
         title: t('nav.group.account'),
         items: [
           { name: t('nav.walletCenter'), href: '/dashboard/wallet', icon: Wallet },
-          { name: t('nav.billingCenter'), href: '/dashboard/billing', icon: Package },
-          ...(isModuleActive('referral') ? [{ name: t('nav.myReferral'), href: '/dashboard/referral', icon: Gift }] : []),
           { name: t('nav.usageStats'), href: '/dashboard/usage', icon: BarChart3 },
         ]
       }
@@ -129,10 +117,8 @@ export function buildNavigation(options: {
         { name: t('nav.providers'), href: '/admin/providers', icon: FolderTree },
         { name: t('nav.modelManagement'), href: '/admin/models', icon: Layers },
         { name: t('nav.routing'), href: '/admin/routing', icon: SlidersHorizontal },
-        { name: t('nav.pool'), href: '/admin/pool', icon: Database },
         { name: t('nav.standaloneKeys'), href: '/admin/keys', icon: Key },
         { name: t('nav.walletManagement'), href: '/admin/wallets', icon: Wallet },
-        { name: t('nav.billingManagement'), href: '/admin/billing-plans', icon: Package },
         ...activeModuleItems(modules, 'management'),
         { name: t('nav.asyncTasks'), href: '/admin/async-tasks', icon: Zap },
         { name: t('nav.usageRecords'), href: '/admin/usage', icon: BarChart3 },

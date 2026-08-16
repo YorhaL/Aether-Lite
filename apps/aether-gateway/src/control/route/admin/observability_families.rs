@@ -23,33 +23,6 @@ pub(super) fn classify_admin_observability_family_route(
     } else if method == http::Method::POST
         && matches!(
             normalized_path,
-            "/api/admin/provider-query/test-model" | "/api/admin/provider-query/test-model/"
-        )
-    {
-        Some(classified(
-            "admin_proxy",
-            "provider_query_manage",
-            "test_model",
-            "admin:provider_query",
-            false,
-        ))
-    } else if method == http::Method::POST
-        && matches!(
-            normalized_path,
-            "/api/admin/provider-query/test-model-failover"
-                | "/api/admin/provider-query/test-model-failover/"
-        )
-    {
-        Some(classified(
-            "admin_proxy",
-            "provider_query_manage",
-            "test_model_failover",
-            "admin:provider_query",
-            false,
-        ))
-    } else if method == http::Method::POST
-        && matches!(
-            normalized_path,
             "/api/admin/security/ip/blacklist" | "/api/admin/security/ip/blacklist/"
         )
     {
@@ -217,128 +190,6 @@ pub(super) fn classify_admin_observability_family_route(
     } else if method == http::Method::GET
         && matches!(
             normalized_path,
-            "/api/admin/pool/overview" | "/api/admin/pool/overview/"
-        )
-    {
-        Some(classified(
-            "admin_proxy",
-            "pool_manage",
-            "overview",
-            "admin:pool",
-            false,
-        ))
-    } else if method == http::Method::GET
-        && matches!(
-            normalized_path,
-            "/api/admin/pool/scheduling-presets" | "/api/admin/pool/scheduling-presets/"
-        )
-    {
-        Some(classified(
-            "admin_proxy",
-            "pool_manage",
-            "scheduling_presets",
-            "admin:pool",
-            false,
-        ))
-    } else if method == http::Method::GET
-        && normalized_path_no_trailing.starts_with("/api/admin/pool/")
-        && normalized_path_no_trailing.ends_with("/keys")
-        && normalized_path_no_trailing.matches('/').count() == 5
-    {
-        Some(classified(
-            "admin_proxy",
-            "pool_manage",
-            "list_keys",
-            "admin:pool",
-            false,
-        ))
-    } else if method == http::Method::GET
-        && normalized_path_no_trailing.starts_with("/api/admin/pool/")
-        && normalized_path_no_trailing.ends_with("/scores")
-        && normalized_path_no_trailing.matches('/').count() == 5
-    {
-        Some(classified(
-            "admin_proxy",
-            "pool_manage",
-            "scores",
-            "admin:pool",
-            false,
-        ))
-    } else if method == http::Method::POST
-        && normalized_path_no_trailing.starts_with("/api/admin/pool/")
-        && normalized_path_no_trailing.ends_with("/keys/batch-import")
-        && normalized_path_no_trailing.matches('/').count() == 6
-    {
-        Some(classified(
-            "admin_proxy",
-            "pool_manage",
-            "batch_import_keys",
-            "admin:pool",
-            false,
-        ))
-    } else if method == http::Method::POST
-        && normalized_path_no_trailing.starts_with("/api/admin/pool/")
-        && normalized_path_no_trailing.ends_with("/keys/batch-action")
-        && normalized_path_no_trailing.matches('/').count() == 6
-    {
-        Some(classified(
-            "admin_proxy",
-            "pool_manage",
-            "batch_action_keys",
-            "admin:pool",
-            false,
-        ))
-    } else if method == http::Method::PATCH
-        && normalized_path_no_trailing.starts_with("/api/admin/pool/")
-        && normalized_path_no_trailing.ends_with("/keys/batch-update")
-        && normalized_path_no_trailing.matches('/').count() == 6
-    {
-        Some(classified(
-            "admin_proxy",
-            "pool_manage",
-            "batch_update_keys",
-            "admin:pool",
-            false,
-        ))
-    } else if method == http::Method::POST
-        && normalized_path_no_trailing.starts_with("/api/admin/pool/")
-        && normalized_path_no_trailing.ends_with("/keys/resolve-selection")
-        && normalized_path_no_trailing.matches('/').count() == 6
-    {
-        Some(classified(
-            "admin_proxy",
-            "pool_manage",
-            "resolve_selection",
-            "admin:pool",
-            false,
-        ))
-    } else if method == http::Method::GET
-        && normalized_path_no_trailing.starts_with("/api/admin/pool/")
-        && normalized_path_no_trailing.contains("/keys/batch-delete-task/")
-        && normalized_path_no_trailing.matches('/').count() == 7
-    {
-        Some(classified(
-            "admin_proxy",
-            "pool_manage",
-            "batch_delete_task_status",
-            "admin:pool",
-            false,
-        ))
-    } else if method == http::Method::POST
-        && normalized_path_no_trailing.starts_with("/api/admin/pool/")
-        && normalized_path_no_trailing.ends_with("/keys/cleanup-banned")
-        && normalized_path_no_trailing.matches('/').count() == 6
-    {
-        Some(classified(
-            "admin_proxy",
-            "pool_manage",
-            "cleanup_banned_keys",
-            "admin:pool",
-            false,
-        ))
-    } else if method == http::Method::GET
-        && matches!(
-            normalized_path,
             "/api/admin/usage/aggregation/stats" | "/api/admin/usage/aggregation/stats/"
         )
     {
@@ -476,19 +327,6 @@ pub(super) fn classify_admin_observability_family_route(
             "usage_manage",
             "detail",
             "admin:usage",
-            false,
-        ))
-    } else if method == http::Method::GET
-        && matches!(
-            normalized_path,
-            "/api/admin/stats/providers/quota-usage" | "/api/admin/stats/providers/quota-usage/"
-        )
-    {
-        Some(classified(
-            "admin_proxy",
-            "stats_manage",
-            "provider_quota_usage",
-            "admin:stats",
             false,
         ))
     } else if method == http::Method::GET

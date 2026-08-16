@@ -9,20 +9,17 @@ pub fn provider_matches_allowed_value(
     allowed_value: &str,
     provider_id: &str,
     provider_name: &str,
-    provider_type: &str,
 ) -> bool {
     let allowed_value = allowed_value.trim();
     !allowed_value.is_empty()
         && (allowed_value.eq_ignore_ascii_case(provider_id.trim())
-            || allowed_value.eq_ignore_ascii_case(provider_name.trim())
-            || allowed_value.eq_ignore_ascii_case(provider_type.trim()))
+            || allowed_value.eq_ignore_ascii_case(provider_name.trim()))
 }
 
 pub fn auth_constraints_allow_provider(
     constraints: Option<&SchedulerAuthConstraints>,
     provider_id: &str,
     provider_name: &str,
-    provider_type: &str,
 ) -> bool {
     let Some(allowed) =
         constraints.and_then(|constraints| constraints.allowed_providers.as_deref())
@@ -30,9 +27,9 @@ pub fn auth_constraints_allow_provider(
         return true;
     };
 
-    allowed.iter().any(|value| {
-        provider_matches_allowed_value(value, provider_id, provider_name, provider_type)
-    })
+    allowed
+        .iter()
+        .any(|value| provider_matches_allowed_value(value, provider_id, provider_name))
 }
 
 pub fn auth_constraints_allow_api_format(
@@ -118,17 +115,9 @@ mod tests {
             Some(&constraints),
             "provider-1",
             "other",
-            "other",
         ));
         assert!(auth_constraints_allow_provider(
             Some(&constraints),
-            "other",
-            "openai",
-            "other",
-        ));
-        assert!(auth_constraints_allow_provider(
-            Some(&constraints),
-            "other",
             "other",
             "openai",
         ));
@@ -136,23 +125,6 @@ mod tests {
             Some(&constraints),
             "other",
             "other",
-            "other",
-        ));
-    }
-
-    #[test]
-    fn provider_allowed_value_matches_type() {
-        assert!(provider_matches_allowed_value(
-            "openai",
-            "provider-1",
-            "OpenAI Pool",
-            "openai",
-        ));
-        assert!(!provider_matches_allowed_value(
-            "claude",
-            "provider-1",
-            "OpenAI Pool",
-            "openai",
         ));
     }
 
@@ -162,43 +134,36 @@ mod tests {
             "claude",
             "provider-1",
             "Claude",
-            "custom",
         ));
         assert!(provider_matches_allowed_value(
             "CLAUDE",
             "provider-1",
             "Claude",
-            "custom",
         ));
         assert!(provider_matches_allowed_value(
             "provider-1",
             "provider-1",
             "Other",
-            "claude",
         ));
         assert!(!provider_matches_allowed_value(
             "vendor-x",
             "provider-1",
             "Other",
-            "claude",
         ));
         assert!(!provider_matches_allowed_value(
             "claude",
             "provider-1",
             "OtherVendor",
-            "custom",
         ));
         assert!(!provider_matches_allowed_value(
             "provider-1:extra",
             "provider-1",
             "Other",
-            "claude",
         ));
         assert!(!provider_matches_allowed_value(
             "openai:responses",
             "provider-1",
             "Other",
-            "claude",
         ));
     }
 

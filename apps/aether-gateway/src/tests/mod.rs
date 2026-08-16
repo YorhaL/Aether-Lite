@@ -9,7 +9,6 @@ pub(super) use http::header::{HeaderName, HeaderValue};
 pub(super) use http::StatusCode;
 pub(super) use serde_json::json;
 
-mod ai_execute;
 mod architecture;
 mod async_task;
 mod audit;
@@ -17,11 +16,9 @@ mod concurrency;
 mod control;
 mod files;
 mod frontdoor;
-mod proxy;
 mod usage;
 mod video;
 
-pub(super) use super::async_task::VideoTaskTruthSourceMode;
 pub(super) use super::constants::*;
 pub(super) use super::fallback_metrics::{GatewayFallbackMetricKind, GatewayFallbackReason};
 pub(super) use super::rate_limit::FrontdoorUserRpmConfig;

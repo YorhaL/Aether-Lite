@@ -2,9 +2,7 @@ use crate::handlers::admin::request::{AdminAppState, AdminRequestContext};
 use crate::handlers::admin::shared::{
     attach_admin_audit_response, query_param_value, unix_secs_to_rfc3339,
 };
-use crate::task_runtime::{
-    self, set_cancel_signal, TASK_KEY_PROVIDER_DELETE, TASK_KEY_PROVIDER_OAUTH_BATCH_IMPORT,
-};
+use crate::task_runtime::{self, set_cancel_signal, TASK_KEY_PROVIDER_DELETE};
 use crate::GatewayError;
 use aether_data_contracts::repository::background_tasks::{
     BackgroundTaskKind, BackgroundTaskListQuery, BackgroundTaskStatus,
@@ -315,17 +313,6 @@ pub(super) async fn maybe_build_local_admin_background_tasks_response(
                     "background_task",
                     task_key,
                 )));
-            }
-            if task_key == TASK_KEY_PROVIDER_OAUTH_BATCH_IMPORT {
-                return Ok(Some(
-                    (
-                        http::StatusCode::BAD_REQUEST,
-                        Json(json!({
-                            "detail": "请使用 provider oauth batch import 专用接口触发该任务",
-                        })),
-                    )
-                        .into_response(),
-                ));
             }
             return Ok(Some(
                 (

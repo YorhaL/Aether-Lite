@@ -5,7 +5,6 @@ use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use aether_ai_serving::AiCandidatePreselectionOutcome;
-use aether_ai_serving::AiCandidateResolutionMode;
 use aether_routing_core::ResolvedRoutingPolicy;
 use aether_runtime::{MetricKind, MetricSample};
 use aether_scheduler_core::{
@@ -115,7 +114,6 @@ enum CandidatePageAuthIdentity {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct CandidateResolvedPageCacheKey {
     page_key: CandidatePageCacheKey,
-    resolution_mode: &'static str,
 }
 
 impl CandidateRowPageCacheKey {
@@ -205,7 +203,6 @@ impl CandidateResolvedPageCacheKey {
         use_api_format_alias_match: bool,
         client_session_affinity: Option<&ClientSessionAffinity>,
         model_directive_policy_hash: &str,
-        resolution_mode: AiCandidateResolutionMode,
     ) -> Self {
         Self {
             page_key: CandidatePageCacheKey::new(
@@ -223,7 +220,6 @@ impl CandidateResolvedPageCacheKey {
                 client_session_affinity,
                 model_directive_policy_hash,
             ),
-            resolution_mode: resolution_mode_name(resolution_mode),
         }
     }
 }
@@ -516,13 +512,6 @@ fn sha256_hex(value: impl AsRef<[u8]>) -> String {
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-fn resolution_mode_name(mode: AiCandidateResolutionMode) -> &'static str {
-    match mode {
-        AiCandidateResolutionMode::Standard => "standard",
-        AiCandidateResolutionMode::WithoutTransportPairGate => "without_transport_pair_gate",
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -738,7 +727,6 @@ mod tests {
             true,
             None,
             "policy-a",
-            AiCandidateResolutionMode::Standard,
         );
         let resolved_same_policy = CandidateResolvedPageCacheKey::new(
             "gpt-4o",
@@ -754,7 +742,6 @@ mod tests {
             true,
             None,
             "policy-a",
-            AiCandidateResolutionMode::Standard,
         );
         let resolved_different_policy = CandidateResolvedPageCacheKey::new(
             "gpt-4o",
@@ -770,7 +757,6 @@ mod tests {
             true,
             None,
             "policy-b",
-            AiCandidateResolutionMode::Standard,
         );
         assert_eq!(resolved_base, resolved_same_policy);
         assert_ne!(resolved_base, resolved_different_policy);

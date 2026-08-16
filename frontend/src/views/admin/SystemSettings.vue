@@ -46,22 +46,10 @@
             @file-select="handleDataFileSelect"
           />
 
-          <!-- 网络代理 -->
-          <ProxyConfigSection
-            id="section-proxy"
-            :proxy-node-id="systemConfig.system_proxy_node_id"
-            :online-nodes="proxyNodesStore.onlineNodes"
-            :all-nodes="proxyNodesStore.nodes"
-            :loading="systemConfigLoading || proxyConfigLoading"
-            :has-changes="hasProxyConfigChanges"
-            @save="saveProxyConfig"
-            @update:proxy-node-id="systemConfig.system_proxy_node_id = $event"
-          />
-
           <!-- 基础配置 -->
           <BasicConfigSection
             id="section-basic"
-            :default-user-initial-gift-usd="systemConfig.default_user_initial_gift_usd"
+            :default-user-initial-balance-usd="systemConfig.default_user_initial_balance_usd"
             :rate-limit-per-minute="systemConfig.rate_limit_per_minute"
             :daily-usage-limit-usd="systemConfig.daily_usage_limit_usd"
             :enable-registration="systemConfig.enable_registration"
@@ -71,24 +59,18 @@
             :turnstile-secret-key="systemConfig.turnstile_secret_key"
             :turnstile-secret-configured="systemConfig.turnstile_secret_key_is_set"
             :turnstile-allowed-hostnames-str="turnstileAllowedHostnamesStr"
-            :referral-enabled="systemConfig.referral_enabled"
-            :referral-reward-mode="systemConfig.referral_reward_mode"
-            :referral-recharge-percent="systemConfig.referral_recharge_percent"
-            :referral-headcount-amount-usd="systemConfig.referral_headcount_amount_usd"
-            :referral-headcount-trigger="systemConfig.referral_headcount_trigger"
             :registration-privacy-policy-enabled="systemConfig.registration_privacy_policy_enabled"
             :registration-privacy-policy-format="systemConfig.registration_privacy_policy_format"
             :registration-privacy-policy-content="systemConfig.registration_privacy_policy_content"
             :registration-privacy-policy-version="systemConfig.registration_privacy_policy_version"
             :auto-delete-expired-keys="systemConfig.auto_delete_expired_keys"
-            :enable-format-conversion="systemConfig.enable_format_conversion"
             :enable-openai-image-sync-heartbeat="systemConfig.enable_openai_image_sync_heartbeat"
             :enable-standard-text-sync-heartbeat="systemConfig.enable_standard_text_sync_heartbeat"
             :cyber-continue-failover="systemConfig.cyber_continue_failover"
             :loading="systemConfigLoading || basicConfigLoading"
             :has-changes="hasBasicConfigChanges"
             @save="saveBasicConfig"
-            @update:default-user-initial-gift-usd="systemConfig.default_user_initial_gift_usd = $event"
+            @update:default-user-initial-balance-usd="systemConfig.default_user_initial_balance_usd = $event"
             @update:rate-limit-per-minute="systemConfig.rate_limit_per_minute = $event"
             @update:daily-usage-limit-usd="systemConfig.daily_usage_limit_usd = $event"
             @update:enable-registration="systemConfig.enable_registration = $event"
@@ -98,17 +80,11 @@
             @update:turnstile-secret-key="systemConfig.turnstile_secret_key = $event"
             @update:turnstile-allowed-hostnames-str="turnstileAllowedHostnamesStr = $event"
             @clear-turnstile-secret="clearTurnstileSecret"
-            @update:referral-enabled="systemConfig.referral_enabled = $event"
-            @update:referral-reward-mode="systemConfig.referral_reward_mode = $event"
-            @update:referral-recharge-percent="systemConfig.referral_recharge_percent = $event"
-            @update:referral-headcount-amount-usd="systemConfig.referral_headcount_amount_usd = $event"
-            @update:referral-headcount-trigger="systemConfig.referral_headcount_trigger = $event"
             @update:registration-privacy-policy-enabled="systemConfig.registration_privacy_policy_enabled = $event"
             @update:registration-privacy-policy-format="systemConfig.registration_privacy_policy_format = $event"
             @update:registration-privacy-policy-content="systemConfig.registration_privacy_policy_content = $event"
             @update:registration-privacy-policy-version="systemConfig.registration_privacy_policy_version = $event"
             @update:auto-delete-expired-keys="systemConfig.auto_delete_expired_keys = $event"
-            @update:enable-format-conversion="systemConfig.enable_format_conversion = $event"
             @update:enable-openai-image-sync-heartbeat="systemConfig.enable_openai_image_sync_heartbeat = $event"
             @update:enable-standard-text-sync-heartbeat="systemConfig.enable_standard_text_sync_heartbeat = $event"
             @update:cyber-continue-failover="systemConfig.cyber_continue_failover = $event"
@@ -138,9 +114,6 @@
             :audit-log-retention-days="systemConfig.audit_log_retention_days"
             :request-candidates-retention-days="systemConfig.request_candidates_retention_days"
             :request-candidates-cleanup-batch-size="systemConfig.request_candidates_cleanup_batch_size"
-            :proxy-node-metrics-1m-retention-days="systemConfig.proxy_node_metrics_1m_retention_days"
-            :proxy-node-metrics-1h-retention-days="systemConfig.proxy_node_metrics_1h_retention_days"
-            :proxy-node-metrics-cleanup-batch-size="systemConfig.proxy_node_metrics_cleanup_batch_size"
             :loading="systemConfigLoading || cleanupConfigLoading"
             :has-changes="hasCleanupConfigChanges"
             @save="saveCleanupConfig"
@@ -153,15 +126,6 @@
             @update:audit-log-retention-days="systemConfig.audit_log_retention_days = $event"
             @update:request-candidates-retention-days="systemConfig.request_candidates_retention_days = $event"
             @update:request-candidates-cleanup-batch-size="systemConfig.request_candidates_cleanup_batch_size = $event"
-            @update:proxy-node-metrics-1m-retention-days="systemConfig.proxy_node_metrics_1m_retention_days = $event"
-            @update:proxy-node-metrics-1h-retention-days="systemConfig.proxy_node_metrics_1h_retention_days = $event"
-            @update:proxy-node-metrics-cleanup-batch-size="systemConfig.proxy_node_metrics_cleanup_batch_size = $event"
-          />
-
-          <!-- 定时任务 -->
-          <ScheduledTasksSection
-            id="section-scheduled"
-            :scheduled-tasks="scheduledTasks"
           />
 
           <!-- 系统版本信息 -->
@@ -259,21 +223,17 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { PageHeader, PageContainer } from '@/components/layout'
-import { useProxyNodesStore } from '@/stores/proxy-nodes'
 
 // Composables
 import { useSystemConfig } from './system-settings/composables/useSystemConfig'
 import { useConfigExportImport } from './system-settings/composables/useConfigExportImport'
-import { useScheduledTasks } from './system-settings/composables/useScheduledTasks'
 
 // Section components
 import SiteInfoSection from './system-settings/SiteInfoSection.vue'
 import DataManagementSection from './system-settings/DataManagementSection.vue'
-import ProxyConfigSection from './system-settings/ProxyConfigSection.vue'
 import BasicConfigSection from './system-settings/BasicConfigSection.vue'
 import RequestLogSection from './system-settings/RequestLogSection.vue'
 import CleanupPolicySection from './system-settings/CleanupPolicySection.vue'
-import ScheduledTasksSection from './system-settings/ScheduledTasksSection.vue'
 import SystemInfoSection from './system-settings/SystemInfoSection.vue'
 
 // Dialog components
@@ -281,17 +241,13 @@ import ConfigImportDialog from './system-settings/ConfigImportDialog.vue'
 import UsersImportDialog from './system-settings/UsersImportDialog.vue'
 import AggregateImportDialog from './system-settings/AggregateImportDialog.vue'
 
-const proxyNodesStore = useProxyNodesStore()
-
 // TOC 目录导航
 const tocItems = [
   { id: 'section-site-info', label: '站点信息' },
   { id: 'section-data-mgmt', label: '数据管理' },
-  { id: 'section-proxy', label: '网络代理' },
   { id: 'section-basic', label: '基础配置' },
   { id: 'section-request-log', label: '请求记录' },
   { id: 'section-cleanup', label: '记录清理策略' },
-  { id: 'section-scheduled', label: '定时任务' },
   { id: 'section-sysinfo', label: '系统信息' },
 ]
 
@@ -348,12 +304,10 @@ const {
   systemVersion,
   systemConfigLoading,
   siteInfoLoading,
-  proxyConfigLoading,
   basicConfigLoading,
   logConfigLoading,
   cleanupConfigLoading,
   hasSiteInfoChanges,
-  hasProxyConfigChanges,
   hasBasicConfigChanges,
   hasLogConfigChanges,
   hasCleanupConfigChanges,
@@ -362,7 +316,6 @@ const {
   loadSystemConfig,
   loadSystemVersion,
   saveSiteInfo,
-  saveProxyConfig,
   saveBasicConfig,
   clearTurnstileSecret,
   saveLogConfig,
@@ -432,20 +385,11 @@ function handleDataFileSelect(kind: DataManagementKind, event: Event) {
   }
 }
 
-// Scheduled tasks composable
-const {
-  scheduledTasks,
-  initPreviousValues,
-} = useScheduledTasks(systemConfig)
-
 onMounted(async () => {
   await Promise.all([
     loadSystemConfig(),
     loadSystemVersion(),
-    proxyNodesStore.ensureLoaded(),
   ])
-  // 配置加载完成后初始化定时任务的原始值
-  initPreviousValues()
   await nextTick()
   setupScrollSpy()
 })

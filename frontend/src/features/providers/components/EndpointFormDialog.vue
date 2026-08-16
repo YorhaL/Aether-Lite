@@ -35,83 +35,7 @@
                   停用
                 </Badge>
               </div>
-              <div
-                v-if="!isEndpointConfigReadOnly"
-                class="flex items-center gap-1.5"
-              >
-                <!-- 格式转换按钮 -->
-                <span
-                  class="mr-1"
-                  :title="isEndpointFormatConversionDisabled ? formatConversionDisabledTooltip : (endpoint.format_acceptance_config?.enabled ? '已启用格式转换（点击关闭）' : '启用格式转换')"
-                >
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    :class="`h-7 w-7 ${endpoint.format_acceptance_config?.enabled ? 'text-primary' : ''} ${isEndpointFormatConversionDisabled ? 'opacity-50' : ''}`"
-                    :disabled="togglingFormatEndpointId === endpoint.id || isEndpointFormatConversionDisabled"
-                    @click="handleToggleFormatConversion(endpoint)"
-                  >
-                    <Shuffle class="w-3.5 h-3.5" />
-                  </Button>
-                </span>
-                <!-- 端点代理 -->
-                <Popover
-                  :open="endpointProxyPopoverOpen[endpoint.id] || false"
-                  @update:open="(open: boolean) => handleEndpointProxyPopoverToggle(endpoint.id, open)"
-                >
-                  <PopoverTrigger as-child>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      class="h-7 w-7"
-                      :class="endpointProxyNodeId(endpoint) ? 'text-blue-500' : ''"
-                      :disabled="savingEndpointId === endpoint.id"
-                      :title="getEndpointProxyTitle(endpoint)"
-                    >
-                      <Globe class="w-3.5 h-3.5" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    class="w-72 p-3 !z-[90]"
-                    side="bottom"
-                    align="end"
-                  >
-                    <div class="space-y-2">
-                      <div class="flex items-center justify-between">
-                        <span class="text-xs font-medium">端点代理节点</span>
-                        <Button
-                          v-if="endpointProxyNodeId(endpoint)"
-                          variant="ghost"
-                          size="sm"
-                          class="h-6 px-2 text-[10px] text-muted-foreground"
-                          :disabled="savingEndpointId === endpoint.id"
-                          @click="clearEndpointProxy(endpoint)"
-                        >
-                          清除
-                        </Button>
-                      </div>
-                      <ProxyNodeSelect
-                        :model-value="endpointProxyNodeId(endpoint)"
-                        trigger-class="h-8"
-                        @update:model-value="setEndpointProxy(endpoint, $event)"
-                      />
-                      <p class="text-[10px] text-muted-foreground">
-                        {{ endpointProxyNodeId(endpoint) ? '当前使用端点级代理' : '未设置时按提供商代理、系统代理继续兜底' }}
-                      </p>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-                <!-- 上游流式三态按钮 -->
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  :class="getUpstreamStreamButtonClass(endpoint)"
-                  :title="getUpstreamStreamTooltip(endpoint)"
-                  :disabled="savingEndpointId === endpoint.id || isUpstreamStreamPolicyLocked(endpoint)"
-                  @click="handleCycleUpstreamStream(endpoint)"
-                >
-                  <Radio class="w-3.5 h-3.5" />
-                </Button>
+              <div class="flex items-center gap-1.5">
                 <!-- 启用/停用 -->
                 <Button
                   variant="ghost"
@@ -125,7 +49,6 @@
                 </Button>
                 <!-- 删除 -->
                 <Button
-                  v-if="!isFixedProvider"
                   variant="ghost"
                   size="icon"
                   class="h-7 w-7 hover:text-destructive"
@@ -148,7 +71,6 @@
                     <Input
                       :model-value="getEndpointEditState(endpoint.id)?.url ?? endpoint.base_url"
                       :placeholder="getEndpointBaseUrlPlaceholder(endpoint.api_format)"
-                      :disabled="isFixedProvider"
                       @update:model-value="(v) => updateEndpointField(endpoint.id, 'url', v)"
                     />
                   </div>
@@ -170,7 +92,7 @@
                 </div>
                 <!-- 保存/撤销按钮（URL/路径有修改时显示） -->
                 <div
-                  v-if="!isEndpointConfigReadOnly && hasUrlChanges(endpoint)"
+                  v-if="hasUrlChanges(endpoint)"
                   class="flex items-center gap-1 shrink-0"
                 >
                   <Button
@@ -197,7 +119,6 @@
 
               <!-- 请求/响应规则（请求头、请求体和响应头规则） -->
               <Collapsible
-                v-if="!isEndpointConfigReadOnly"
                 v-model:open="endpointRulesExpanded[endpoint.id]"
               >
                 <div class="flex items-center gap-2">
@@ -296,18 +217,6 @@
                     >
                       <Plus class="w-3 h-3 mr-1" />
                       响应头
-                    </Button>
-                    <Button
-                      v-if="isFixedProvider && hasDefaultBodyRules(endpoint.api_format)"
-                      variant="ghost"
-                      size="sm"
-                      class="h-7 text-xs px-2"
-                      title="重置请求体"
-                      :disabled="resettingDefaultRulesEndpointId === endpoint.id"
-                      @click="handleResetBodyRulesToDefault(endpoint)"
-                    >
-                      <RotateCcw class="w-3 h-3 mr-1" />
-                      重置请求体
                     </Button>
                   </div>
                 </div>
@@ -923,7 +832,7 @@
 
       <!-- 添加新端点 -->
       <div
-        v-if="!isFixedProvider && availableFormats.length > 0"
+        v-if="availableFormats.length > 0"
         class="rounded-lg border border-dashed p-3"
       >
         <!-- 卡片头部：API 格式选择 + 添加按钮 -->
@@ -1043,17 +952,14 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from '@/components/ui'
-import { Settings, Trash2, Check, X, Power, ChevronRight, Plus, Shuffle, RotateCcw, Radio, CheckCircle, Save, Filter, HelpCircle, GripVertical, Globe, Code2, AlignLeft } from 'lucide-vue-next'
+import { Settings, Trash2, Check, X, Power, ChevronRight, Plus, RotateCcw, CheckCircle, Save, Filter, HelpCircle, GripVertical, Code2, AlignLeft } from 'lucide-vue-next'
 import { useToast } from '@/composables/useToast'
 import { parseApiError } from '@/utils/errorParser'
 import { log } from '@/utils/logger'
 import { useI18n } from '@/i18n'
 import AlertDialog from '@/components/common/AlertDialog.vue'
 import EndpointConditionEditor from './EndpointConditionEditor.vue'
-import ProxyNodeSelect from './ProxyNodeSelect.vue'
 import { getDefaultEndpointBaseUrl, getDefaultEndpointPath } from './endpoint-default-paths'
-import { fixedEndpointUpstreamStreamPolicy } from './endpoint-protocol-policy'
-import { useProxyNodesStore } from '@/stores/proxy-nodes'
 import {
   createEndpoint,
   getDefaultBodyRules,
@@ -1106,11 +1012,10 @@ interface EditableBodyRule {
   condition: EditableConditionNode | null
 }
 
-// 端点编辑状态（仅 URL、路径、规则，格式转换是直接保存的）
+// 端点编辑状态（仅 URL、路径和规则）
 interface EndpointEditState {
   url: string
   path: string
-  upstreamStreamPolicy: string
   rules: EditableRule[]
   responseRules: EditableRule[]
   bodyRules: EditableBodyRule[]
@@ -1126,8 +1031,6 @@ const props = defineProps<{
   modelValue: boolean
   provider: ProviderWithEndpointsSummary | null
   endpoints?: ProviderEndpoint[]
-  systemFormatConversionEnabled?: boolean
-  providerFormatConversionEnabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -1136,24 +1039,7 @@ const emit = defineEmits<{
   'endpointUpdated': []
 }>()
 
-// 计算端点级格式转换是否应该被禁用
-const isEndpointFormatConversionDisabled = computed(() => {
-  return props.systemFormatConversionEnabled || props.providerFormatConversionEnabled
-})
-
-// 获取禁用提示
-const formatConversionDisabledTooltip = computed(() => {
-  if (props.systemFormatConversionEnabled) {
-    return legacyT('请先关闭系统级开关')
-  }
-  if (props.providerFormatConversionEnabled) {
-    return legacyT('请先关闭提供商级开关')
-  }
-  return ''
-})
-
 const { success, error: showError } = useToast()
-const proxyNodesStore = useProxyNodesStore()
 const { legacyT, locale } = useI18n()
 
 function localizedApiError(error: unknown, fallback: string): string {
@@ -1420,12 +1306,9 @@ function handleBodyRuleDragEnd(endpointId: string) {
 // 状态
 const addingEndpoint = ref(false)
 const savingEndpointId = ref<string | null>(null)
-const resettingDefaultRulesEndpointId = ref<string | null>(null)
 const deletingEndpointId = ref<string | null>(null)
 const togglingEndpointId = ref<string | null>(null)
-const togglingFormatEndpointId = ref<string | null>(null)
 const formatSelectOpen = ref(false)
-const endpointProxyPopoverOpen = ref<Record<string, boolean>>({})
 
 // 删除确认弹窗状态
 const deleteConfirmOpen = ref(false)
@@ -1463,9 +1346,7 @@ const defaultBodyRulesLoaded = ref<Record<string, boolean>>({})
 const loadingDefaultBodyRulesByFormat = ref<Record<string, boolean>>({})
 
 // Endpoint 规则会经过通用 header/body rule 引擎执行。认证头、协议控制头和
-// 响应长度这类字段在后端同样是 protected keys；前端也保持同一语义，避免用户
-// 以为普通 endpoint rules 能改认证。OAuth/账号导入保留 headers 走 auth_config，
-// 不走这里的 endpoint header_rules。
+// 响应长度这类字段在后端同样是 protected keys；前端也保持同一语义。
 const RESERVED_HEADERS = new Set([
   'authorization',
   'x-api-key',
@@ -1863,15 +1744,6 @@ function initBodyRuleSetValueForEditor(value: unknown): { value: string } {
 // 内部状态
 const internalOpen = computed(() => props.modelValue)
 
-const isFixedProvider = computed(() => {
-  const t = props.provider?.provider_type
-  return !!t && t !== 'custom'
-})
-
-const isEndpointConfigReadOnly = computed(() => {
-  return (props.provider?.provider_type || '').trim().toLowerCase() === 'gemini_cli'
-})
-
 // 新端点表单
 const newEndpoint = ref({
   api_format: '',
@@ -1903,19 +1775,11 @@ const deleteConfirmDescription = computed(() => {
 })
 
 function defaultBodyRulesCacheKey(apiFormat: string): string {
-  const providerType = (props.provider?.provider_type || '').toLowerCase()
-  return providerType ? `${apiFormat}:${providerType}` : apiFormat
-}
-
-function hasDefaultBodyRules(apiFormat: string): boolean {
-  const cacheKey = defaultBodyRulesCacheKey(apiFormat)
-  if (!defaultBodyRulesLoaded.value[cacheKey]) return false
-  return (defaultBodyRulesByFormat.value[cacheKey]?.length || 0) > 0
+  return apiFormat
 }
 
 async function loadDefaultBodyRulesForFormat(apiFormat: string, force = false): Promise<BodyRule[]> {
   if (!apiFormat) return []
-  const providerType = (props.provider?.provider_type || '').toLowerCase()
   const cacheKey = defaultBodyRulesCacheKey(apiFormat)
   if (!force && defaultBodyRulesLoaded.value[cacheKey]) {
     return defaultBodyRulesByFormat.value[cacheKey] || []
@@ -1926,7 +1790,7 @@ async function loadDefaultBodyRulesForFormat(apiFormat: string, force = false): 
 
   loadingDefaultBodyRulesByFormat.value[cacheKey] = true
   try {
-    const response = await getDefaultBodyRules(apiFormat, providerType || undefined)
+    const response = await getDefaultBodyRules(apiFormat)
     const rules = response.body_rules || []
     defaultBodyRulesByFormat.value[cacheKey] = rules
     defaultBodyRulesLoaded.value[cacheKey] = true
@@ -1948,10 +1812,8 @@ async function preloadDefaultBodyRules(endpoints: ProviderEndpoint[]): Promise<v
 
 // 获取指定 API 格式的默认路径
 function getDefaultPath(apiFormat: string, baseUrl?: string): string {
-  const providerType = (props.provider?.provider_type || '').toLowerCase()
   return getDefaultEndpointPath({
     apiFormat,
-    providerType,
     baseUrl,
     apiFormats: apiFormats.value,
   })
@@ -1984,84 +1846,6 @@ const newEndpointBaseUrlPlaceholder = computed(() => {
 
 function getDisplayedPath(endpoint: ProviderEndpoint): string {
   return getEndpointEditState(endpoint.id)?.path ?? (endpoint.custom_path || '')
-}
-
-// 读取端点的上游流式策略（endpoint.config.upstream_stream_policy）
-function getEndpointUpstreamStreamPolicy(endpoint: ProviderEndpoint): string {
-  const cfg = endpoint.config || {}
-  const raw = (cfg.upstream_stream_policy ?? cfg.upstreamStreamPolicy ?? cfg.upstream_stream) as unknown
-  if (raw === null || raw === undefined) return 'auto'
-  if (typeof raw === 'boolean') return raw ? 'force_stream' : 'force_non_stream'
-  const s = String(raw).trim().toLowerCase()
-  if (!s || s === 'auto' || s === 'follow' || s === 'client' || s === 'default') return 'auto'
-  if (s === 'force_stream' || s === 'stream' || s === 'sse' || s === 'true' || s === '1') return 'force_stream'
-  if (s === 'force_non_stream' || s === 'force_sync' || s === 'non_stream' || s === 'sync' || s === 'false' || s === '0') return 'force_non_stream'
-  return 'auto'
-}
-
-function endpointProxyNodeId(endpoint: ProviderEndpoint): string {
-  if (endpoint.proxy?.enabled === false) return ''
-  return endpoint.proxy?.node_id?.trim() || ''
-}
-
-function getEndpointProxyNodeName(endpoint: ProviderEndpoint): string {
-  const nodeId = endpointProxyNodeId(endpoint)
-  if (!nodeId) return legacyT('未知节点')
-  const node = proxyNodesStore.nodes.find(n => n.id === nodeId)
-  return node ? node.name : `${nodeId.slice(0, 8)}...`
-}
-
-function getEndpointProxyTitle(endpoint: ProviderEndpoint): string {
-  const nodeId = endpointProxyNodeId(endpoint)
-  return nodeId ? `${legacyT('端点代理')}: ${getEndpointProxyNodeName(endpoint)}` : legacyT('设置端点代理节点')
-}
-
-function handleEndpointProxyPopoverToggle(endpointId: string, open: boolean) {
-  endpointProxyPopoverOpen.value[endpointId] = open
-  if (open) {
-    proxyNodesStore.ensureLoaded()
-  }
-}
-
-function replaceLocalEndpoint(updated: ProviderEndpoint) {
-  localEndpoints.value = localEndpoints.value.map(endpoint =>
-    endpoint.id === updated.id ? updated : endpoint,
-  )
-}
-
-async function setEndpointProxy(endpoint: ProviderEndpoint, nodeId: string) {
-  const normalizedNodeId = nodeId.trim()
-  if (!normalizedNodeId) return
-
-  savingEndpointId.value = endpoint.id
-  try {
-    const updated = await updateEndpoint(endpoint.id, {
-      proxy: { node_id: normalizedNodeId, enabled: true },
-    })
-    replaceLocalEndpoint(updated)
-    endpointProxyPopoverOpen.value[endpoint.id] = false
-    success(legacyT('端点代理已更新'))
-    emit('endpointUpdated')
-  } catch (error: unknown) {
-    showError(localizedApiError(error, '更新代理失败'), legacyT('错误'))
-  } finally {
-    savingEndpointId.value = null
-  }
-}
-
-async function clearEndpointProxy(endpoint: ProviderEndpoint) {
-  savingEndpointId.value = endpoint.id
-  try {
-    const updated = await updateEndpoint(endpoint.id, { proxy: null })
-    replaceLocalEndpoint(updated)
-    endpointProxyPopoverOpen.value[endpoint.id] = false
-    success(legacyT('端点代理已清除'))
-    emit('endpointUpdated')
-  } catch (error: unknown) {
-    showError(localizedApiError(error, '清除代理失败'), legacyT('错误'))
-  } finally {
-    savingEndpointId.value = null
-  }
 }
 
 function emptyHeaderRule(): EditableRule {
@@ -2143,7 +1927,6 @@ function initEndpointEditState(endpoint: ProviderEndpoint): EndpointEditState {
   return {
     url: endpoint.base_url,
     path: endpoint.custom_path || '',
-    upstreamStreamPolicy: getEndpointUpstreamStreamPolicy(endpoint),
     rules,
     responseRules,
     bodyRules,
@@ -3021,7 +2804,6 @@ function hasUrlChanges(endpoint: ProviderEndpoint): boolean {
   if (!state) return false
   if (state.url !== endpoint.base_url) return true
   if (state.path !== (endpoint.custom_path || '')) return true
-  // 注：upstreamStreamPolicy 现在由头部按钮直接保存，无需在此检查
   return false
 }
 
@@ -3084,40 +2866,6 @@ function resetEndpointChanges(endpoint: ProviderEndpoint) {
   } else {
     endpointRulesJsonError.value[endpoint.id] = null
     endpointRulesJsonDirty.value[endpoint.id] = false
-  }
-}
-
-async function handleResetBodyRulesToDefault(endpoint: ProviderEndpoint) {
-  resettingDefaultRulesEndpointId.value = endpoint.id
-  try {
-    const defaultRules = await loadDefaultBodyRulesForFormat(endpoint.api_format, true)
-    if (!defaultRules.length) {
-      showError(legacyT('该端点没有默认请求体规则'))
-      return
-    }
-
-    if (!endpointEditStates.value[endpoint.id]) {
-      endpointEditStates.value[endpoint.id] = initEndpointEditState(endpoint)
-    }
-    const state = endpointEditStates.value[endpoint.id]
-    if (!state) return
-
-    const resetState = initEndpointEditState({
-      ...endpoint,
-      body_rules: defaultRules,
-    })
-    state.bodyRules = resetState.bodyRules
-    endpointRulesExpanded.value[endpoint.id] = (state.rules.length + state.responseRules.length + state.bodyRules.length) > 0
-    clearBodyRuleDragState(endpoint.id)
-    clearBodyRuleSelectOpen(endpoint.id)
-    if (isEndpointRulesJsonMode(endpoint.id)) {
-      refreshEndpointRulesJsonDraft(endpoint.id)
-    }
-    success(legacyT('已重置请求体为默认规则，请点击保存生效'))
-  } catch (error: unknown) {
-    showError(localizedApiError(error, '重置失败'), legacyT('错误'))
-  } finally {
-    resettingDefaultRulesEndpointId.value = null
   }
 }
 
@@ -3296,8 +3044,6 @@ watch(() => props.endpoints, (endpoints) => {
 
 // 保存端点
 async function saveEndpoint(endpoint: ProviderEndpoint) {
-  if (isEndpointConfigReadOnly.value) return
-
   if (isEndpointRulesJsonMode(endpoint.id) && endpointRulesJsonDirty.value[endpoint.id]) {
     if (!applyEndpointRulesJsonDraft(endpoint.id, { notify: false })) return
   }
@@ -3327,12 +3073,9 @@ async function saveEndpoint(endpoint: ProviderEndpoint) {
 
   savingEndpointId.value = endpoint.id
   try {
-    // 仅提交变更字段；fixed provider 锁定 base_url，但允许覆盖 custom_path。
     const payload: Record<string, unknown> = {}
 
-    if (!isFixedProvider.value) {
-      if (state.url !== endpoint.base_url) payload.base_url = state.url
-    }
+    if (state.url !== endpoint.base_url) payload.base_url = state.url
     if (state.path !== (endpoint.custom_path || '')) payload.custom_path = state.path || null
 
     if (hasRulesChanges(endpoint)) payload.header_rules = rulesToHeaderRules(state.rules)
@@ -3344,8 +3087,6 @@ async function saveEndpoint(endpoint: ProviderEndpoint) {
     }
     if (hasBodyRulesChanges(endpoint)) payload.body_rules = rulesToBodyRules(state.bodyRules)
 
-    // 注：upstreamStreamPolicy 现在由头部按钮直接保存，不在此处处理
-
     if (Object.keys(payload).length === 0) return
 
     await updateEndpoint(endpoint.id, payload)
@@ -3353,116 +3094,6 @@ async function saveEndpoint(endpoint: ProviderEndpoint) {
     emit('endpointUpdated')
   } catch (error: unknown) {
     showError(localizedApiError(error, '更新失败'), legacyT('错误'))
-  } finally {
-    savingEndpointId.value = null
-  }
-}
-
-// 切换格式转换（直接保存）
-async function handleToggleFormatConversion(endpoint: ProviderEndpoint) {
-  const currentEnabled = endpoint.format_acceptance_config?.enabled || false
-  const newEnabled = !currentEnabled
-
-  togglingFormatEndpointId.value = endpoint.id
-  try {
-    await updateEndpoint(endpoint.id, {
-      format_acceptance_config: newEnabled ? { enabled: true } : null,
-    })
-    success(legacyT(newEnabled ? '已启用格式转换' : '已关闭格式转换'))
-    emit('endpointUpdated')
-  } catch (error: unknown) {
-    showError(localizedApiError(error, '操作失败'), legacyT('错误'))
-  } finally {
-    togglingFormatEndpointId.value = null
-  }
-}
-
-// 获取上游流式按钮的当前状态（优先使用编辑状态）
-function getCurrentUpstreamStreamPolicy(endpoint: ProviderEndpoint): string {
-  const fixedPolicy = getFixedUpstreamStreamPolicy(endpoint)
-  if (fixedPolicy) return fixedPolicy
-  const state = endpointEditStates.value[endpoint.id]
-  return state?.upstreamStreamPolicy ?? getEndpointUpstreamStreamPolicy(endpoint)
-}
-
-function getFixedUpstreamStreamPolicy(endpoint: ProviderEndpoint) {
-  return fixedEndpointUpstreamStreamPolicy(props.provider?.provider_type, endpoint.api_format)
-}
-
-function isUpstreamStreamPolicyLocked(endpoint: ProviderEndpoint): boolean {
-  return getFixedUpstreamStreamPolicy(endpoint) !== null
-}
-
-// 获取上游流式按钮的样式类
-function getUpstreamStreamButtonClass(endpoint: ProviderEndpoint): string {
-  const fixedPolicy = getFixedUpstreamStreamPolicy(endpoint)
-  if (fixedPolicy) {
-    const color = fixedPolicy === 'force_stream' ? 'text-primary/70' : 'text-destructive/70'
-    return `h-7 w-7 ${color} cursor-not-allowed`
-  }
-  const policy = getCurrentUpstreamStreamPolicy(endpoint)
-  const base = 'h-7 w-7'
-  if (policy === 'force_stream') return `${base} text-primary`
-  if (policy === 'force_non_stream') return `${base} text-destructive`
-  return `${base} text-muted-foreground` // auto - 跟随请求，淡色显示
-}
-
-// 获取上游流式按钮的提示文字
-function getUpstreamStreamTooltip(endpoint: ProviderEndpoint): string {
-  const fixedPolicy = getFixedUpstreamStreamPolicy(endpoint)
-  if (fixedPolicy === 'force_stream') return legacyT('Codex Responses 固定流式')
-  if (fixedPolicy === 'force_non_stream') return legacyT('OpenAI Search 固定非流式')
-  const policy = getCurrentUpstreamStreamPolicy(endpoint)
-  if (policy === 'force_stream') return legacyT('固定流式（点击切换为固定非流）')
-  if (policy === 'force_non_stream') return legacyT('固定非流（点击切换为跟随请求）')
-  return legacyT('跟随请求（点击切换为固定流式）')
-}
-
-// 循环切换上游流式策略并直接保存
-async function handleCycleUpstreamStream(endpoint: ProviderEndpoint) {
-  if (isUpstreamStreamPolicyLocked(endpoint)) return
-
-  const currentPolicy = getCurrentUpstreamStreamPolicy(endpoint)
-  let nextPolicy: string
-  let nextLabel: string
-
-  // 循环：auto -> force_stream -> force_non_stream -> auto
-  if (currentPolicy === 'auto') {
-    nextPolicy = 'force_stream'
-    nextLabel = legacyT('固定流式')
-  } else if (currentPolicy === 'force_stream') {
-    nextPolicy = 'force_non_stream'
-    nextLabel = legacyT('固定非流')
-  } else {
-    nextPolicy = 'auto'
-    nextLabel = legacyT('跟随请求')
-  }
-
-  savingEndpointId.value = endpoint.id
-  try {
-    const merged: Record<string, unknown> = { ...(endpoint.config || {}) }
-    // 清理旧的 key
-    delete merged.upstream_stream_policy
-    delete merged.upstreamStreamPolicy
-    delete merged.upstream_stream
-
-    if (nextPolicy !== 'auto') {
-      merged.upstream_stream_policy = nextPolicy
-    }
-
-    await updateEndpoint(endpoint.id, {
-      config: Object.keys(merged).length > 0 ? merged : null,
-    })
-
-    // 更新本地编辑状态
-    if (endpointEditStates.value[endpoint.id]) {
-      endpointEditStates.value[endpoint.id].upstreamStreamPolicy = nextPolicy
-    }
-
-    success(locale.value === 'en-US' ? `Switched to ${nextLabel}` : `已切换为${nextLabel}`)
-    emit('endpointUpdated')
-  } catch (error: unknown) {
-    showError(localizedApiError(error, '操作失败'), legacyT('错误'))
   } finally {
     savingEndpointId.value = null
   }

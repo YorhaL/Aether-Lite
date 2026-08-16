@@ -1,28 +1,25 @@
 use super::route_filters::parse_admin_monitoring_limit;
 use crate::handlers::admin::request::{AdminAppState, AdminRequestContext};
-use crate::log_ids::short_request_id;
 use crate::GatewayError;
 use aether_admin::observability::monitoring::{
     admin_monitoring_bad_request_response, admin_monitoring_trace_not_found_response,
     admin_monitoring_trace_provider_id_from_path, admin_monitoring_trace_request_id_from_path,
     build_admin_monitoring_trace_provider_stats_payload_response,
-    build_admin_monitoring_trace_request_payload_response_with_key_accounts,
-    parse_admin_monitoring_attempted_only, AdminMonitoringKeyAccountDisplay,
+    build_admin_monitoring_trace_request_payload_response, parse_admin_monitoring_attempted_only,
 };
 use aether_data_contracts::repository::{
     candidates::{
         DecisionTrace, DecisionTraceCandidate, RequestCandidateFinalStatus, RequestCandidateStatus,
         StoredRequestCandidate,
     },
-    provider_catalog::StoredProviderCatalogKey,
     usage::StoredRequestUsageAudit,
 };
+use aether_gateway_frontdoor::short_request_id;
 use axum::{
     body::Body,
     response::{IntoResponse, Response},
 };
 use serde_json::{json, Map, Value};
-use std::collections::BTreeMap;
 use tracing::debug;
 
 struct ResolvedAdminMonitoringTrace {
@@ -82,16 +79,10 @@ pub(super) async fn build_admin_monitoring_trace_request_response(
             attempted_only,
         ));
     };
-    let key_accounts =
-        build_admin_monitoring_key_account_display_map(admin_state, &resolved.trace).await?;
-
-    Ok(
-        build_admin_monitoring_trace_request_payload_response_with_key_accounts(
-            &resolved.trace,
-            resolved.usage.as_ref(),
-            &key_accounts,
-        ),
-    )
+    Ok(build_admin_monitoring_trace_request_payload_response(
+        &resolved.trace,
+        resolved.usage.as_ref(),
+    ))
 }
 
 async fn resolve_admin_monitoring_trace(
@@ -229,10 +220,7 @@ fn build_admin_monitoring_usage_routing_snapshot_trace(
             candidate,
             provider_name: non_empty_string(usage.provider_name.as_str()),
             provider_website: None,
-            provider_type: None,
             provider_priority: None,
-            provider_keep_priority_on_conversion: None,
-            provider_enable_format_conversion: None,
             endpoint_api_format: usage
                 .endpoint_api_format
                 .clone()
@@ -245,7 +233,6 @@ fn build_admin_monitoring_usage_routing_snapshot_trace(
                 .provider_endpoint_kind
                 .clone()
                 .or_else(|| usage.endpoint_kind.clone()),
-            endpoint_format_acceptance_config: None,
             provider_key_name: usage.routing_key_name().map(ToOwned::to_owned),
             provider_key_auth_type: None,
             provider_key_api_formats: None,
@@ -410,96 +397,6 @@ fn insert_optional_string(object: &mut Map<String, Value>, key: &str, value: Opt
         return;
     };
     object.insert(key.to_string(), Value::String(value));
-}
-
-async fn build_admin_monitoring_key_account_display_map(
-    state: &AdminAppState<'_>,
-    trace: &DecisionTrace,
-) -> Result<BTreeMap<String, AdminMonitoringKeyAccountDisplay>, GatewayError> {
-    let key_ids = trace
-        .candidates
-        .iter()
-        .filter_map(|item| item.candidate.key_id.as_deref())
-        .filter(|value| !value.trim().is_empty())
-        .map(ToOwned::to_owned)
-        .collect::<std::collections::BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
-    if key_ids.is_empty() {
-        return Ok(BTreeMap::new());
-    }
-
-    let keys = state.read_provider_catalog_keys_by_ids(&key_ids).await?;
-    Ok(keys
-        .into_iter()
-        .filter_map(|key| {
-            let display = resolve_admin_monitoring_key_account_display(state, &key)?;
-            Some((key.id, display))
-        })
-        .collect())
-}
-
-fn resolve_admin_monitoring_key_account_display(
-    state: &AdminAppState<'_>,
-    key: &StoredProviderCatalogKey,
-) -> Option<AdminMonitoringKeyAccountDisplay> {
-    let auth_config = parse_admin_monitoring_key_auth_config(state, key);
-    let label = auth_config
-        .as_ref()
-        .and_then(|config| {
-            first_non_empty_json_string([
-                config.get("email"),
-                config.get("account_name"),
-                config.get("accountName"),
-                config.get("client_email"),
-                config.get("account_id"),
-                config.get("accountId"),
-            ])
-        })
-        .or_else(|| {
-            key.upstream_metadata.as_ref().and_then(|metadata| {
-                first_non_empty_json_string([
-                    metadata.get("email"),
-                    metadata.get("account_name"),
-                    metadata.get("accountName"),
-                    metadata.get("account_id"),
-                    metadata.get("accountId"),
-                ])
-            })
-        });
-    let oauth_plan_type = auth_config.as_ref().and_then(|config| {
-        first_non_empty_json_string([config.get("plan_type"), config.get("planType")])
-    });
-
-    if label.is_none() && oauth_plan_type.is_none() {
-        return None;
-    }
-
-    Some(AdminMonitoringKeyAccountDisplay {
-        label,
-        oauth_plan_type,
-    })
-}
-
-fn parse_admin_monitoring_key_auth_config(
-    state: &AdminAppState<'_>,
-    key: &StoredProviderCatalogKey,
-) -> Option<Map<String, Value>> {
-    let ciphertext = key.encrypted_auth_config.as_deref()?;
-    let plaintext = state.decrypt_catalog_secret_with_fallbacks(ciphertext)?;
-    serde_json::from_str::<Value>(&plaintext)
-        .ok()?
-        .as_object()
-        .cloned()
-}
-
-fn first_non_empty_json_string<'a>(
-    values: impl IntoIterator<Item = Option<&'a Value>>,
-) -> Option<String> {
-    values.into_iter().find_map(|value| {
-        let text = value?.as_str()?.trim();
-        (!text.is_empty()).then(|| text.to_string())
-    })
 }
 
 pub(super) async fn build_admin_monitoring_trace_provider_stats_response(

@@ -745,11 +745,6 @@ fn usage_matches_provider_performance_query(
             return None;
         }
     }
-    if let Some(has_format_conversion) = query.has_format_conversion {
-        if item.has_format_conversion != has_format_conversion {
-            return None;
-        }
-    }
     usage_provider_performance_identity(item)
 }
 
@@ -3062,7 +3057,6 @@ impl UsageWriteRepository for InMemoryUsageReadRepository {
             endpoint_api_format: usage.endpoint_api_format,
             provider_api_family: usage.provider_api_family,
             provider_endpoint_kind: usage.provider_endpoint_kind,
-            has_format_conversion: usage.has_format_conversion.unwrap_or(false),
             is_stream: usage.is_stream.unwrap_or(false),
             input_tokens: usage.input_tokens.unwrap_or_default(),
             output_tokens: usage.output_tokens.unwrap_or_default(),
@@ -3426,6 +3420,3 @@ impl UsageWriteRepository for InMemoryUsageReadRepository {
         Ok(aggregates.len() as u64)
     }
 }
-
-#[cfg(test)]
-mod tests;

@@ -194,7 +194,6 @@ function routingGroup(
       default_policy: {
         priority_mode: 'provider',
         scheduling_mode: 'cache_affinity',
-        keep_priority_on_conversion: false,
       },
       model_policies: [],
       rules: [],

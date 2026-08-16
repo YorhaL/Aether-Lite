@@ -7,7 +7,7 @@ pub(crate) use self::ai_public::{
     ai_public_local_requires_buffered_body, maybe_build_local_ai_public_response,
 };
 pub(crate) use self::catalog_helpers::{
-    admin_requested_force_stream, api_format_display_name, build_api_format_health_monitor_payload,
+    api_format_display_name, build_api_format_health_monitor_payload,
     build_model_health_monitor_payload, build_provider_health_monitor_payload,
     build_public_catalog_models_payload, build_public_catalog_search_models_payload,
     build_public_health_timeline, build_public_health_timeline_details,
@@ -23,8 +23,7 @@ pub(crate) use self::system_modules_helpers::{
 };
 
 pub(crate) use self::support::{
-    build_api_key_install_session_response, build_proxy_node_install_session_response,
-    build_unhandled_public_support_response, matches_model_mapping_for_models,
-    maybe_build_local_admin_announcements_response, maybe_build_local_public_support_response,
-    CreateApiKeyInstallSessionRequest,
+    build_api_key_install_session_response, build_public_support_route_not_found_response,
+    matches_model_mapping_for_models, maybe_build_local_admin_announcements_response,
+    maybe_build_local_public_support_response, CreateApiKeyInstallSessionRequest,
 };

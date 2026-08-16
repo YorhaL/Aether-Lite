@@ -68,7 +68,6 @@ impl<'a> OAuthHttpExecutor for GatewayOAuthHttpExecutor<'a> {
             client_api_format: "oauth:exchange".to_string(),
             provider_api_format: "oauth:exchange".to_string(),
             model_name: Some("oauth-exchange".to_string()),
-            proxy: request.network.proxy,
             transport_profile: request.transport_profile,
             timeouts: Some(ExecutionTimeouts {
                 connect_ms: Some(timeouts.connect_ms),

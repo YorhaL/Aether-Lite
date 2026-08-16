@@ -62,21 +62,6 @@
         >{{ legacyT('添加备注') }}</span>
       </div>
     </TableCell>
-    <TableCell class="py-3.5">
-      <ProviderBalanceCell
-        :provider="provider"
-        :is-balance-loading="isBalanceLoading"
-        :get-provider-balance="getProviderBalance"
-        :get-provider-balance-breakdown="getProviderBalanceBreakdown"
-        :get-provider-balance-error="getProviderBalanceError"
-        :get-provider-checkin="getProviderCheckin"
-        :get-provider-cookie-expired="getProviderCookieExpired"
-        :get-provider-balance-extra="getProviderBalanceExtra"
-        :format-balance-display="formatBalanceDisplay"
-        :format-reset-countdown="formatResetCountdown"
-        :get-quota-used-color-class="getQuotaUsedColorClass"
-      />
-    </TableCell>
     <TableCell class="py-3.5 text-center">
       <div class="inline-grid grid-cols-[1.75rem_1.75rem_1.75rem] gap-x-0.5 gap-y-0.5 text-xs text-left">
         <span class="text-muted-foreground/70">{{ legacyT('端点:') }}</span>
@@ -163,15 +148,6 @@
           variant="ghost"
           size="icon"
           class="h-7 w-7 text-muted-foreground/70 hover:text-foreground"
-          :title="legacyT('扩展操作配置')"
-          @click="$emit('openOpsConfig', provider)"
-        >
-          <KeyRound class="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          class="h-7 w-7 text-muted-foreground/70 hover:text-foreground"
           :title="legacyT(provider.is_active ? '停用提供商' : '启用提供商')"
           @click="$emit('toggleStatus', provider)"
         >
@@ -198,7 +174,6 @@ import {
   Eye,
   Trash2,
   Power,
-  KeyRound,
   ExternalLink,
   Pencil,
   Check,
@@ -208,26 +183,13 @@ import Button from '@/components/ui/button.vue'
 import Badge from '@/components/ui/badge.vue'
 import TableRow from '@/components/ui/table-row.vue'
 import TableCell from '@/components/ui/table-cell.vue'
-import ProviderBalanceCell from './ProviderBalanceCell.vue'
 import { type ProviderWithEndpointsSummary, formatApiFormatShort } from '@/api/endpoints'
 import { sortEndpoints, isEndpointAvailable, getEndpointDotColor, getEndpointTooltip } from '@/features/providers/composables/useEndpointStatus'
-import type { BalanceExtraItem } from '@/features/providers/auth-templates'
 import { useI18n } from '@/i18n'
 
 const props = defineProps<{
   provider: ProviderWithEndpointsSummary
   editingDescriptionId: string | null
-  // Balance functions
-  isBalanceLoading: (providerId: string) => boolean
-  getProviderBalance: (providerId: string) => { available: number | null; currency: string } | null
-  getProviderBalanceBreakdown: (providerId: string) => { balance: number; points: number; currency: string } | null
-  getProviderBalanceError: (providerId: string) => { status: string; message: string } | null
-  getProviderCheckin: (providerId: string) => { success: boolean | null; message: string } | null
-  getProviderCookieExpired: (providerId: string) => { expired: boolean; message: string } | null
-  getProviderBalanceExtra: (providerId: string, architectureId?: string) => BalanceExtraItem[]
-  formatBalanceDisplay: (balance: { available: number | null; currency: string } | null) => string
-  formatResetCountdown: (resetsAt: number) => string
-  getQuotaUsedColorClass: (provider: ProviderWithEndpointsSummary) => string
 }>()
 
 const emit = defineEmits<{
@@ -235,7 +197,6 @@ const emit = defineEmits<{
   'rowClick': [event: MouseEvent, providerId: string]
   'viewDetail': [providerId: string]
   'editProvider': [provider: ProviderWithEndpointsSummary]
-  'openOpsConfig': [provider: ProviderWithEndpointsSummary]
   'toggleStatus': [provider: ProviderWithEndpointsSummary]
   'deleteProvider': [provider: ProviderWithEndpointsSummary]
   'startEditDescription': [event: Event, provider: ProviderWithEndpointsSummary]
@@ -284,8 +245,7 @@ function handleDescriptionKeydown(event: KeyboardEvent) {
   }
 }
 
-function getCredentialLabel(provider: ProviderWithEndpointsSummary): string {
-  const providerType = String(provider.provider_type || '').trim().toLowerCase()
-  return legacyT(providerType && providerType !== 'custom' ? '账号' : '密钥')
+function getCredentialLabel(_provider: ProviderWithEndpointsSummary): string {
+  return legacyT('密钥')
 }
 </script>

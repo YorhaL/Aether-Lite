@@ -268,7 +268,7 @@
               <span class="text-muted-foreground">描述</span>
               <Input
                 v-model="draft.description"
-                placeholder="例如：默认策略 / 高推理策略 / 号池优先策略"
+                placeholder="例如：默认策略 / 高推理策略 / 低延迟策略"
               />
             </label>
             <div class="space-y-1 text-sm">

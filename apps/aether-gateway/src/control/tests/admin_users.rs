@@ -71,49 +71,6 @@ fn classifies_admin_user_batch_routes_as_admin_proxy_route() {
 }
 
 #[test]
-fn classifies_admin_user_billing_routes_as_admin_proxy_route() {
-    let headers = headers(&[]);
-
-    let entitlements_uri: Uri = "/api/admin/users/user-1/billing/entitlements"
-        .parse()
-        .expect("uri should parse");
-    let entitlements = classify_control_route(&http::Method::GET, &entitlements_uri, &headers)
-        .expect("route should classify");
-    assert_eq!(entitlements.route_class.as_deref(), Some("admin_proxy"));
-    assert_eq!(entitlements.route_family.as_deref(), Some("users_manage"));
-    assert_eq!(
-        entitlements.route_kind.as_deref(),
-        Some("list_user_billing_entitlements")
-    );
-    assert_eq!(
-        entitlements.auth_endpoint_signature.as_deref(),
-        Some("admin:users")
-    );
-
-    let grant_uri: Uri = "/api/admin/users/user-1/billing/grant-plan"
-        .parse()
-        .expect("uri should parse");
-    let grant = classify_control_route(&http::Method::POST, &grant_uri, &headers)
-        .expect("route should classify");
-    assert_eq!(grant.route_class.as_deref(), Some("admin_proxy"));
-    assert_eq!(grant.route_family.as_deref(), Some("users_manage"));
-    assert_eq!(grant.route_kind.as_deref(), Some("grant_user_billing_plan"));
-    assert_eq!(
-        grant.auth_endpoint_signature.as_deref(),
-        Some("admin:users")
-    );
-
-    let context = GatewayPublicRequestContext::from_request_parts(
-        "trace-user-billing-grant",
-        &http::Method::POST,
-        &grant_uri,
-        &headers,
-        Some(grant),
-    );
-    assert!(local_proxy_route_requires_buffered_body(&context));
-}
-
-#[test]
 fn classifies_admin_user_group_routes_as_admin_proxy_route() {
     let headers = headers(&[]);
 

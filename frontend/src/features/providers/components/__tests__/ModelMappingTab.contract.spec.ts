@@ -8,7 +8,6 @@ import ModelMappingTab from '../provider-tabs/ModelMappingTab.vue'
 const provider = {
   id: 'provider-demo',
   name: 'Demo Provider',
-  provider_type: 'custom',
   is_active: true,
   active_keys: 0,
   api_formats: [],

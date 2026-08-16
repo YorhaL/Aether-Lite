@@ -5,7 +5,6 @@ use axum::Json;
 use serde_json::json;
 use tracing::warn;
 
-use crate::ai_serving::AiSurfaceFinalizeError;
 use crate::constants::*;
 use crate::insert_header_if_missing;
 
@@ -76,7 +75,7 @@ impl IntoResponse for GatewayError {
                 let _ = insert_header_if_missing(
                     response.headers_mut(),
                     GATEWAY_HEADER,
-                    "rust-phase3b",
+                    GATEWAY_MARKER_VALUE,
                 );
                 response
             }
@@ -94,7 +93,7 @@ impl IntoResponse for GatewayError {
                 let _ = insert_header_if_missing(
                     response.headers_mut(),
                     GATEWAY_HEADER,
-                    "rust-phase3b",
+                    GATEWAY_MARKER_VALUE,
                 );
                 response
             }
@@ -121,7 +120,7 @@ impl IntoResponse for GatewayError {
                 let _ = insert_header_if_missing(
                     response.headers_mut(),
                     GATEWAY_HEADER,
-                    "rust-phase3b",
+                    GATEWAY_MARKER_VALUE,
                 );
                 response
             }
@@ -148,7 +147,7 @@ impl IntoResponse for GatewayError {
                 let _ = insert_header_if_missing(
                     response.headers_mut(),
                     GATEWAY_HEADER,
-                    "rust-phase3b",
+                    GATEWAY_MARKER_VALUE,
                 );
                 let _ = insert_header_if_missing(response.headers_mut(), "Retry-After", "1");
                 response
@@ -172,12 +171,6 @@ impl IntoResponse for GatewayError {
             )
                 .into_response(),
         }
-    }
-}
-
-impl From<AiSurfaceFinalizeError> for GatewayError {
-    fn from(error: AiSurfaceFinalizeError) -> Self {
-        GatewayError::Internal(error.0)
     }
 }
 

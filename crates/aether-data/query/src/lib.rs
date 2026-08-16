@@ -3,16 +3,12 @@ use sqlx::{Database, Encode, QueryBuilder, Type};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SqlDialect {
     Postgres,
-    MySql,
     Sqlite,
 }
 
 impl SqlDialect {
     pub fn quote_ident(self, ident: &str) -> String {
-        let quote = match self {
-            Self::Postgres | Self::Sqlite => '"',
-            Self::MySql => '`',
-        };
+        let quote = '"';
         let escaped = ident.replace(quote, &format!("{quote}{quote}"));
         format!("{quote}{escaped}{quote}")
     }
@@ -30,7 +26,6 @@ impl SqlDialect {
 pub struct DialectSql<'a> {
     common: Option<&'a str>,
     postgres: Option<&'a str>,
-    mysql: Option<&'a str>,
     sqlite: Option<&'a str>,
 }
 
@@ -39,7 +34,6 @@ impl<'a> DialectSql<'a> {
         Self {
             common: Some(sql),
             postgres: None,
-            mysql: None,
             sqlite: None,
         }
     }
@@ -48,18 +42,12 @@ impl<'a> DialectSql<'a> {
         Self {
             common: None,
             postgres: Some(postgres),
-            mysql: None,
             sqlite: Some(sqlite),
         }
     }
 
     pub fn with_postgres(mut self, sql: &'a str) -> Self {
         self.postgres = Some(sql);
-        self
-    }
-
-    pub fn with_mysql(mut self, sql: &'a str) -> Self {
-        self.mysql = Some(sql);
         self
     }
 
@@ -71,7 +59,6 @@ impl<'a> DialectSql<'a> {
     pub fn sql(self, dialect: SqlDialect) -> &'a str {
         match dialect {
             SqlDialect::Postgres => self.postgres.or(self.common),
-            SqlDialect::MySql => self.mysql.or(self.common),
             SqlDialect::Sqlite => self.sqlite.or(self.common),
         }
         .expect("dialect SQL expression is missing for selected dialect")
@@ -470,7 +457,7 @@ fn push_ci_contains_predicate<'args, DB>(
                 .push(" ILIKE ")
                 .push_bind(format!("%{trimmed}%"));
         }
-        SqlDialect::MySql | SqlDialect::Sqlite => {
+        SqlDialect::Sqlite => {
             builder
                 .push("LOWER(")
                 .push(column_sql)
@@ -522,21 +509,15 @@ pub fn push_order_by<DB>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sqlx::{Execute, MySql, Postgres, QueryBuilder, Sqlite};
+    use sqlx::{Execute, Postgres, QueryBuilder, Sqlite};
 
     #[test]
     fn quotes_identifiers_by_dialect() {
         assert_eq!(SqlDialect::Postgres.quote_ident("trigger"), "\"trigger\"");
-        assert_eq!(SqlDialect::MySql.quote_ident("trigger"), "`trigger`");
-        assert_eq!(SqlDialect::MySql.quote_ident("tri`gger"), "`tri``gger`");
         assert_eq!(SqlDialect::Sqlite.quote_ident("trigger"), "\"trigger\"");
         assert_eq!(
             SqlDialect::Postgres.quote_path(&["usage", "id"]),
             "\"usage\".\"id\""
-        );
-        assert_eq!(
-            SqlDialect::MySql.quote_path(&["usage", "item`id"]),
-            "`usage`.`item``id`"
         );
     }
 
@@ -593,23 +574,6 @@ mod tests {
     }
 
     #[test]
-    fn ci_contains_uses_lower_like_for_mysql() {
-        let mut mysql_builder = QueryBuilder::<MySql>::new("SELECT * FROM items");
-        let mut mysql_where = WhereClause::new();
-        push_ci_contains(
-            &mut mysql_builder,
-            &mut mysql_where,
-            SqlDialect::MySql,
-            "task_key",
-            " Fetch ",
-        );
-        assert!(mysql_builder
-            .build()
-            .sql()
-            .contains(" WHERE LOWER(task_key) LIKE ?"));
-    }
-
-    #[test]
     fn ci_contains_any_groups_or_predicates() {
         let mut builder = QueryBuilder::<Sqlite>::new("SELECT * FROM items");
         let mut where_clause = WhereClause::new();
@@ -657,23 +621,16 @@ mod tests {
     fn select_query_renders_dialect_specific_projection() {
         let query = SelectQuery::new("providers").select_columns([
             SelectColumn::expr("id").alias("provider_id"),
-            SelectColumn::expr(
-                DialectSql::dialect(
-                    "CAST(monthly_quota_usd AS DOUBLE PRECISION)",
-                    "CAST(monthly_quota_usd AS REAL)",
-                )
-                .with_mysql("CAST(monthly_quota_usd AS DOUBLE)"),
-            )
+            SelectColumn::expr(DialectSql::dialect(
+                "CAST(monthly_quota_usd AS DOUBLE PRECISION)",
+                "CAST(monthly_quota_usd AS REAL)",
+            ))
             .alias("monthly_quota_usd"),
         ]);
 
         assert_eq!(
             query.render(SqlDialect::Postgres),
             "SELECT id AS \"provider_id\", CAST(monthly_quota_usd AS DOUBLE PRECISION) AS \"monthly_quota_usd\" FROM providers"
-        );
-        assert_eq!(
-            query.render(SqlDialect::MySql),
-            "SELECT id AS `provider_id`, CAST(monthly_quota_usd AS DOUBLE) AS `monthly_quota_usd` FROM providers"
         );
         assert_eq!(
             query.render(SqlDialect::Sqlite),

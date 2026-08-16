@@ -23,22 +23,14 @@ pub(crate) async fn build_admin_provider_summary_payload(
         .ok()?
         .into_iter()
         .next()?;
-    let (
-        endpoints_result,
-        keys_result,
-        quota_snapshot_result,
-        model_stats_result,
-        active_global_model_ids_result,
-    ) = tokio::join!(
+    let (endpoints_result, keys_result, model_stats_result, active_global_model_ids_result) = tokio::join!(
         state.list_provider_catalog_endpoints_by_provider_ids(&provider_ids),
         state.list_provider_catalog_key_summaries_by_provider_ids(&provider_ids),
-        state.read_provider_quota_snapshot(provider_id),
         state.list_provider_model_stats(&provider_ids),
         state.list_active_global_model_ids_by_provider_ids(&provider_ids),
     );
     let endpoints = endpoints_result.ok().unwrap_or_default();
     let keys = keys_result.ok().unwrap_or_default();
-    let quota_snapshot = quota_snapshot_result.ok().flatten();
     let model_stats = model_stats_result
         .ok()
         .unwrap_or_default()
@@ -61,7 +53,6 @@ pub(crate) async fn build_admin_provider_summary_payload(
         &provider,
         &endpoints,
         &keys,
-        quota_snapshot.as_ref(),
         model_stats.as_ref(),
         active_global_model_ids,
         now_unix_secs,
@@ -255,7 +246,6 @@ pub(crate) async fn build_admin_providers_summary_payload(
                 .get(&provider.id)
                 .map(Vec::as_slice)
                 .unwrap_or(&[]),
-            None,
             model_stats_by_provider.get(&provider.id),
             active_global_model_ids,
             now_unix_secs,

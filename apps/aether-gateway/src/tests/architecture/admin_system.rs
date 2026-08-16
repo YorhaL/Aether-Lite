@@ -44,7 +44,6 @@ fn admin_system_build_version_contract_uses_explicit_local_build_arg() {
         "process.env.AETHER_BUILD_VERSION",
         "process.env.AETHER_VERSION",
         "git describe --tags --match \"v[0-9]*\" --always --dirty",
-        "trimmed.startsWith('tunnel-v')",
     ] {
         assert!(
             vite_config.contains(pattern),
@@ -63,17 +62,6 @@ fn admin_system_build_version_contract_uses_explicit_local_build_arg() {
         );
     }
 
-    let build_rs = read_workspace_file("apps/aether-gateway/build.rs");
-    for pattern in [
-        "\"--match\"",
-        "\"v[0-9]*\"",
-        "trimmed.starts_with(\"tunnel-v\")",
-    ] {
-        assert!(
-            build_rs.contains(pattern),
-            "apps/aether-gateway/build.rs should ignore tunnel release tags for gateway version pattern {pattern}"
-        );
-    }
 }
 
 #[test]
@@ -103,19 +91,12 @@ fn admin_system_and_endpoint_roots_stay_thin() {
         "pub(crate) use self::core::maybe_build_local_admin_core_response;",
         "pub(crate) use self::management_tokens::maybe_build_local_admin_management_tokens_response;",
         "pub(crate) use self::modules::maybe_build_local_admin_modules_response;",
-        "pub(crate) use self::proxy_nodes::maybe_build_local_admin_proxy_nodes_response;",
-        "pub(crate) use crate::handlers::admin::provider::pool_admin::maybe_build_local_admin_pool_response;",
     ] {
         assert!(
             !system_mod.contains(forbidden),
             "handlers/admin/system/mod.rs should not remain a public owner export hub for {forbidden}"
         );
     }
-
-    assert!(
-        !workspace_file_exists("apps/aether-gateway/src/handlers/admin/system/pool/mod.rs"),
-        "handlers/admin/system/pool/mod.rs should be deleted once system root delegates pool admin directly to provider::pool_admin"
-    );
 
     let endpoint_mod =
         read_workspace_file("apps/aether-gateway/src/handlers/admin/endpoint/mod.rs");
@@ -164,8 +145,6 @@ fn admin_system_and_endpoint_roots_stay_thin() {
     for pattern in [
         "core::maybe_build_local_admin_core_response(",
         "adaptive::maybe_build_local_admin_adaptive_response(",
-        "pool_admin::maybe_build_local_admin_pool_response(",
-        "proxy_nodes::maybe_build_local_admin_proxy_nodes_response(",
     ] {
         assert!(
             system_routes.contains(pattern),

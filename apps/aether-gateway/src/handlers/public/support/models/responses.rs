@@ -102,10 +102,6 @@ pub(super) fn build_empty_models_list_response(api_format: &str) -> Response<Bod
     }
 }
 
-pub(super) fn build_codex_models_list_response(models: Vec<serde_json::Value>) -> Response<Body> {
-    Json(json!({ "models": models })).into_response()
-}
-
 pub(super) fn build_openai_models_list_response(
     rows: &[StoredMinimalCandidateSelectionRow],
 ) -> Response<Body> {

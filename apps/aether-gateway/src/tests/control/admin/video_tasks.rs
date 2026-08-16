@@ -31,7 +31,7 @@ use crate::data::GatewayDataState;
 
 fn trusted_admin_headers() -> HeaderMap {
     let mut headers = HeaderMap::new();
-    headers.insert(GATEWAY_HEADER, HeaderValue::from_static("rust-phase3b"));
+    headers.insert(GATEWAY_HEADER, HeaderValue::from_static("aether"));
     headers.insert(
         TRUSTED_ADMIN_USER_ID_HEADER,
         HeaderValue::from_static("admin-user-123"),
@@ -100,7 +100,6 @@ fn sample_admin_video_task(
         key_id: Some("provider-key-1".to_string()),
         client_api_format: Some("openai:video".to_string()),
         provider_api_format: Some("openai:video".to_string()),
-        format_converted: false,
         model: Some(model.to_string()),
         prompt: Some(prompt.to_string()),
         original_request_body: Some(json!({ "prompt": prompt })),
@@ -205,7 +204,7 @@ async fn gateway_handles_admin_video_tasks_list_locally_with_trusted_admin_princ
         .get(format!(
             "{gateway_url}/api/admin/video-tasks?status=completed&page=1&page_size=20"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -299,7 +298,7 @@ async fn gateway_handles_admin_video_tasks_stats_locally_with_trusted_admin_prin
 
     let response = reqwest::Client::new()
         .get(format!("{gateway_url}/api/admin/video-tasks/stats"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -381,7 +380,7 @@ async fn gateway_handles_admin_video_task_detail_locally_with_trusted_admin_prin
 
     let response = reqwest::Client::new()
         .get(format!("{gateway_url}/api/admin/video-tasks/task-detail"))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -566,7 +565,6 @@ async fn gateway_cancels_admin_video_task_locally_with_trusted_admin_principal()
                     "original_request_body": {
                         "prompt": "cancel prompt"
                     },
-                    "format_converted": false
                 },
                 "transport": {
                     "upstream_base_url": "https://api.openai.example/v1",
@@ -604,7 +602,7 @@ async fn gateway_cancels_admin_video_task_locally_with_trusted_admin_principal()
         .post(format!(
             "{gateway_url}/api/admin/video-tasks/task-openai-cancel/cancel"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -629,7 +627,7 @@ async fn gateway_cancels_admin_video_task_locally_with_trusted_admin_principal()
         .get(format!(
             "{gateway_url}/api/admin/video-tasks/task-openai-cancel"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -753,7 +751,7 @@ async fn gateway_redirects_admin_video_task_video_locally_with_trusted_admin_pri
         .get(format!(
             "{gateway_url}/api/admin/video-tasks/task-redirect/video"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -911,7 +909,7 @@ async fn gateway_proxies_admin_video_task_video_locally_with_trusted_admin_princ
         .get(format!(
             "{gateway_url}/api/admin/video-tasks/task-proxy/video"
         ))
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")

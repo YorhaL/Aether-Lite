@@ -1,5 +1,5 @@
 import client from '../client'
-import type { ProviderEndpoint, ProxyConfig, HeaderRule, BodyRule, FormatAcceptanceConfig } from './types'
+import type { ProviderEndpoint, HeaderRule, BodyRule } from './types'
 
 /**
  * 获取指定 Provider 的所有 Endpoints
@@ -32,8 +32,6 @@ export async function createEndpoint(
     max_retries?: number
     is_active?: boolean
     config?: Record<string, unknown>
-    proxy?: ProxyConfig | null
-    format_acceptance_config?: FormatAcceptanceConfig | null
   }
 ): Promise<ProviderEndpoint> {
   const response = await client.post(`/api/admin/endpoints/providers/${providerId}/endpoints`, data)
@@ -53,8 +51,6 @@ export async function updateEndpoint(
     max_retries: number
     is_active: boolean
     config: Record<string, unknown> | null
-    proxy: ProxyConfig | null
-    format_acceptance_config: FormatAcceptanceConfig | null
   }>
 ): Promise<ProviderEndpoint> {
   const response = await client.put(`/api/admin/endpoints/${endpointId}`, data)
@@ -72,9 +68,7 @@ export async function deleteEndpoint(endpointId: string): Promise<{ message: str
 /**
  * 获取指定 API 格式的默认请求体规则
  */
-export async function getDefaultBodyRules(apiFormat: string, providerType?: string): Promise<{ api_format: string; body_rules: BodyRule[] }> {
-  const params: Record<string, string> = {}
-  if (providerType) params.provider_type = providerType
-  const response = await client.get(`/api/admin/endpoints/defaults/${apiFormat}/body-rules`, { params })
+export async function getDefaultBodyRules(apiFormat: string): Promise<{ api_format: string; body_rules: BodyRule[] }> {
+  const response = await client.get(`/api/admin/endpoints/defaults/${apiFormat}/body-rules`)
   return response.data
 }

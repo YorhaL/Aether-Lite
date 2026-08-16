@@ -124,12 +124,8 @@ pub(super) async fn maybe_handle(
                         .ok()
                         .map(|duration| duration.as_secs())
                         .unwrap_or(0);
-                    Json(build_admin_provider_model_response(
-                        &provider,
-                        &updated,
-                        now_unix_secs,
-                    ))
-                    .into_response()
+                    Json(build_admin_provider_model_response(&updated, now_unix_secs))
+                        .into_response()
                 }
                 None => (
                     http::StatusCode::NOT_FOUND,

@@ -762,8 +762,6 @@ async fn build_admin_system_cleanup_payload(
     let cleaned = json!({
         "audit_logs": summary.audit_logs_deleted,
         "request_candidates": summary.request_candidates_deleted,
-        "proxy_node_metrics_1m": summary.proxy_node_metrics.deleted_1m_rows,
-        "proxy_node_metrics_1h": summary.proxy_node_metrics.deleted_1h_rows,
         "pending_failed": summary.pending_failed,
         "pending_recovered": summary.pending_recovered,
         "usage_body_externalized": summary.usage.body_externalized,
@@ -776,8 +774,6 @@ async fn build_admin_system_cleanup_payload(
     let total = summary
         .audit_logs_deleted
         .saturating_add(summary.request_candidates_deleted)
-        .saturating_add(summary.proxy_node_metrics.deleted_1m_rows)
-        .saturating_add(summary.proxy_node_metrics.deleted_1h_rows)
         .saturating_add(summary.pending_failed)
         .saturating_add(summary.pending_recovered)
         .saturating_add(summary.usage.body_externalized)

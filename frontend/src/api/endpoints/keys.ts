@@ -1,6 +1,5 @@
 import client from '../client'
 import type { EndpointAPIKey, AllowedModels } from './types'
-import type { QuotaStatusSnapshot } from './types'
 
 // Re-export types for convenience
 export type { EndpointAPIKey, AllowedModels }
@@ -61,22 +60,12 @@ export async function getModelCapabilities(modelName: string): Promise<ModelCapa
  * 获取完整的 API Key（用于查看和复制）
  */
 export interface RevealKeyResult {
-  auth_type: 'api_key' | 'service_account' | 'oauth' | 'bearer'
+  auth_type: 'api_key' | 'bearer'
   api_key?: string
-  refresh_token?: string
-  auth_config?: string | Record<string, unknown>
 }
 
 export async function revealEndpointKey(keyId: string): Promise<RevealKeyResult> {
   const response = await client.get(`/api/admin/endpoints/keys/${keyId}/reveal`)
-  return response.data
-}
-
-/**
- * 导出 OAuth Key 凭据（扁平 JSON，用于跨实例迁移）
- */
-export async function exportKey(keyId: string): Promise<Record<string, unknown>> {
-  const response = await client.get(`/api/admin/endpoints/keys/${keyId}/export`)
   return response.data
 }
 
@@ -196,10 +185,7 @@ export async function addProviderKey(
   data: {
     api_formats: string[]  // 支持的 API 格式列表（必填）
     api_key: string
-    auth_type?: 'api_key' | 'service_account' | 'oauth' | 'bearer'  // 认证类型
-    auth_type_by_format?: Record<string, 'api_key' | 'bearer'> | null
-    allow_auth_channel_mismatch_formats?: string[] | null
-    auth_config?: Record<string, unknown>  // 认证配置（Vertex AI Service Account JSON）
+    auth_type?: 'api_key' | 'bearer'  // 认证类型
     name: string
     rate_multipliers?: Record<string, number> | null  // 按 API 格式的成本倍率
     internal_priority?: number
@@ -227,10 +213,7 @@ export async function updateProviderKey(
   data: Partial<{
     api_formats: string[]  // 支持的 API 格式列表
     api_key: string
-    auth_type: 'api_key' | 'service_account' | 'oauth' | 'bearer'  // 认证类型
-    auth_type_by_format: Record<string, 'api_key' | 'bearer'> | null
-    allow_auth_channel_mismatch_formats: string[] | null
-    auth_config: Record<string, unknown>  // 认证配置（Vertex AI Service Account JSON）
+    auth_type: 'api_key' | 'bearer'  // 认证类型
     name: string
     rate_multipliers: Record<string, number> | null  // 按 API 格式的成本倍率
     internal_priority: number
@@ -247,7 +230,6 @@ export async function updateProviderKey(
     auto_fetch_models: boolean  // 是否启用自动获取模型
     model_include_patterns: string[]  // 模型包含规则
     model_exclude_patterns: string[]  // 模型排除规则
-    proxy: import('./types').ProxyConfig | null  // Key 级别代理配置
   }>,
   requestOptions?: KeyRequestOptions,
 ): Promise<EndpointAPIKey> {
@@ -256,136 +238,5 @@ export async function updateProviderKey(
     data,
     requestOptions,
   )
-  return response.data
-}
-
-/**
- * 清除 Key 的 OAuth 失效标记
- */
-export async function clearOAuthInvalid(keyId: string): Promise<{ message: string }> {
-  const response = await client.post(`/api/admin/endpoints/keys/${keyId}/clear-oauth-invalid`)
-  return response.data
-}
-
-/**
- * 重置 Key 的当前周期统计起点（Codex 号池）
- */
-export async function resetProviderKeyCycleStats(keyId: string): Promise<{
-  message: string
-  reset_at: number
-  windows: number
-}> {
-  const response = await client.post(`/api/admin/endpoints/keys/${keyId}/reset-cycle-stats`)
-  return response.data
-}
-
-/**
- * 刷新 Provider 的所有 Key 限额信息（Codex / Antigravity）
- */
-export interface RefreshQuotaResult {
-  success: number
-  failed: number
-  total: number
-  results: Array<{
-    key_id: string
-    key_name: string
-    status:
-      | 'success'
-      | 'no_metadata'
-      | 'quota_exhausted'
-      | 'workspace_deactivated'
-      | 'auth_invalid'
-      | 'forbidden'
-      | 'banned'
-      | 'error'
-    // provider 级 bucket 数据；前端应按当前 provider_type 包装回 upstream_metadata.<provider_type>
-    metadata?: Record<string, unknown>
-    quota_snapshot?: QuotaStatusSnapshot
-    message?: string
-    status_code?: number
-  }>
-}
-
-export async function refreshProviderQuota(
-  providerId: string,
-  keyIds?: string[],
-): Promise<RefreshQuotaResult> {
-  const body = keyIds && keyIds.length > 0 ? { key_ids: keyIds } : undefined
-  const response = await client.post(
-    `/api/admin/endpoints/providers/${providerId}/refresh-quota`,
-    body,
-    { timeout: 5 * 60 * 1000 },
-  )
-  return response.data
-}
-
-export interface ConsumeCodexResetCreditPayload {
-  idempotency_key: string
-  expected_credential_generation: string | null
-}
-
-export interface ConsumeCodexResetCreditResult {
-  key_id: string
-  status: 'success' | 'noop' | 'unknown' | 'error' | string
-  outcome:
-    | 'reset'
-    | 'already_redeemed'
-    | 'nothing_to_reset'
-    | 'no_credit'
-    | 'historical_replay'
-    | 'credential_changed'
-    | 'unknown'
-    | 'error'
-    | string
-  idempotency_key: string
-  refresh_status?: 'success' | 'failed' | string
-  refresh_error?: string | null
-  metadata?: Record<string, unknown>
-  quota_snapshot?: QuotaStatusSnapshot
-  message?: string
-  status_code?: number
-}
-
-export async function consumeCodexResetCredit(
-  keyId: string,
-  payload: ConsumeCodexResetCreditPayload,
-): Promise<ConsumeCodexResetCreditResult> {
-  const response = await client.post(
-    `/api/admin/endpoints/keys/${keyId}/codex-reset-credit/consume`,
-    payload,
-    { timeout: 5 * 60 * 1000 },
-  )
-  return response.data
-}
-
-/**
- * 批量导入 OAuth 凭据（通用）
- * 支持的 Provider 类型：Codex、Antigravity、GeminiCli、ClaudeCode、Kiro
- */
-export interface BatchImportResultItem {
-  index: number
-  status: 'success' | 'error'
-  key_id?: string
-  key_name?: string
-  auth_method?: string
-  error?: string
-}
-
-export interface BatchImportResult {
-  total: number
-  success: number
-  failed: number
-  results: BatchImportResultItem[]
-}
-
-export async function batchImportOAuth(
-  providerId: string,
-  credentials: string,
-  proxyNodeId?: string
-): Promise<BatchImportResult> {
-  const response = await client.post(`/api/admin/provider-oauth/providers/${providerId}/batch-import`, {
-    credentials,
-    proxy_node_id: proxyNodeId || undefined,
-  })
   return response.data
 }

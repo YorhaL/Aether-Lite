@@ -4,7 +4,7 @@ use serde_json::json;
 
 use super::{
     ExecutionPlan, ExecutionTimeouts, GatewayControlAuthContext, LocalVideoTaskPersistence,
-    LocalVideoTaskTransport, ProxySnapshot, RequestBody,
+    LocalVideoTaskTransport, RequestBody,
 };
 
 pub(super) fn sample_transport(
@@ -36,7 +36,6 @@ pub(super) fn sample_persistence(provider_api_format: &str) -> LocalVideoTaskPer
             "aspect_ratio": "16:9",
             "size": "1280x720"
         }),
-        format_converted: false,
     }
 }
 
@@ -95,14 +94,6 @@ pub(super) fn sample_plan(url: &str, provider_api_format: &str) -> ExecutionPlan
             }
             .to_string(),
         ),
-        proxy: Some(ProxySnapshot {
-            enabled: Some(false),
-            mode: Some("direct".to_string()),
-            node_id: None,
-            label: None,
-            url: None,
-            extra: None,
-        }),
         transport_profile: None,
         timeouts: Some(ExecutionTimeouts {
             connect_ms: Some(10_000),

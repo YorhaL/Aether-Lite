@@ -46,14 +46,8 @@ async fn build_admin_provider_key_items_payload(
     let items = keys
         .into_iter()
         .map(|key| {
-            let api_formats =
-                provider_key_effective_api_formats(&key, &provider.provider_type, &endpoints);
-            state.build_admin_provider_key_response(
-                &key,
-                &provider.provider_type,
-                &api_formats,
-                now_unix_secs,
-            )
+            let api_formats = provider_key_effective_api_formats(&key);
+            state.build_admin_provider_key_response(&key, &api_formats, now_unix_secs)
         })
         .collect();
     Some((items, key_page.total))

@@ -8,29 +8,12 @@ use crate::actions::{
 };
 use crate::conditions::RoutingCondition;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RoutingSchedulingPreset {
-    pub preset: String,
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mode: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct RoutingPoolPolicyOverride {
-    #[serde(default)]
-    pub scheduling_presets: Vec<RoutingSchedulingPreset>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct RoutingDefaultPolicy {
     #[serde(default)]
     pub priority_mode: RoutingSetPriorityMode,
     #[serde(default)]
     pub scheduling_mode: RoutingSchedulingMode,
-    #[serde(default)]
-    pub keep_priority_on_conversion: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -44,10 +27,6 @@ pub struct RoutingModelPolicy {
     pub provider_priority_overrides: BTreeMap<String, i32>,
     #[serde(default)]
     pub key_priority_overrides: BTreeMap<String, i32>,
-    #[serde(default)]
-    pub pool_priority_overrides: BTreeMap<String, i32>,
-    #[serde(default)]
-    pub pool_policy_overrides: BTreeMap<String, RoutingPoolPolicyOverride>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

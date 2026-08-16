@@ -9,8 +9,6 @@ pub use aether_data_contracts::repository::auth::{
     StoredAuthApiKeyExportRecord, StoredAuthApiKeySnapshot, UpdateStandaloneApiKeyBasicRecord,
     UpdateUserApiKeyBasicRecord,
 };
-#[cfg(feature = "mysql")]
-pub use aether_data_mysql::MysqlAuthApiKeyReadRepository;
 #[cfg(feature = "postgres")]
 pub use aether_data_postgres::SqlxAuthApiKeySnapshotReadRepository;
 #[cfg(feature = "sqlite")]

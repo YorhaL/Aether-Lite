@@ -1,7 +1,6 @@
 use super::extractors::admin_default_body_rules_api_format;
 use crate::api::ai::admin_default_body_rules_for_signature;
 use crate::handlers::admin::request::{AdminAppState, AdminRequestContext};
-use crate::handlers::admin::shared::query_param_value;
 use crate::GatewayError;
 use axum::{
     body::{Body, Bytes},
@@ -39,10 +38,8 @@ pub(super) async fn maybe_handle(
                 .into_response(),
         ));
     };
-    let provider_type = query_param_value(request_context.query_string(), "provider_type");
-
     Ok(Some(
-        match admin_default_body_rules_for_signature(&api_format, provider_type.as_deref()) {
+        match admin_default_body_rules_for_signature(&api_format) {
             Some((normalized_api_format, body_rules)) => Json(json!({
                 "api_format": normalized_api_format,
                 "body_rules": body_rules,

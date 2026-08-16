@@ -254,15 +254,11 @@ async fn seed_provider_catalog(
         config.provider_id.clone(),
         "Local pressure OpenAI mock".to_string(),
         Some("http://127.0.0.1:18181".to_string()),
-        "openai".to_string(),
     )?
     .with_transport_fields(
         true,
-        false,
-        false,
         None,
         Some(0),
-        None,
         Some(120.0),
         Some(30.0),
         provider_config,
@@ -297,8 +293,6 @@ async fn seed_provider_catalog(
         Some(0),
         None,
         None,
-        None,
-        None,
     )?
     .with_health_score(1.0);
 
@@ -325,9 +319,7 @@ async fn seed_provider_catalog(
         Some(config.provider_api_key.clone()),
         None,
         None,
-        None,
         Some(json!([config.model.clone()])),
-        None,
         None,
         None,
     )?

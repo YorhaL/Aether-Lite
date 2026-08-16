@@ -14,7 +14,6 @@ pub(crate) enum SchedulerSchedulingMode {
 pub(crate) struct SchedulerOrderingConfig {
     pub(crate) priority_mode: SchedulerPriorityMode,
     pub(crate) scheduling_mode: SchedulerSchedulingMode,
-    pub(crate) keep_priority_on_conversion: bool,
 }
 
 impl Default for SchedulerOrderingConfig {
@@ -22,7 +21,6 @@ impl Default for SchedulerOrderingConfig {
         Self {
             priority_mode: SchedulerPriorityMode::Provider,
             scheduling_mode: SchedulerSchedulingMode::CacheAffinity,
-            keep_priority_on_conversion: false,
         }
     }
 }
@@ -40,10 +38,6 @@ pub(crate) fn parse_scheduler_priority_mode(
         Some("global_key") => SchedulerPriorityMode::GlobalKey,
         _ => SchedulerPriorityMode::Provider,
     }
-}
-
-pub(crate) fn parse_keep_priority_on_conversion(value: Option<&serde_json::Value>) -> bool {
-    value.and_then(serde_json::Value::as_bool).unwrap_or(false)
 }
 
 pub(crate) fn parse_scheduler_scheduling_mode(
@@ -77,15 +71,8 @@ pub(crate) async fn read_scheduler_ordering_config(
             .await?
             .as_ref(),
     );
-    let keep_priority_on_conversion = parse_keep_priority_on_conversion(
-        state
-            .read_system_config_json_value("keep_priority_on_conversion")
-            .await?
-            .as_ref(),
-    );
     Ok(SchedulerOrderingConfig {
         priority_mode,
         scheduling_mode,
-        keep_priority_on_conversion,
     })
 }

@@ -26,7 +26,7 @@ const productionSteps = [
   {
     title: '配置环境变量',
     note: '生成密钥并填入 .env',
-    code: 'cp .env.example .env\npython generate_keys.py',
+    code: 'cp .env.example .env\n./generate_keys.sh',
     icon: Key
   },
   {
@@ -86,7 +86,7 @@ function copyStep(stepId: string, code: string) {
         快速开始
       </h1>
       <p class="text-base text-[#666663] dark:text-[#a3a094] max-w-2xl">
-        本文档将引导您完成 Aether 的项目部署、配置以及反向代理等高级特性的使用。
+        本文档将引导您完成 Aether Lite 的部署，并配置用于内部 API 分发的自定义提供商。
       </p>
     </div>
 
@@ -237,6 +237,7 @@ function copyStep(stepId: string, code: string) {
 
         <div>
           <h3>2. 添加提供商</h3>
+          <p>Lite 版本仅支持自定义提供商；请求格式必须与端点 API 格式一致。</p>
           <img
             loading="lazy"
             src="/guide/quickstart-add-provider.webp"
@@ -303,125 +304,18 @@ function copyStep(stepId: string, code: string) {
       </div>
     </section>
 
-    <!-- 3. 反向代理 -->
-    <section
-      id="reverse-proxy"
-      class="scroll-mt-24 lg:scroll-mt-20"
-    >
-      <h2>3. 反向代理</h2>
-      <p>添加提供商时, 提供商类型选择对应类型即可, 反向代理默认开启提供商级格式转换。</p>
-
-      <ul class="list-decimal pl-5 space-y-4 mt-4 text-[#666663] dark:text-[#a3a094]">
-        <li>
-          <span class="font-medium text-[#262624] dark:text-[#f1ead8]">Codex</span>
-          <ul class="list-disc pl-5 mt-2 space-y-1">
-            <li>OAuth授权登录</li>
-            <li>导入RefreshToken, 支持批量导入</li>
-          </ul>
-        </li>
-        <li>
-          <span class="font-medium text-[#262624] dark:text-[#f1ead8]">Kiro</span>
-          <ul class="list-disc pl-5 mt-2 space-y-2">
-            <li>Build ID</li>
-            <li>Identity Center (Start URL, Region)</li>
-            <li>
-              导入 RefreshToken, 支持批量导入
-              <div
-                :class="[panelClasses.commandPanel]"
-                class="mt-3"
-              >
-                <div class="px-4 py-2 border-b border-[#e5e4df]/50 dark:border-[rgba(227,224,211,0.06)] bg-[#f5f5f0]/50 dark:bg-[rgba(227,224,211,0.05)] text-xs text-[#91918d] dark:text-[#a3a094]/70">
-                  Social 格式要求
-                </div>
-                <pre class="px-4 py-3 text-[13px] font-mono text-[#262624] dark:text-[#f1ead8] overflow-x-auto m-0 bg-transparent"><code>{
-  "refresh_token": ""
-}</code></pre>
-              </div>
-              <div
-                :class="[panelClasses.commandPanel]"
-                class="mt-3"
-              >
-                <div class="px-4 py-2 border-b border-[#e5e4df]/50 dark:border-[rgba(227,224,211,0.06)] bg-[#f5f5f0]/50 dark:bg-[rgba(227,224,211,0.05)] text-xs text-[#91918d] dark:text-[#a3a094]/70">
-                  IDC 格式要求
-                </div>
-                <pre class="px-4 py-3 text-[13px] font-mono text-[#262624] dark:text-[#f1ead8] overflow-x-auto m-0 bg-transparent"><code>{
-  "refresh_token": "",
-  "client_id": "",
-  "client_secret": "",
-  "machine_id": ""
-}</code></pre>
-              </div>
-            </li>
-          </ul>
-        </li>
-        <li>
-          <span class="font-medium text-[#262624] dark:text-[#f1ead8]">Antigravity</span>
-          <ul class="list-disc pl-5 mt-2 space-y-1">
-            <li>OAuth授权登录</li>
-            <li>导入RefreshToken, 支持批量导入</li>
-          </ul>
-        </li>
-      </ul>
-
-      <img
-        loading="lazy"
-        src="/guide/quickstart-reverse-proxy.webp"
-        alt="反向代理配置示例"
-        class="rounded-xl border border-[#e5e4df] dark:border-[rgba(227,224,211,0.12)] shadow-sm mt-6 w-full max-w-2xl"
-      >
-    </section>
-
-    <!-- 4. 异步任务 -->
+    <!-- 3. 异步任务 -->
     <section
       id="async-tasks"
       class="scroll-mt-24 lg:scroll-mt-20"
     >
-      <h2>4. 异步任务</h2>
+      <h2>3. 异步任务</h2>
       <p>需要有提供商端点支持。</p>
       
       <ul class="list-decimal pl-5 mt-4 text-[#666663] dark:text-[#a3a094] space-y-1">
         <li><span class="font-medium text-[#262624] dark:text-[#f1ead8]">Veo</span></li>
         <li><span class="font-medium text-[#262624] dark:text-[#f1ead8]">Sora</span></li>
       </ul>
-    </section>
-
-    <!-- 5. 代理配置 -->
-    <section
-      id="proxy-config"
-      class="scroll-mt-24 lg:scroll-mt-20"
-    >
-      <h2>5. 代理配置</h2>
-
-      <div class="space-y-6 mt-6">
-        <div>
-          <h3>1. Aether-Proxy</h3>
-          <p>Rust实现, 超小资源占有, 适合性能低的VPS直接使用。</p>
-          <a
-            href="https://github.com/fawney19/Aether/tree/main/aether-tunnel"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-[#cc785c] dark:text-[#d4a27f] hover:underline mt-2 inline-block"
-          >
-            GitHub 仓库 >
-          </a>
-        </div>
-
-        <div>
-          <h3>2. 代理节点</h3>
-          <p>在模块管理中，开启代理模块后可以添加和使用代理功能，包括手动添加和 Aether-Proxy 自动连接。</p>
-        </div>
-
-        <div>
-          <h3>3. 多级代理</h3>
-          <p>优先级：<span class="text-[#262624] dark:text-[#f1ead8] font-medium bg-[#cc785c]/10 px-2 py-0.5 rounded">Key代理</span> > <span class="text-[#262624] dark:text-[#f1ead8] font-medium bg-[#cc785c]/10 px-2 py-0.5 rounded">提供商代理</span> > <span class="text-[#262624] dark:text-[#f1ead8] font-medium bg-[#cc785c]/10 px-2 py-0.5 rounded">全局代理</span></p>
-          
-          <ul class="list-decimal pl-5 mt-4 space-y-2 text-[#666663] dark:text-[#a3a094]">
-            <li>全局代理 - 系统配置</li>
-            <li>提供商代理 - 提供商配置</li>
-            <li>Key代理 - Key配置</li>
-          </ul>
-        </div>
-      </div>
     </section>
   </div>
 </template>

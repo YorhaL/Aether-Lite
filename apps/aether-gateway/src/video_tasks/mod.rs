@@ -1,14 +1,12 @@
 use crate::control::GatewayControlAuthContext;
-use aether_contracts::{ExecutionPlan, ExecutionTimeouts, ProxySnapshot, RequestBody};
+use aether_contracts::{ExecutionPlan, ExecutionTimeouts, RequestBody};
 
 pub(crate) use self::service::VideoTaskService;
-pub use self::types::VideoTaskTruthSourceMode;
 pub(crate) use self::types::{
     GeminiVideoTaskSeed, LocalVideoTaskContentAction, LocalVideoTaskFollowUpPlan,
     LocalVideoTaskPersistence, LocalVideoTaskReadRefreshPlan, LocalVideoTaskReadResponse,
     LocalVideoTaskRegistryMutation, LocalVideoTaskSeed, LocalVideoTaskSnapshot,
     LocalVideoTaskStatus, LocalVideoTaskSuccessPlan, LocalVideoTaskTransport, OpenAiVideoTaskSeed,
-    VideoTaskSyncReportMode,
 };
 pub(crate) use aether_video_tasks_core::{
     build_internal_finalize_video_plan, build_local_sync_finalize_read_response,

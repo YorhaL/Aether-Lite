@@ -1,12 +1,8 @@
 use crate::admin_api::AdminAppState;
-use crate::bark_push::{read_bark_push_config, send_bark_push, BarkPushConfig};
 use crate::email_delivery::{
     read_smtp_delivery_config, send_smtp_email, ComposedEmail, SmtpDeliveryConfig,
 };
 use crate::handlers::shared::{system_config_bool, system_config_string};
-use crate::server_chan_push::{
-    read_server_chan_push_config, send_server_chan_push, ServerChanPushConfig,
-};
 use crate::{AppState, GatewayError};
 use axum::body::Bytes;
 use serde::{Deserialize, Serialize};
@@ -22,7 +18,6 @@ pub(crate) const IMPORTANT_NOTIFICATION_EMAIL_RECIPIENTS_KEY: &str =
 pub(crate) const IMPORTANT_NOTIFICATION_DEFAULT_CHANNEL_KEY: &str =
     "module.important_notification.default_channel";
 pub(crate) const IMPORTANT_NOTIFICATION_ITEMS_KEY: &str = "module.important_notification.items";
-pub(crate) const PROVIDER_QUOTA_ALERT_ITEM_KEY: &str = "provider_quota_alert";
 
 #[derive(Debug, Clone)]
 pub(crate) struct ImportantNotification {
@@ -35,8 +30,6 @@ pub(crate) struct ImportantNotification {
 pub(crate) enum ImportantNotificationChannelFilter {
     All,
     Email,
-    ServerChan,
-    Bark,
 }
 
 #[derive(Debug, Clone)]
@@ -46,8 +39,6 @@ struct ImportantNotificationConfig {
     email_recipients: Vec<String>,
     default_channel: ImportantNotificationChannelFilter,
     items: Vec<ImportantNotificationItemConfig>,
-    server_chan: ServerChanPushConfig,
-    bark: BarkPushConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -65,8 +56,6 @@ struct ImportantNotificationItemConfig {
 #[derive(Debug, Clone, Copy)]
 struct NotificationChannelReadiness {
     email: bool,
-    server_chan: bool,
-    bark: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -229,8 +218,6 @@ async fn read_notification_channel_readiness(
     let smtp_config = read_smtp_delivery_config(state).await?;
     Ok(NotificationChannelReadiness {
         email: config.email_enabled && !config.email_recipients.is_empty() && smtp_config.is_some(),
-        server_chan: config.server_chan.enabled && config.server_chan.send_key.is_some(),
-        bark: config.bark.enabled && config.bark.device_key.is_some(),
     })
 }
 
@@ -239,12 +226,8 @@ fn channel_filter_has_ready_channel(
     readiness: NotificationChannelReadiness,
 ) -> bool {
     match filter {
-        ImportantNotificationChannelFilter::All => {
-            readiness.email || readiness.server_chan || readiness.bark
-        }
+        ImportantNotificationChannelFilter::All => readiness.email,
         ImportantNotificationChannelFilter::Email => readiness.email,
-        ImportantNotificationChannelFilter::ServerChan => readiness.server_chan,
-        ImportantNotificationChannelFilter::Bark => readiness.bark,
     }
 }
 
@@ -277,34 +260,6 @@ async fn dispatch_important_notification(
         ImportantNotificationChannelFilter::All | ImportantNotificationChannelFilter::Email
     ) {
         maybe_send_email_notification(
-            state,
-            &config,
-            &notification,
-            bypass_enable_checks,
-            &mut reports,
-        )
-        .await;
-    }
-
-    if matches!(
-        channel_filter,
-        ImportantNotificationChannelFilter::All | ImportantNotificationChannelFilter::ServerChan
-    ) {
-        maybe_send_server_chan_notification(
-            state,
-            &config,
-            &notification,
-            bypass_enable_checks,
-            &mut reports,
-        )
-        .await;
-    }
-
-    if matches!(
-        channel_filter,
-        ImportantNotificationChannelFilter::All | ImportantNotificationChannelFilter::Bark
-    ) {
-        maybe_send_bark_notification(
             state,
             &config,
             &notification,
@@ -406,8 +361,6 @@ async fn read_important_notification_config(
             .and_then(parse_channel_filter)
             .unwrap_or(ImportantNotificationChannelFilter::All),
         items: parse_notification_items(items.as_ref()),
-        server_chan: read_server_chan_push_config(state).await?,
-        bark: read_bark_push_config(state).await?,
     })
 }
 
@@ -415,10 +368,6 @@ fn parse_channel_filter(raw: &str) -> Option<ImportantNotificationChannelFilter>
     match raw.trim().to_ascii_lowercase().as_str() {
         "all" => Some(ImportantNotificationChannelFilter::All),
         "email" => Some(ImportantNotificationChannelFilter::Email),
-        "server_chan" | "serverchan" | "serve_chan" => {
-            Some(ImportantNotificationChannelFilter::ServerChan)
-        }
-        "bark" => Some(ImportantNotificationChannelFilter::Bark),
         "global" | "" => None,
         _ => None,
     }
@@ -465,40 +414,16 @@ fn parse_notification_item(value: &Value) -> Option<ImportantNotificationItemCon
 }
 
 fn default_notification_items() -> Vec<ImportantNotificationItemConfig> {
-    vec![
-        ImportantNotificationItemConfig {
-            key: PROVIDER_QUOTA_ALERT_ITEM_KEY.to_string(),
-            name: "号池额度不足".to_string(),
-            enabled: true,
-            channel: None,
-            title_template: None,
-            markdown_template: None,
-            text_template: None,
-            user_email_enabled: false,
-        },
-        ImportantNotificationItemConfig {
-            key: "provider_pool_abnormal".to_string(),
-            name: "号池异常".to_string(),
-            enabled: true,
-            channel: None,
-            title_template: Some("号池异常：{provider_name}".to_string()),
-            markdown_template: Some(
-                "号池 `{provider_name}` 出现异常，请检查服务状态。".to_string(),
-            ),
-            text_template: Some("号池 {provider_name} 出现异常，请检查服务状态。".to_string()),
-            user_email_enabled: false,
-        },
-        ImportantNotificationItemConfig {
-            key: "user_balance_low".to_string(),
-            name: "用户余额不足".to_string(),
-            enabled: true,
-            channel: Some(ImportantNotificationChannelFilter::Email),
-            title_template: Some("余额不足提醒".to_string()),
-            markdown_template: Some("你的账户余额已低于提醒阈值，请及时处理。".to_string()),
-            text_template: Some("你的账户余额已低于提醒阈值，请及时处理。".to_string()),
-            user_email_enabled: true,
-        },
-    ]
+    vec![ImportantNotificationItemConfig {
+        key: "user_balance_low".to_string(),
+        name: "用户余额不足".to_string(),
+        enabled: true,
+        channel: Some(ImportantNotificationChannelFilter::Email),
+        title_template: Some("余额不足提醒".to_string()),
+        markdown_template: Some("你的账户余额已低于提醒阈值，请及时处理。".to_string()),
+        text_template: Some("你的账户余额已低于提醒阈值，请及时处理。".to_string()),
+        user_email_enabled: true,
+    }]
 }
 
 fn optional_non_empty_string(value: Option<&Value>) -> Option<String> {
@@ -662,90 +587,6 @@ async fn send_single_email_notification(
     .await
 }
 
-async fn maybe_send_server_chan_notification(
-    state: &AppState,
-    config: &ImportantNotificationConfig,
-    notification: &ImportantNotification,
-    bypass_channel_toggle: bool,
-    reports: &mut Vec<ImportantNotificationChannelReport>,
-) {
-    if !bypass_channel_toggle && !config.server_chan.enabled {
-        return;
-    }
-    if config.server_chan.send_key.is_none() {
-        reports.push(ImportantNotificationChannelReport {
-            channel: "server_chan",
-            success: false,
-            message: "未配置 Server 酱 SendKey".to_string(),
-        });
-        return;
-    };
-    match send_server_chan_push(
-        state,
-        &config.server_chan,
-        &notification.title,
-        &notification.markdown_body,
-    )
-    .await
-    {
-        Ok(()) => reports.push(ImportantNotificationChannelReport {
-            channel: "server_chan",
-            success: true,
-            message: "Server 酱通知已发送".to_string(),
-        }),
-        Err(err) => {
-            warn!(error = ?err, "failed to send server chan important notification");
-            reports.push(ImportantNotificationChannelReport {
-                channel: "server_chan",
-                success: false,
-                message: format!("Server 酱通知发送失败: {err:?}"),
-            });
-        }
-    }
-}
-
-async fn maybe_send_bark_notification(
-    state: &AppState,
-    config: &ImportantNotificationConfig,
-    notification: &ImportantNotification,
-    bypass_channel_toggle: bool,
-    reports: &mut Vec<ImportantNotificationChannelReport>,
-) {
-    if !bypass_channel_toggle && !config.bark.enabled {
-        return;
-    }
-    if config.bark.device_key.is_none() {
-        reports.push(ImportantNotificationChannelReport {
-            channel: "bark",
-            success: false,
-            message: "未配置 Bark Device Key".to_string(),
-        });
-        return;
-    };
-    match send_bark_push(
-        state,
-        &config.bark,
-        &notification.title,
-        &notification.markdown_body,
-    )
-    .await
-    {
-        Ok(()) => reports.push(ImportantNotificationChannelReport {
-            channel: "bark",
-            success: true,
-            message: "Bark 通知已发送".to_string(),
-        }),
-        Err(err) => {
-            warn!(error = ?err, "failed to send bark important notification");
-            reports.push(ImportantNotificationChannelReport {
-                channel: "bark",
-                success: false,
-                message: format!("Bark 通知发送失败: {err:?}"),
-            });
-        }
-    }
-}
-
 fn single_report(
     channel: &'static str,
     success: bool,
@@ -852,19 +693,11 @@ mod tests {
     }
 
     #[test]
-    fn parse_channel_filter_accepts_bark() {
-        assert_eq!(
-            parse_channel_filter("bark"),
-            Some(ImportantNotificationChannelFilter::Bark)
-        );
-    }
-
-    #[test]
     fn item_template_renders_fallback_and_variables() {
         let items = parse_notification_items(Some(&json!([
             {
-                "key": "provider_quota_alert",
-                "name": "号池额度不足",
+                "key": "custom_alert",
+                "name": "自定义提醒",
                 "title_template": "额度提醒：{provider_name}",
                 "markdown_template": "{body}\n剩余：{total_available}",
                 "text_template": "{text_body}\n剩余：{total_available}"

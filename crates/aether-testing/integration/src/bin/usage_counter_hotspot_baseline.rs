@@ -78,7 +78,6 @@ struct FlushReport {
     provider_api_key_targets: usize,
     model_targets: usize,
     provider_monthly_targets: usize,
-    proxy_node_targets: usize,
     management_token_targets: usize,
     api_key_last_used_targets: usize,
 }
@@ -187,7 +186,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     flush.provider_api_key_targets += final_flush.provider_api_key_targets;
     flush.model_targets += final_flush.model_targets;
     flush.provider_monthly_targets += final_flush.provider_monthly_targets;
-    flush.proxy_node_targets += final_flush.proxy_node_targets;
     flush.management_token_targets += final_flush.management_token_targets;
     flush.api_key_last_used_targets += final_flush.api_key_last_used_targets;
     drop(flush);
@@ -315,7 +313,6 @@ fn spawn_flush_loop(
             report.provider_api_key_targets += summary.provider_api_key_targets;
             report.model_targets += summary.model_targets;
             report.provider_monthly_targets += summary.provider_monthly_targets;
-            report.proxy_node_targets += summary.proxy_node_targets;
             report.management_token_targets += summary.management_token_targets;
             report.api_key_last_used_targets += summary.api_key_last_used_targets;
             drop(report);
@@ -471,7 +468,6 @@ fn usage_record(index: usize) -> UpsertUsageRecord {
         endpoint_api_format: Some("openai:chat".to_string()),
         provider_api_family: Some("openai".to_string()),
         provider_endpoint_kind: Some("chat".to_string()),
-        has_format_conversion: Some(false),
         is_stream: Some(false),
         input_tokens: Some(10),
         output_tokens: Some(20),

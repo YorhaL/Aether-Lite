@@ -1,5 +1,4 @@
 import apiClient from './client'
-import type { ModelTestCapabilities } from './endpoints/types'
 import axios, { type AxiosRequestConfig } from 'axios'
 import { cache, cachedRequest, buildCacheKey } from '@/utils/cache'
 import type { BillingSummary } from './auth'
@@ -75,26 +74,9 @@ export interface ConfigExportData {
   exported_at: string
   global_models: GlobalModelExport[]
   providers: ProviderExport[]
-  proxy_nodes?: ProxyNodeExport[]
   ldap_config?: LDAPConfigExport | null
   oauth_providers?: OAuthProviderExport[]
   system_configs?: SystemConfigExport[]
-}
-
-export interface ProxyNodeExport {
-  id: string
-  name: string
-  ip: string
-  port: number
-  region?: string | null
-  is_manual: boolean
-  proxy_url?: string | null
-  proxy_username?: string | null
-  proxy_password?: string | null
-  tunnel_mode: boolean
-  heartbeat_interval: number
-  remote_config?: Record<string, unknown> | null
-  config_version: number
 }
 
 // 用户导出数据结构
@@ -274,19 +256,12 @@ export interface ProviderExport {
   name: string
   description?: string | null
   website?: string | null
-  provider_type?: string
-  billing_type?: string | null
-  monthly_quota_usd?: number | null
-  quota_reset_day?: number
   provider_priority?: number
-  keep_priority_on_conversion?: boolean
-  enable_format_conversion?: boolean
   is_active: boolean
   concurrent_limit?: number | null
   max_retries?: number | null
   stream_first_byte_timeout?: number | null
   request_timeout?: number | null
-  proxy?: Record<string, unknown>
   config?: Record<string, unknown>
   endpoints: EndpointExport[]
   api_keys: ProviderKeyExport[]
@@ -302,14 +277,11 @@ export interface EndpointExport {
   is_active: boolean
   custom_path?: string | null
   config?: Record<string, unknown>
-  format_acceptance_config?: Record<string, unknown> | null
-  proxy?: Record<string, unknown>
 }
 
 export interface ProviderKeyExport {
   api_key: string
   auth_type?: string
-  auth_config?: string | Record<string, unknown> | null
   name?: string | null
   note?: string | null
   api_formats: string[]
@@ -318,7 +290,6 @@ export interface ProviderKeyExport {
   internal_priority?: number
   global_priority_by_format?: Record<string, number> | null
   auth_type_by_format?: Record<string, 'api_key' | 'bearer'> | null
-  allow_auth_channel_mismatch_formats?: string[] | null
   rpm_limit?: number | null
   allowed_models?: string[] | null
   capabilities?: Record<string, boolean>
@@ -329,8 +300,6 @@ export interface ProviderKeyExport {
   model_include_patterns?: string[] | null
   model_exclude_patterns?: string[] | null
   is_active: boolean
-  proxy?: Record<string, unknown> | null
-  fingerprint?: Record<string, unknown> | null
 }
 
 export interface ModelExport {
@@ -588,7 +557,6 @@ export interface ProviderModelsQueryResponse {
       display_name?: string
       api_format?: string
       api_formats?: string[]
-      model_test_capabilities?: ModelTestCapabilities | null
     }>
     error?: string
     warning?: string
@@ -635,7 +603,6 @@ export interface ConfigImportResponse {
   message: string
   stats: {
     global_models: { created: number; updated: number; skipped: number }
-    proxy_nodes?: { created: number; updated: number; skipped: number }
     providers: { created: number; updated: number; skipped: number }
     endpoints: { created: number; updated: number; skipped: number }
     keys: { created: number; updated: number; skipped: number }
@@ -732,21 +699,6 @@ export interface CostSavingsResponse {
   cache_creation_cost: number
   estimated_full_cost: number
   cache_savings: number
-}
-
-export interface QuotaUsageProvider {
-  id: string
-  name: string
-  quota_usd: number
-  used_usd: number
-  remaining_usd: number
-  usage_percent: number
-  quota_expires_at?: string | null
-  estimated_exhaust_at?: string | null
-}
-
-export interface QuotaUsageResponse {
-  providers: QuotaUsageProvider[]
 }
 
 export interface AdminAnalyticsRequestOptions {
@@ -1121,8 +1073,8 @@ export const adminApi = {
     return response.data
   },
 
-  async testImportantNotification(options: 'all' | 'email' | 'server_chan' | 'bark' | {
-    channel?: 'all' | 'email' | 'server_chan' | 'bark'
+  async testImportantNotification(options: 'all' | 'email' | {
+    channel?: 'all' | 'email'
     item_key?: string
   } = 'all'): Promise<{
     success: boolean
@@ -1408,17 +1360,6 @@ export const adminApi = {
     )
   },
 
-  async getQuotaUsage(): Promise<QuotaUsageResponse> {
-    return cachedRequest(
-      'admin:stats:providers:quota-usage',
-      async () => {
-        const response = await apiClient.get<QuotaUsageResponse>('/api/admin/stats/providers/quota-usage')
-        return response.data
-      },
-      30 * 1000
-    )
-  },
-
   async getPercentiles(
     params?: {
       start_date?: string
@@ -1457,7 +1398,6 @@ export const adminApi = {
       api_format?: string
       endpoint_kind?: string
       is_stream?: boolean
-      has_format_conversion?: boolean
       slow_threshold_ms?: number
     },
     options?: AdminAnalyticsRequestOptions

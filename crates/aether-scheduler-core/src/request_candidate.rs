@@ -26,16 +26,12 @@ pub struct SchedulerRequestCandidateReportContext {
     pub header_rules: Option<Value>,
     pub body_rules: Option<Value>,
     pub upstream_response: Option<Value>,
-    pub proxy: Option<Value>,
     pub error_flow: Option<Value>,
-    pub candidate_group_id: Option<String>,
-    pub pool_key_index: Option<u32>,
     pub ranking_mode: Option<String>,
     pub priority_mode: Option<String>,
     pub ranking_index: Option<u32>,
     pub priority_slot: Option<i32>,
     pub promoted_by: Option<String>,
-    pub demoted_by: Option<String>,
     pub routing_trace: Option<Value>,
 }
 
@@ -74,16 +70,12 @@ struct ReportCandidateExtraDataInput {
     header_rules: Option<Value>,
     body_rules: Option<Value>,
     upstream_response: Option<Value>,
-    proxy: Option<Value>,
     error_flow: Option<Value>,
-    candidate_group_id: Option<String>,
-    pool_key_index: Option<u32>,
     ranking_mode: Option<String>,
     priority_mode: Option<String>,
     ranking_index: Option<u32>,
     priority_slot: Option<i32>,
     promoted_by: Option<String>,
-    demoted_by: Option<String>,
     routing_trace: Option<Value>,
 }
 
@@ -166,22 +158,15 @@ pub fn parse_request_candidate_report_context(
             .get("upstream_response")
             .cloned()
             .filter(|value| !value.is_null()),
-        proxy: report_context
-            .get("proxy")
-            .cloned()
-            .filter(|value| !value.is_null()),
         error_flow: report_context
             .get("error_flow")
             .cloned()
             .filter(|value| !value.is_null()),
-        candidate_group_id: string_field(report_context, "candidate_group_id"),
-        pool_key_index: u32_field(report_context, "pool_key_index"),
         ranking_mode: string_field(report_context, "ranking_mode"),
         priority_mode: string_field(report_context, "priority_mode"),
         ranking_index: u32_field(report_context, "ranking_index"),
         priority_slot: i32_field(report_context, "priority_slot"),
         promoted_by: string_field(report_context, "promoted_by"),
-        demoted_by: string_field(report_context, "demoted_by"),
         routing_trace: report_context
             .get("routing_trace")
             .cloned()
@@ -217,16 +202,12 @@ pub fn resolve_report_request_candidate_slot(
         header_rules,
         body_rules,
         upstream_response,
-        proxy,
         error_flow,
-        candidate_group_id,
-        pool_key_index,
         ranking_mode,
         priority_mode,
         ranking_index,
         priority_slot,
         promoted_by,
-        demoted_by,
         routing_trace,
     } = metadata;
     let request_id = request_id?;
@@ -242,16 +223,12 @@ pub fn resolve_report_request_candidate_slot(
         header_rules,
         body_rules,
         upstream_response,
-        proxy,
         error_flow,
-        candidate_group_id,
-        pool_key_index,
         ranking_mode,
         priority_mode,
         ranking_index,
         priority_slot,
         promoted_by,
-        demoted_by,
         routing_trace,
     });
     let created_at_unix_ms = matched_candidate
@@ -366,16 +343,12 @@ pub fn build_execution_request_candidate_seed(
             header_rules: metadata.header_rules,
             body_rules: metadata.body_rules,
             upstream_response: metadata.upstream_response,
-            proxy: metadata.proxy,
             error_flow: metadata.error_flow,
-            candidate_group_id: metadata.candidate_group_id,
-            pool_key_index: metadata.pool_key_index,
             ranking_mode: metadata.ranking_mode,
             priority_mode: metadata.priority_mode,
             ranking_index: metadata.ranking_index,
             priority_slot: metadata.priority_slot,
             promoted_by: metadata.promoted_by,
-            demoted_by: metadata.demoted_by,
             routing_trace: metadata.routing_trace,
         })
     });
@@ -416,13 +389,7 @@ fn append_seed_extra_data_from_report_context(
     extra_data: &mut Option<Value>,
     context: &Map<String, Value>,
 ) {
-    const PASSTHROUGH_FIELDS: &[&str] = &[
-        "execution_strategy",
-        "conversion_mode",
-        "client_contract",
-        "provider_contract",
-        "transport_diagnostics",
-    ];
+    const PASSTHROUGH_FIELDS: &[&str] = &["execution_strategy", "transport_diagnostics"];
 
     let mut object = extra_data
         .take()
@@ -532,16 +499,12 @@ fn build_local_request_candidate_extra_data(
         header_rules: metadata.and_then(|metadata| metadata.header_rules.clone()),
         body_rules: metadata.and_then(|metadata| metadata.body_rules.clone()),
         upstream_response: metadata.and_then(|metadata| metadata.upstream_response.clone()),
-        proxy: metadata.and_then(|metadata| metadata.proxy.clone()),
         error_flow: metadata.and_then(|metadata| metadata.error_flow.clone()),
-        candidate_group_id: metadata.and_then(|metadata| metadata.candidate_group_id.clone()),
-        pool_key_index: metadata.and_then(|metadata| metadata.pool_key_index),
         ranking_mode: metadata.and_then(|metadata| metadata.ranking_mode.clone()),
         priority_mode: metadata.and_then(|metadata| metadata.priority_mode.clone()),
         ranking_index: metadata.and_then(|metadata| metadata.ranking_index),
         priority_slot: metadata.and_then(|metadata| metadata.priority_slot),
         promoted_by: metadata.and_then(|metadata| metadata.promoted_by.clone()),
-        demoted_by: metadata.and_then(|metadata| metadata.demoted_by.clone()),
         routing_trace: metadata.and_then(|metadata| metadata.routing_trace.clone()),
     })
 }
@@ -750,16 +713,12 @@ fn build_report_candidate_extra_data(input: ReportCandidateExtraDataInput) -> Op
         header_rules,
         body_rules,
         upstream_response,
-        proxy,
         error_flow,
-        candidate_group_id,
-        pool_key_index,
         ranking_mode,
         priority_mode,
         ranking_index,
         priority_slot,
         promoted_by,
-        demoted_by,
         routing_trace,
     } = input;
     let mut extra_data = Map::with_capacity(8);
@@ -810,27 +769,8 @@ fn build_report_candidate_extra_data(input: ReportCandidateExtraDataInput) -> Op
     if let Some(upstream_response) = upstream_response {
         extra_data.insert("upstream_response".to_string(), upstream_response);
     }
-    if let Some(proxy) = proxy {
-        extra_data.insert("proxy".to_string(), proxy);
-    }
     if let Some(error_flow) = error_flow {
         extra_data.insert("error_flow".to_string(), error_flow);
-    }
-    if let Some(candidate_group_id) = candidate_group_id {
-        extra_data.insert(
-            "candidate_group_id".to_string(),
-            Value::String(candidate_group_id.clone()),
-        );
-        extra_data.insert(
-            "pool_group_id".to_string(),
-            Value::String(candidate_group_id),
-        );
-    }
-    if let Some(pool_key_index) = pool_key_index {
-        extra_data.insert(
-            "pool_key_index".to_string(),
-            Value::Number(pool_key_index.into()),
-        );
     }
     if let Some(ranking_mode) = ranking_mode {
         extra_data.insert("ranking_mode".to_string(), Value::String(ranking_mode));
@@ -852,9 +792,6 @@ fn build_report_candidate_extra_data(input: ReportCandidateExtraDataInput) -> Op
     }
     if let Some(promoted_by) = promoted_by {
         extra_data.insert("promoted_by".to_string(), Value::String(promoted_by));
-    }
-    if let Some(demoted_by) = demoted_by {
-        extra_data.insert("demoted_by".to_string(), Value::String(demoted_by));
     }
     if let Some(routing_trace) = routing_trace {
         extra_data.insert("routing_trace".to_string(), routing_trace);
@@ -966,7 +903,6 @@ mod tests {
             client_api_format: "openai:chat".to_string(),
             provider_api_format: "openai:chat".to_string(),
             model_name: Some("gpt-5".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         }
@@ -999,7 +935,7 @@ mod tests {
     }
 
     #[test]
-    fn merges_proxy_trace_info_into_existing_candidate_extra_data() {
+    fn merges_request_trace_info_into_existing_candidate_extra_data() {
         let mut existing = sample_candidate("cand-1", 1, 0);
         existing.extra_data = Some(json!({
             "provider_name": "Provider One"
@@ -1013,7 +949,7 @@ mod tests {
             "endpoint_id": "endpoint-1",
             "key_id": "catalog-key-1",
             "client_api_format": "openai:chat",
-            "provider_api_format": "openai:responses",
+            "provider_api_format": "openai:chat",
             "header_rules": [
                 {"op": "set", "name": "x-test", "value": "1"}
             ],
@@ -1025,18 +961,11 @@ mod tests {
                 "headers": {"retry-after": "2"},
                 "body": {"error": {"message": "overloaded"}}
             },
-            "proxy": {
-                "node_id": "proxy-node-1",
-                "node_name": "edge-1",
-                "source": "provider"
-            },
             "error_flow": {
                 "classification": "retry_upstream_failure",
                 "decision": "retry_next_candidate",
                 "propagation": "suppressed"
-            },
-            "candidate_group_id": "pool-group-1",
-            "pool_key_index": 2
+            }
         })))
         .expect("metadata");
 
@@ -1053,20 +982,6 @@ mod tests {
                 .as_ref()
                 .and_then(|value| value.get("provider_name")),
             Some(&json!("Provider One"))
-        );
-        assert_eq!(
-            slot.extra_data
-                .as_ref()
-                .and_then(|value| value.get("proxy"))
-                .and_then(|value| value.get("node_id")),
-            Some(&json!("proxy-node-1"))
-        );
-        assert_eq!(
-            slot.extra_data
-                .as_ref()
-                .and_then(|value| value.get("proxy"))
-                .and_then(|value| value.get("source")),
-            Some(&json!("provider"))
         );
         assert_eq!(
             slot.extra_data
@@ -1097,24 +1012,6 @@ mod tests {
                 .and_then(|value| value.get("error_flow"))
                 .and_then(|value| value.get("propagation")),
             Some(&json!("suppressed"))
-        );
-        assert_eq!(
-            slot.extra_data
-                .as_ref()
-                .and_then(|value| value.get("candidate_group_id")),
-            Some(&json!("pool-group-1"))
-        );
-        assert_eq!(
-            slot.extra_data
-                .as_ref()
-                .and_then(|value| value.get("pool_group_id")),
-            Some(&json!("pool-group-1"))
-        );
-        assert_eq!(
-            slot.extra_data
-                .as_ref()
-                .and_then(|value| value.get("pool_key_index")),
-            Some(&json!(2))
         );
     }
 
@@ -1191,10 +1088,10 @@ mod tests {
                     "user_id": "user-1",
                     "api_key_id": "api-key-1",
                     "client_api_format": "openai:chat",
-                    "provider_api_format": "openai:responses",
-                    "request_path": "/v1/responses",
+                    "provider_api_format": "openai:chat",
+                    "request_path": "/v1/chat/completions",
                     "request_query_string": "debug=true",
-                    "upstream_url": "https://example.com/v1/responses",
+                    "upstream_url": "https://example.com/v1/chat/completions",
                     "mapped_model": "gpt-5-upstream",
                     "key_name": "primary",
                     "ranking_mode": "CacheAffinity",
@@ -1202,14 +1099,8 @@ mod tests {
                     "ranking_index": 2,
                     "priority_slot": 7,
                     "promoted_by": "cached_affinity",
-                    "demoted_by": "cross_format",
                     "routing_trace": {
-                        "group_id": "routing-group-1",
-                        "pool_expansion": [{
-                            "pool_group_id": "pool-1",
-                            "key_id": "key-1",
-                            "selected_order": 0
-                        }]
+                        "group_id": "routing-group-1"
                     }
                 })),
                 status_update: SchedulerRequestCandidateStatusUpdate {
@@ -1235,14 +1126,14 @@ mod tests {
                 .extra_data
                 .as_ref()
                 .and_then(|value| value.get("provider_api_format")),
-            Some(&json!("openai:responses"))
+            Some(&json!("openai:chat"))
         );
         assert_eq!(
             record
                 .extra_data
                 .as_ref()
                 .and_then(|value| value.get("request_path")),
-            Some(&json!("/v1/responses"))
+            Some(&json!("/v1/chat/completions"))
         );
         assert_eq!(
             record
@@ -1292,13 +1183,6 @@ mod tests {
                 .as_ref()
                 .and_then(|value| value.get("promoted_by")),
             Some(&json!("cached_affinity"))
-        );
-        assert_eq!(
-            record
-                .extra_data
-                .as_ref()
-                .and_then(|value| value.get("demoted_by")),
-            Some(&json!("cross_format"))
         );
         assert_eq!(
             record

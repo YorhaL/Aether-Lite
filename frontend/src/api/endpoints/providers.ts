@@ -1,18 +1,11 @@
 import client from '../client'
 import { buildCacheKey, cachedRequest, dedupedRequest } from '@/utils/cache'
 import type {
-  ClaudeCodeAdvancedConfig,
   FailoverRulesConfig,
-  PoolAdvancedConfig,
   ProviderConfig,
-  ProviderType,
   ProviderWithEndpointsSummary,
-  ProxyConfig,
 } from './types'
-import {
-  normalizeChatPiiRedactionProviderConfig as normalizeChatPiiRedactionProvider,
-  normalizePoolAdvancedConfig as normalizePoolAdvanced,
-} from './types'
+import { normalizeChatPiiRedactionProviderConfig as normalizeChatPiiRedactionProvider } from './types'
 
 interface ProviderRequestOptions {
   timeout?: number
@@ -50,11 +43,6 @@ function normalizeProviderSummary(
   return {
     ...provider,
     chat_pii_redaction: normalizeChatPiiRedactionProvider(provider.chat_pii_redaction),
-    pool_advanced: normalizePoolAdvanced(provider.pool_advanced),
-    codex_fingerprint_convergence_enabled: provider.codex_fingerprint_convergence_enabled ?? false,
-    kiro_simulated_cache_enabled: provider.kiro_simulated_cache_enabled ?? false,
-    max_transfer_count: provider.max_transfer_count ?? 0,
-    max_transfer_timeout_seconds: provider.max_transfer_timeout_seconds ?? 0,
   }
 }
 
@@ -110,29 +98,15 @@ export async function updateProvider(
   providerId: string,
   data: Partial<{
     name: string
-    provider_type: ProviderType
     description: string | null
     website: string
     provider_priority: number
-    keep_priority_on_conversion: boolean
-    billing_type: 'monthly_quota' | 'pay_as_you_go' | 'free_tier'
-    monthly_quota_usd: number
-    quota_reset_day: number
-    quota_last_reset_at: string  // 周期开始时间
-    quota_expires_at: string
     rpm_limit: number | null
     // 请求配置（从 Endpoint 迁移）
     max_retries: number
-    max_transfer_count: number
-    max_transfer_timeout_seconds: number
-    proxy: ProxyConfig | null
     cache_ttl_minutes: number  // 0表示不支持缓存，>0表示支持缓存并设置TTL(分钟)
     max_probe_interval_minutes: number
-    enable_format_conversion: boolean  // 是否允许格式转换（提供商级别开关）
     is_active: boolean
-    claude_code_advanced: ClaudeCodeAdvancedConfig | null
-    codex_fingerprint_convergence_enabled: boolean
-    pool_advanced: PoolAdvancedConfig | null
     failover_rules: FailoverRulesConfig | null
     config: ProviderConfig | null
   }>,
@@ -148,26 +122,13 @@ export async function updateProvider(
 export async function createProvider(
   data: {
     name: string
-    provider_type?: ProviderType
     description?: string
     website?: string
-    billing_type?: 'monthly_quota' | 'pay_as_you_go' | 'free_tier'
-    monthly_quota_usd?: number
-    quota_reset_day?: number
-    quota_last_reset_at?: string
-    quota_expires_at?: string
     provider_priority?: number
-    keep_priority_on_conversion?: boolean
     is_active?: boolean
     max_retries?: number
-    max_transfer_count?: number
-    max_transfer_timeout_seconds?: number
     stream_first_byte_timeout?: number | null
     request_timeout?: number | null
-    proxy?: ProxyConfig | null
-    claude_code_advanced?: ClaudeCodeAdvancedConfig | null
-    codex_fingerprint_convergence_enabled?: boolean
-    pool_advanced?: PoolAdvancedConfig | null
     failover_rules?: FailoverRulesConfig | null
     config?: ProviderConfig | null
   }
@@ -209,151 +170,6 @@ export async function getProviderDeleteTask(
   const response = await client.get<ProviderDeleteTaskResponse>(
     `/api/admin/providers/${providerId}/delete-task/${taskId}`,
   )
-  return response.data
-}
-
-/**
- * 测试模型连接性
- */
-export interface TestModelRequest {
-  provider_id: string
-  model_name: string
-  api_key_id?: string
-  api_key_ids?: string[]
-  endpoint_id?: string
-  message?: string
-  api_format?: string
-  mode?: 'global' | 'direct' | 'pool'
-  apply_model_mapping?: boolean
-  mapped_model_name?: string
-  request_headers?: Record<string, unknown>
-  request_body?: Record<string, unknown>
-  request_id?: string
-}
-
-export interface TestModelResponse {
-  success: boolean
-  error?: string
-  attempts?: TestAttemptDetail[]
-  total_candidates?: number
-  total_attempts?: number
-  candidate_summary?: TestCandidateSummary
-  data?: {
-    response?: {
-      status_code?: number
-      error?: string | { message?: string }
-      choices?: Array<{ message?: { content?: string } }>
-    }
-    content_preview?: string
-  }
-  provider?: {
-    id: string
-    name: string
-    provider_type?: string
-  }
-  model?: string
-}
-
-export async function testModel(
-  data: TestModelRequest,
-  options: { signal?: AbortSignal } = {},
-): Promise<TestModelResponse> {
-  const response = await client.post('/api/admin/provider-query/test-model', data, {
-    timeout: 10 * 60 * 1000,
-    signal: options.signal,
-  })
-  return response.data
-}
-
-/**
- * 带故障转移的模型测试
- */
-export interface TestModelFailoverRequest {
-  provider_id: string
-  mode: 'global' | 'direct' | 'pool'
-  model_name: string
-  failover_models?: string[]
-  api_key_ids?: string[]
-  api_format?: string
-  endpoint_id?: string
-  message?: string
-  apply_model_mapping?: boolean
-  mapped_model_name?: string
-  request_headers?: Record<string, unknown>
-  request_body?: Record<string, unknown>
-  request_id?: string
-}
-
-export interface TestAttemptDetail {
-  candidate_index: number
-  retry_index?: number
-  endpoint_api_format: string
-  endpoint_base_url: string
-  key_name: string | null
-  key_id: string
-  auth_type: string
-  effective_model?: string | null
-  status: 'success' | 'failed' | 'skipped' | 'cancelled' | 'pending' | 'streaming' | 'stream_interrupted' | 'available' | 'unused'
-  skip_reason?: string | null
-  error_message?: string | null
-  status_code?: number | null
-  latency_ms?: number | null
-  request_url?: string | null
-  request_headers?: Record<string, unknown> | null
-  request_body?: unknown
-  response_headers?: Record<string, unknown> | null
-  response_body?: unknown
-}
-
-export interface TestCandidateSummary {
-  total_candidates: number
-  attempted: number
-  success: number
-  failed: number
-  skipped: number
-  unused: number
-  pending?: number
-  available?: number
-  completed?: number
-  stop_reason?: 'first_success' | 'exhausted' | 'all_skipped' | 'no_candidate' | 'pending' | string
-  winning_candidate_index?: number | null
-  winning_key_name?: string | null
-  winning_key_id?: string | null
-  winning_auth_type?: string | null
-  winning_effective_model?: string | null
-  winning_endpoint_api_format?: string | null
-  winning_endpoint_base_url?: string | null
-  winning_latency_ms?: number | null
-  winning_status_code?: number | null
-}
-
-export interface TestModelFailoverResponse {
-  success: boolean
-  model: string
-  provider: { id: string; name: string; provider_type?: string }
-  attempts: TestAttemptDetail[]
-  total_candidates: number
-  total_attempts: number
-  candidate_summary?: TestCandidateSummary
-  data?: Record<string, unknown> | null
-  error?: string | null
-}
-
-export async function testModelFailover(
-  data: TestModelFailoverRequest,
-  options: { signal?: AbortSignal } = {}
-): Promise<TestModelFailoverResponse> {
-  const normalizedModelName = typeof data.model_name === 'string' ? data.model_name.trim() : ''
-  const failoverModels = Array.isArray(data.failover_models) && data.failover_models.length > 0
-    ? data.failover_models
-    : (normalizedModelName ? [normalizedModelName] : undefined)
-  const response = await client.post('/api/admin/provider-query/test-model-failover', {
-    ...data,
-    ...(failoverModels ? { failover_models: failoverModels } : {}),
-  }, {
-    timeout: 10 * 60 * 1000,
-    signal: options.signal,
-  })
   return response.data
 }
 

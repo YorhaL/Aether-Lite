@@ -27,12 +27,6 @@ pub fn append_ai_ranking_metadata_to_object(
             Value::String(promoted_by.to_string()),
         );
     }
-    if let Some(demoted_by) = ranking.demoted_by {
-        object.insert(
-            "demoted_by".to_string(),
-            Value::String(demoted_by.to_string()),
-        );
-    }
 }
 
 #[cfg(test)]
@@ -50,7 +44,6 @@ mod tests {
             ranking_mode: SchedulerRankingMode::CacheAffinity,
             priority_slot: 7,
             promoted_by: Some("cached_affinity"),
-            demoted_by: Some("cross_format"),
         };
         let mut object = Map::new();
 
@@ -61,6 +54,5 @@ mod tests {
         assert_eq!(object.get("ranking_index"), Some(&json!(1)));
         assert_eq!(object.get("priority_slot"), Some(&json!(7)));
         assert_eq!(object.get("promoted_by"), Some(&json!("cached_affinity")));
-        assert_eq!(object.get("demoted_by"), Some(&json!("cross_format")));
     }
 }

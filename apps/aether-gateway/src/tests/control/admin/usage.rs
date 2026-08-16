@@ -40,7 +40,7 @@ const DAY_2_UNIX_SECS: i64 = 1_711_086_400;
 
 fn admin_request(builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
     builder
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_ADMIN_USER_ID_HEADER, "admin-user-123")
         .header(TRUSTED_ADMIN_USER_ROLE_HEADER, "admin")
         .header(TRUSTED_ADMIN_SESSION_ID_HEADER, "session-123")
@@ -48,7 +48,7 @@ fn admin_request(builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
 
 fn trusted_admin_headers() -> HeaderMap {
     let mut headers = HeaderMap::new();
-    headers.insert(GATEWAY_HEADER, HeaderValue::from_static("rust-phase3b"));
+    headers.insert(GATEWAY_HEADER, HeaderValue::from_static("aether"));
     headers.insert(
         TRUSTED_ADMIN_USER_ID_HEADER,
         HeaderValue::from_static("admin-user-123"),
@@ -2011,7 +2011,6 @@ async fn gateway_handles_admin_usage_detail_locally_with_trusted_admin_principal
         "billing_snapshot_schema_version": "v2",
         "billing_snapshot_status": "resolved",
         "rate_multiplier": 0.5,
-        "is_free_tier": false,
         "input_price_per_1m": 3.0,
         "output_price_per_1m": 15.0,
         "cache_creation_price_per_1m": 3.75,
@@ -2086,7 +2085,6 @@ async fn gateway_handles_admin_usage_detail_locally_with_trusted_admin_principal
     assert!(payload["metadata"]["billing_snapshot_schema_version"].is_null());
     assert!(payload["metadata"]["billing_snapshot_status"].is_null());
     assert!(payload["metadata"]["rate_multiplier"].is_null());
-    assert!(payload["metadata"]["is_free_tier"].is_null());
     assert!(payload["metadata"]["input_price_per_1m"].is_null());
     assert!(payload["metadata"]["output_price_per_1m"].is_null());
     assert!(payload["metadata"]["cache_creation_price_per_1m"].is_null());
@@ -2131,7 +2129,6 @@ async fn gateway_handles_admin_usage_detail_locally_with_trusted_admin_principal
     );
     assert_eq!(payload["settlement"]["billing_snapshot_status"], "resolved");
     assert_eq!(payload["settlement"]["rate_multiplier"], 0.5);
-    assert_eq!(payload["settlement"]["is_free_tier"], false);
     assert_eq!(payload["settlement"]["input_price_per_1m"], 3.0);
     assert_eq!(payload["settlement"]["output_price_per_1m"], 15.0);
     assert_eq!(payload["settlement"]["cache_creation_price_per_1m"], 3.75);

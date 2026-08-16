@@ -167,10 +167,9 @@ impl<'a> AdminAppState<'a> {
 
     pub(crate) async fn build_video_task_video_response(
         &self,
-        task_id: &str,
         source: crate::async_task::VideoTaskVideoSource,
     ) -> Result<axum::response::Response, GatewayError> {
-        crate::async_task::build_video_task_video_response(self.app, task_id, source).await
+        crate::async_task::build_video_task_video_response(source).await
     }
 
     pub(crate) async fn store_local_gemini_file_mapping(

@@ -67,15 +67,7 @@ import { BookOpen } from 'lucide-vue-next'
       <h2>2. 添加提供商</h2>
       <div class="space-y-4 mt-4 text-[#666663] dark:text-[#a3a094] text-sm">
         <ul class="list-decimal pl-5 space-y-2">
-          <li><strong class="text-[#262624] dark:text-[#f1ead8] font-medium">提供商类型：</strong>自定义或反代；一般自定义即可，反代请进入反代章节。</li>
-          <li>
-            <strong class="text-[#262624] dark:text-[#f1ead8] font-medium">计费类型：</strong>
-            <ul class="list-disc pl-5 mt-1 space-y-1">
-              <li>按量付费：持续使用</li>
-              <li>月卡额度：按周期(天)限额</li>
-              <li>免费套餐：不计入成本即倍率为0</li>
-            </ul>
-          </li>
+          <li><strong class="text-[#262624] dark:text-[#f1ead8] font-medium">提供商类型：</strong>Lite 版本固定为自定义提供商。</li>
           <li><strong class="text-[#262624] dark:text-[#f1ead8] font-medium">最大重试次数：</strong>在缓存亲和调度模式下，首次请求失败后的重试次数。</li>
           <li>
             <strong class="text-[#262624] dark:text-[#f1ead8] font-medium">超时时间：</strong>
@@ -84,7 +76,6 @@ import { BookOpen } from 'lucide-vue-next'
               <li>非流请求超时时间：非流请求的总超时时间</li>
             </ul>
           </li>
-          <li><strong class="text-[#262624] dark:text-[#f1ead8] font-medium">保持优先级：</strong>通过格式转换的请求，是否保持当前优先级。</li>
         </ul>
         <img
           loading="lazy"
@@ -279,55 +270,12 @@ import { BookOpen } from 'lucide-vue-next'
       </div>
     </section>
 
-    <!-- 8. 反向代理 -->
-    <section
-      id="reverse-proxy"
-      class="scroll-mt-24 lg:scroll-mt-20"
-    >
-      <h2>8. 反向代理</h2>
-      <div class="space-y-6 mt-6">
-        <div>
-          <h4 class="font-medium text-[#262624] dark:text-[#f1ead8] mb-3">
-            1. Codex
-          </h4>
-          <img
-            loading="lazy"
-            src="/guide/concepts-reverse-proxy-codex.webp"
-            alt="Codex 反向代理"
-            class="rounded-xl border border-[#e5e4df] dark:border-[rgba(227,224,211,0.12)] shadow-sm w-full max-w-2xl"
-          >
-        </div>
-        <div>
-          <h4 class="font-medium text-[#262624] dark:text-[#f1ead8] mb-3">
-            2. Krio
-          </h4>
-          <img
-            loading="lazy"
-            src="/guide/concepts-reverse-proxy-kiro.webp"
-            alt="Krio 反向代理"
-            class="rounded-xl border border-[#e5e4df] dark:border-[rgba(227,224,211,0.12)] shadow-sm w-full max-w-2xl"
-          >
-        </div>
-        <div>
-          <h4 class="font-medium text-[#262624] dark:text-[#f1ead8] mb-3">
-            3. Antigravity
-          </h4>
-          <img
-            loading="lazy"
-            src="/guide/concepts-reverse-proxy-antigravity.webp"
-            alt="Antigravity 反向代理"
-            class="rounded-xl border border-[#e5e4df] dark:border-[rgba(227,224,211,0.12)] shadow-sm w-full max-w-2xl"
-          >
-        </div>
-      </div>
-    </section>
-
-    <!-- 9. 优先级管理 -->
+    <!-- 8. 优先级管理 -->
     <section
       id="priority-management"
       class="scroll-mt-24 lg:scroll-mt-20 pb-8"
     >
-      <h2>9. 优先级管理</h2>
+      <h2>8. 优先级管理</h2>
       <p class="text-sm text-[#666663] dark:text-[#a3a094] mb-4">
         允许拖动、或者直接点击数字输入调整优先级。
       </p>

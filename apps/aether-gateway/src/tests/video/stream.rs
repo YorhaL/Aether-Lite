@@ -1,5 +1,5 @@
 use aether_contracts::{StreamFrame, StreamFramePayload, StreamFrameType};
-use aether_crypto::{encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
+use aether_crypto::{encrypt_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
 use aether_data::repository::provider_catalog::InMemoryProviderCatalogReadRepository;
 use aether_data::repository::video_tasks::InMemoryVideoTaskRepository;
 use aether_data_contracts::repository::provider_catalog::{
@@ -22,7 +22,6 @@ use crate::constants::{CONTROL_EXECUTED_HEADER, CONTROL_EXECUTE_FALLBACK_HEADER,
 
 use super::{
     build_router_with_state, build_state_with_execution_runtime_override, start_server,
-    VideoTaskTruthSourceMode,
 };
 
 #[tokio::test]
@@ -90,7 +89,7 @@ async fn gateway_executes_openai_video_content_from_reconstructed_data_task_with
         .expect("key should build")
         .with_transport_fields(
             Some(json!(["openai:video"])),
-            encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-upstream-openai-video")
+            encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-upstream-openai-video")
                 .expect("api key should encrypt"),
             None,
             None,
@@ -269,7 +268,6 @@ async fn gateway_executes_openai_video_content_from_reconstructed_data_task_with
             key_id: Some("key-openai-video-content-followup-1".to_string()),
             client_api_format: Some("openai:video".to_string()),
             provider_api_format: Some("openai:video".to_string()),
-            format_converted: false,
             model: Some("sora-2".to_string()),
             prompt: Some("video content".to_string()),
             original_request_body: Some(json!({
@@ -307,7 +305,6 @@ async fn gateway_executes_openai_video_content_from_reconstructed_data_task_with
 
     let gateway = build_router_with_state(
         build_state_with_execution_runtime_override(execution_runtime_url)
-            .with_video_task_truth_source_mode(VideoTaskTruthSourceMode::RustAuthoritative)
             .with_video_task_repository_and_provider_transport_for_tests(
                 repository,
                 provider_catalog_repository,

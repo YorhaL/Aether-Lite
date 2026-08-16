@@ -71,7 +71,7 @@ async fn gateway_locally_denies_explicit_trusted_balance_failure_without_hitting
         .post(format!("{gateway_url}/v1/chat/completions"))
         .header(http::header::CONTENT_TYPE, "application/json")
         .header(TRACE_ID_HEADER, "trace-control-balance-denied-1")
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_AUTH_USER_ID_HEADER, "user-123")
         .header(TRUSTED_AUTH_API_KEY_ID_HEADER, "key-123")
         .header(TRUSTED_AUTH_BALANCE_HEADER, "0")
@@ -160,7 +160,7 @@ async fn gateway_locally_denies_invalid_trusted_snapshot_without_hitting_control
         .post(format!("{gateway_url}/v1/chat/completions"))
         .header(http::header::CONTENT_TYPE, "application/json")
         .header(TRACE_ID_HEADER, "trace-control-invalid-trusted-1")
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_AUTH_USER_ID_HEADER, "user-123")
         .header(TRUSTED_AUTH_API_KEY_ID_HEADER, "key-123")
         .body("{\"model\":\"gpt-5\",\"messages\":[]}")
@@ -235,7 +235,7 @@ async fn gateway_locally_denies_missing_wallet_without_hitting_control_or_upstre
         .post(format!("{gateway_url}/v1/chat/completions"))
         .header(http::header::CONTENT_TYPE, "application/json")
         .header(TRACE_ID_HEADER, "trace-control-wallet-missing-1")
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_AUTH_USER_ID_HEADER, "user-123")
         .header(TRUSTED_AUTH_API_KEY_ID_HEADER, "key-123")
         .body("{\"model\":\"gpt-5\",\"messages\":[]}")
@@ -481,12 +481,9 @@ async fn gateway_locally_rejects_unclassified_admin_route_without_hitting_upstre
         .await
         .expect("request should succeed");
 
-    assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
     let payload: serde_json::Value = response.json().await.expect("response json should parse");
-    assert_eq!(
-        payload["detail"],
-        "admin proxy route not implemented in rust frontdoor"
-    );
+    assert_eq!(payload["detail"], "Route not found");
     assert_eq!(*upstream_hits.lock().expect("mutex should lock"), 0);
 
     gateway_handle.abort();
@@ -765,7 +762,7 @@ async fn gateway_locally_denies_locked_trusted_snapshot_without_hitting_control_
         .post(format!("{gateway_url}/v1/chat/completions"))
         .header(http::header::CONTENT_TYPE, "application/json")
         .header(TRACE_ID_HEADER, "trace-control-locked-trusted-1")
-        .header(crate::constants::GATEWAY_HEADER, "rust-phase3b")
+        .header(crate::constants::GATEWAY_HEADER, "aether")
         .header(TRUSTED_AUTH_USER_ID_HEADER, "user-locked-123")
         .header(TRUSTED_AUTH_API_KEY_ID_HEADER, "key-locked-123")
         .body("{\"model\":\"gpt-5\",\"messages\":[]}")

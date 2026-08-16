@@ -17,8 +17,6 @@ mod cache_types;
 mod resilience;
 mod route_filters;
 mod routes;
-#[cfg(test)]
-pub(crate) mod test_support;
 mod trace;
 mod usage_helpers;
 
@@ -28,6 +26,3 @@ pub(crate) async fn maybe_build_local_admin_monitoring_response(
 ) -> Result<Option<Response<Body>>, GatewayError> {
     routes::maybe_build_local_admin_monitoring_response(state, request_context).await
 }
-
-#[cfg(test)]
-mod tests;

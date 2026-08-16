@@ -1,7 +1,7 @@
 use axum::{body::Body, http, response::Response};
 
 pub(super) use super::{
-    build_auth_error_response, build_unhandled_public_support_response,
+    build_auth_error_response, build_public_support_route_not_found_response,
     resolve_authenticated_local_user, AppState, GatewayPublicRequestContext,
 };
 
@@ -36,7 +36,9 @@ pub(super) async fn maybe_build_local_user_monitoring_response(
         {
             Some(handle_user_rate_limit_status(state, request_context, headers).await)
         }
-        _ => Some(build_unhandled_public_support_response(request_context)),
+        _ => Some(build_public_support_route_not_found_response(
+            request_context,
+        )),
     }
 }
 
@@ -66,7 +68,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn monitoring_unhandled_route_returns_local_not_implemented_response() {
+    async fn monitoring_unhandled_route_returns_not_found_response() {
         let state = AppState::new().expect("gateway should build");
         let request_context = request_context(
             Method::GET,
@@ -78,16 +80,13 @@ mod tests {
                 .await
                 .expect("monitoring handler should return response");
 
-        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
         let body = to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("body should read");
         let payload: serde_json::Value =
             serde_json::from_slice(&body).expect("json body should parse");
-        assert_eq!(
-            payload["detail"],
-            "public support route not implemented in rust frontdoor"
-        );
+        assert_eq!(payload["detail"], "Route not found");
         assert_eq!(payload["route_family"], "monitoring_user");
         assert_eq!(payload["route_kind"], "audit_logs");
         assert_eq!(

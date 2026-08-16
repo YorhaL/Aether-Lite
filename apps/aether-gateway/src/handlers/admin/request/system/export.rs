@@ -10,8 +10,7 @@ use crate::GatewayError;
 use aether_admin::system::{
     serialize_admin_system_users_export_wallet, AdminSystemConfigDocument, AdminSystemConfigEntry,
     AdminSystemConfigGlobalModel, AdminSystemConfigLdap, AdminSystemConfigOAuthProvider,
-    AdminSystemConfigProxyNode, ADMIN_SYSTEM_CONFIG_EXPORT_VERSION,
-    ADMIN_SYSTEM_USERS_EXPORT_VERSION,
+    ADMIN_SYSTEM_CONFIG_EXPORT_VERSION, ADMIN_SYSTEM_USERS_EXPORT_VERSION,
 };
 use aether_data_contracts::repository::global_models::AdminGlobalModelListQuery;
 use chrono::Utc;
@@ -131,32 +130,11 @@ impl<'a> AdminAppState<'a> {
             })
             .collect::<Vec<_>>();
 
-        let proxy_nodes = self.list_proxy_nodes().await?;
-        let proxy_nodes_data = proxy_nodes
-            .iter()
-            .map(|node| AdminSystemConfigProxyNode {
-                id: Some(node.id.clone()),
-                name: Some(node.name.clone()),
-                ip: Some(node.ip.clone()),
-                port: Some(node.port),
-                region: node.region.clone(),
-                is_manual: Some(node.is_manual),
-                proxy_url: node.proxy_url.clone(),
-                proxy_username: node.proxy_username.clone(),
-                proxy_password: node.proxy_password.clone(),
-                tunnel_mode: Some(node.tunnel_mode),
-                heartbeat_interval: Some(node.heartbeat_interval),
-                remote_config: node.remote_config.clone(),
-                config_version: Some(node.config_version),
-            })
-            .collect::<Vec<_>>();
-
         let document = AdminSystemConfigDocument {
             version: ADMIN_SYSTEM_CONFIG_EXPORT_VERSION.to_string(),
             exported_at: Utc::now().to_rfc3339(),
             global_models: global_models_data,
             providers: providers_data,
-            proxy_nodes: proxy_nodes_data,
             ldap_config: ldap_data,
             oauth_providers: oauth_data,
             system_configs: system_configs_data,

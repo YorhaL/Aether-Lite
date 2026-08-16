@@ -33,21 +33,6 @@ pub(in super::super) async fn build_admin_delete_user_response(
         )
             .into_response());
     }
-    if state.count_user_pending_refunds(&user_id).await? > 0 {
-        return Ok((
-            http::StatusCode::BAD_REQUEST,
-            Json(json!({ "detail": "用户存在未完结退款，禁止删除" })),
-        )
-            .into_response());
-    }
-    if state.count_user_pending_payment_orders(&user_id).await? > 0 {
-        return Ok((
-            http::StatusCode::BAD_REQUEST,
-            Json(json!({ "detail": "用户存在未完结充值订单，禁止删除" })),
-        )
-            .into_response());
-    }
-
     if !state.delete_local_auth_user(&user_id).await? {
         return Ok((
             http::StatusCode::NOT_FOUND,

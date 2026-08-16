@@ -42,7 +42,7 @@ pub(crate) async fn build_admin_provider_endpoints_payload(
         .ok()
         .unwrap_or_default();
     let (total_keys_by_format, active_keys_by_format) =
-        endpoint_key_counts_by_format(&provider.provider_type, &endpoints, &keys);
+        endpoint_key_counts_by_format(&endpoints, &keys);
     let now_unix_secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .ok()
@@ -97,11 +97,8 @@ pub(crate) async fn build_admin_endpoint_payload(
         .await
         .ok()
         .unwrap_or_default();
-    let (total_keys_by_format, active_keys_by_format) = endpoint_key_counts_by_format(
-        &provider.provider_type,
-        std::slice::from_ref(&endpoint),
-        &keys,
-    );
+    let (total_keys_by_format, active_keys_by_format) =
+        endpoint_key_counts_by_format(std::slice::from_ref(&endpoint), &keys);
     let now_unix_secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .ok()

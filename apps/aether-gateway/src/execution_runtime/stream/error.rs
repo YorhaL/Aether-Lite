@@ -8,10 +8,10 @@ use serde_json::{json, Map, Value};
 use tokio_util::codec::{FramedRead, LinesCodec};
 use tracing::warn;
 
-use crate::execution_runtime::ndjson::decode_stream_frame_ndjson;
 use crate::execution_runtime::submission::{has_nested_error, strip_utf8_bom_and_ws};
 use crate::GatewayError;
 use crate::{MAX_ERROR_BODY_BYTES, MAX_STREAM_PREFETCH_FRAMES};
+use aether_gateway_execution::stream::decode_stream_frame_ndjson;
 
 #[derive(Debug)]
 pub(super) enum StreamPrefetchInspection {
@@ -237,7 +237,8 @@ where
         if line.trim().is_empty() {
             continue;
         }
-        let frame = decode_stream_frame_ndjson(line.as_bytes())?;
+        let frame = decode_stream_frame_ndjson(line.as_bytes())
+            .map_err(|err| GatewayError::Internal(err.to_string()))?;
         return Ok(Some(frame));
     }
     Ok(None)

@@ -1,6 +1,6 @@
 use super::{
     any, build_router_with_state, build_state_with_execution_runtime_override,
-    encrypt_python_fernet_plaintext, hash_api_key, json, sample_local_openai_auth_snapshot,
+    encrypt_fernet_plaintext, hash_api_key, json, sample_local_openai_auth_snapshot,
     sample_local_openai_candidate_row, sample_local_openai_endpoint, sample_local_openai_key,
     sample_local_openai_provider, send_request, start_server, strip_sse_keepalive_comments, Arc,
     Body, GatewayDataState, HeaderValue, InMemoryAuthApiKeySnapshotRepository,
@@ -1829,7 +1829,7 @@ async fn gateway_records_failed_usage_when_all_local_claude_cli_candidates_are_s
         .expect("key should build")
         .with_transport_fields(
             Some(serde_json::json!(["openai:responses"])),
-            encrypt_python_fernet_plaintext(
+            encrypt_fernet_plaintext(
                 DEVELOPMENT_ENCRYPTION_KEY,
                 "sk-upstream-openai-cli-usage-local-miss",
             )
@@ -1964,12 +1964,6 @@ async fn gateway_records_failed_usage_when_all_local_claude_cli_candidates_are_s
         Some("all_candidates_skipped")
     );
     assert_eq!(
-        stored_usage.error_message.as_deref(),
-        Some(
-            "找到 1 个支持模型 gpt-5.4 的候选提供商，但本次同步请求全部不可用：格式转换未启用 2 次（原因代码: all_candidates_skipped）"
-        )
-    );
-    assert_eq!(
         stored_usage
             .request_headers
             .as_ref()
@@ -2010,16 +2004,8 @@ async fn gateway_records_failed_usage_when_all_local_claude_cli_candidates_are_s
     assert_eq!(stored_candidates.len(), 1);
     assert_eq!(stored_candidates[0].status, RequestCandidateStatus::Skipped);
     assert_eq!(
-        stored_candidates[0].skip_reason.as_deref(),
-        Some("format_conversion_disabled")
-    );
-    assert_eq!(
         stored_usage.routing_candidate_id(),
         Some(stored_candidates[0].id.as_str())
-    );
-    assert_eq!(
-        stored_usage.routing_candidate_skip_reason(),
-        Some("format_conversion_disabled")
     );
     assert_eq!(*public_hits.lock().expect("mutex should lock"), 0);
 
@@ -2154,7 +2140,7 @@ fn gateway_keeps_failed_usage_request_capture_lightweight_for_large_local_claude
         .expect("key should build")
         .with_transport_fields(
             Some(serde_json::json!(["openai:responses"])),
-            encrypt_python_fernet_plaintext(
+            encrypt_fernet_plaintext(
                 DEVELOPMENT_ENCRYPTION_KEY,
                 "sk-upstream-openai-cli-usage-local-miss-large",
             )
@@ -2283,11 +2269,6 @@ fn gateway_keeps_failed_usage_request_capture_lightweight_for_large_local_claude
             .expect("request candidate trace should read");
         assert_eq!(stored_candidates.len(), 1);
         assert_eq!(stored_candidates[0].status, RequestCandidateStatus::Skipped);
-        assert_eq!(
-            stored_candidates[0].skip_reason.as_deref(),
-            Some("format_conversion_disabled")
-        );
-
         gateway_handle.abort();
         execution_runtime_handle.abort();
     });

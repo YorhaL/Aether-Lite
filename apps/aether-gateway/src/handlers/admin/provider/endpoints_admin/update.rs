@@ -147,11 +147,8 @@ pub(super) async fn maybe_handle(
         .list_provider_catalog_keys_by_provider_ids(std::slice::from_ref(&provider.id))
         .await
         .unwrap_or_default();
-    let (total_keys_by_format, active_keys_by_format) = endpoint_key_counts_by_format(
-        &provider.provider_type,
-        std::slice::from_ref(&updated),
-        &keys,
-    );
+    let (total_keys_by_format, active_keys_by_format) =
+        endpoint_key_counts_by_format(std::slice::from_ref(&updated), &keys);
     let updated_api_format = normalize_endpoint_api_format(&updated.api_format);
 
     Ok(Some(

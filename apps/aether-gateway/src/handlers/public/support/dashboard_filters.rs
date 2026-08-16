@@ -205,17 +205,10 @@ fn dashboard_wallet_card_value_and_subvalue(
         return ("无限额度".to_string(), "无限额度".to_string());
     }
 
-    let package_balance = dashboard_json_f64(wallet_payload.get("package_balance")).max(0.0);
-    let wallet_balance = dashboard_json_f64(wallet_payload.get("wallet_balance")).max(0.0);
-    let total_available =
-        dashboard_json_f64(wallet_payload.get("total_available_balance")).max(0.0);
+    let balance = dashboard_json_f64(wallet_payload.get("balance")).max(0.0);
     (
-        dashboard_format_usd(total_available),
-        format!(
-            "套餐额度 {} · 钱包余额 {}",
-            dashboard_format_usd(package_balance),
-            dashboard_format_usd(wallet_balance)
-        ),
+        dashboard_format_usd(balance),
+        format!("可用额度 {}", dashboard_format_usd(balance)),
     )
 }
 
@@ -1193,7 +1186,7 @@ pub(super) async fn handle_dashboard_stats_get(
                 "icon": "Users",
             },
             {
-                "name": "钱包余额",
+                "name": "可用额度",
                 "value": wallet_value,
                 "subValue": wallet_sub_value,
                 "icon": "DollarSign",

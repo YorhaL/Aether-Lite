@@ -118,7 +118,7 @@
                 实时并发
               </h2>
               <p class="text-xs text-muted-foreground">
-                网关、全局锁与代理通道
+                网关与全局并发控制
               </p>
             </div>
             <Badge :variant="distributedGateVariant">
@@ -144,30 +144,6 @@
               label="全局可接入"
               :value="formatMetricNumber(gatewayMetrics?.distributed.availablePermits)"
             />
-            <MetricCell
-              label="代理活跃流"
-              :value="formatMetricNumber(currentActiveStreams)"
-            />
-            <MetricCell
-              label="代理连接"
-              :value="formatMetricNumber(currentProxyConnections)"
-            />
-          </div>
-          <div class="rounded-lg border border-border/60 bg-background/45 px-3 py-3">
-            <div class="flex items-center justify-between gap-3 text-xs">
-              <span class="text-muted-foreground">队列利用率</span>
-              <span class="font-medium tabular-nums">{{ tunnelQueueUtilizationText }}</span>
-            </div>
-            <div class="mt-2 h-2 overflow-hidden rounded-full bg-muted">
-              <div
-                class="h-full rounded-full bg-primary"
-                :style="{ width: tunnelQueueUtilizationWidth }"
-              />
-            </div>
-            <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-              <span>拒绝 {{ formatMetricNumber(tunnelQueueRejectedTotal) }}</span>
-              <span>选择压力 {{ formatMetricNumber(tunnelSelectionPressureTotal) }}</span>
-            </div>
           </div>
         </div>
       </Card>
@@ -837,7 +813,7 @@
                 资源、数据流与缓存
               </h2>
               <p class="text-xs text-muted-foreground">
-                代理节点资源、WebSocket 流量、Redis Key 分类与缓存命中
+                网关网络、Redis Key 分类与缓存命中
               </p>
             </div>
             <RouterLink
@@ -850,24 +826,6 @@
         </div>
         <div class="space-y-4 p-4">
           <div class="grid grid-cols-2 gap-3">
-            <MetricCell
-              label="CPU"
-              :value="formatPercentResource(resourceSnapshot?.avgCpuPercent)"
-              :value-class="resourceToneClass(resourceSnapshot?.avgCpuPercent, 70, 90)"
-            />
-            <MetricCell
-              label="内存"
-              :value="formatPercentResource(resourceSnapshot?.avgMemoryPercent)"
-              :value-class="resourceToneClass(resourceSnapshot?.avgMemoryPercent, 75, 90)"
-            />
-            <MetricCell
-              label="WS 入站"
-              :value="formatBytes(resourceSnapshot?.wsInBytes)"
-            />
-            <MetricCell
-              label="WS 出站"
-              :value="formatBytes(resourceSnapshot?.wsOutBytes)"
-            />
             <MetricCell
               label="网关 TCP"
               :value="gatewayProcessTcpText"
@@ -1042,7 +1000,6 @@ import DoughnutChart from '@/components/charts/DoughnutChart.vue'
 import { adminApi, type ErrorDistributionItem, type PercentileItem, type ProviderPerformanceResponse } from '@/api/admin'
 import { cacheApi, redisCacheApi, type CacheStats, type RedisCacheCategoriesResponse } from '@/api/cache'
 import { monitoringApi, type AdminMonitoringRecentError, type AdminMonitoringResilienceStatus, type GatewayMetricsSummary } from '@/api/monitoring'
-import { proxyNodesApi, type ProxyNode, type ProxyNodeMetricsResponse } from '@/api/proxy-nodes'
 import { getDateRangeFromPeriod } from '@/features/usage/composables'
 import type { DateRangeParams } from '@/features/usage/types'
 import { formatByteSize, formatCurrency, formatNumber, formatTokens } from '@/utils/format'
@@ -1071,15 +1028,6 @@ const MetricCell = defineComponent<MetricCellProps>({
 
 const DEFAULT_SLOW_THRESHOLD_MS = 10_000
 
-interface ResourceSnapshot {
-  totalNodes: number
-  onlineNodes: number
-  avgCpuPercent: number | null
-  avgMemoryPercent: number | null
-  wsInBytes: number | null
-  wsOutBytes: number | null
-}
-
 const timeRange = ref<DateRangeParams>({
   ...getDateRangeFromPeriod('today'),
   granularity: 'hour',
@@ -1093,7 +1041,6 @@ const resilienceStatus = ref<AdminMonitoringResilienceStatus | null>(null)
 const gatewayMetrics = ref<GatewayMetricsSummary | null>(null)
 const cacheStats = ref<CacheStats | null>(null)
 const redisCategories = ref<RedisCacheCategoriesResponse | null>(null)
-const resourceSnapshot = ref<ResourceSnapshot | null>(null)
 const lastUpdatedAt = ref<string | null>(null)
 const analyticsWarning = ref<string | null>(null)
 const realtimeWarning = ref<string | null>(null)
@@ -1126,73 +1073,6 @@ function numeric(value: unknown): number {
     return Number.isFinite(parsed) ? parsed : 0
   }
   return 0
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  return value as Record<string, unknown>
-}
-
-function numberField(record: Record<string, unknown> | null | undefined, key: string): number | null {
-  if (!record) return null
-  const value = record[key]
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string') {
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? parsed : null
-  }
-  return null
-}
-
-function averageFinite(values: Array<number | null | undefined>): number | null {
-  const numbers = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
-  if (!numbers.length) return null
-  return numbers.reduce((total, value) => total + value, 0) / numbers.length
-}
-
-function memoryUsedPercent(node: ProxyNode): number | null {
-  const metadata = asRecord(node.proxy_metadata)
-  const resource = asRecord(metadata?.resource_usage)
-  const hardware = asRecord(node.hardware_info)
-  const explicitPercent = numberField(resource, 'memory_used_percent')
-  if (explicitPercent != null) return explicitPercent
-  const usedBytes = numberField(resource, 'memory_used_bytes')
-  const totalBytes = numberField(resource, 'memory_total_bytes')
-    ?? numberField(hardware, 'memory_total_bytes')
-    ?? numberField(hardware, 'total_memory_bytes')
-  if (usedBytes == null || totalBytes == null || totalBytes <= 0) return null
-  return usedBytes / totalBytes * 100
-}
-
-function cpuUsedPercent(node: ProxyNode): number | null {
-  const metadata = asRecord(node.proxy_metadata)
-  const resource = asRecord(metadata?.resource_usage)
-  return numberField(resource, 'system_cpu_usage_percent')
-    ?? numberField(resource, 'process_cpu_usage_percent')
-}
-
-async function loadResourceSnapshot(): Promise<ResourceSnapshot | null> {
-  const now = Math.floor(Date.now() / 1000)
-  const from = now - 3600
-  const [nodesResult, fleetResult] = await Promise.allSettled([
-    proxyNodesApi.listProxyNodes({ limit: 200 }),
-    proxyNodesApi.listFleetMetrics({ from, to: now, step: '1m' }),
-  ])
-
-  const nodes = nodesResult.status === 'fulfilled' ? nodesResult.value.items : []
-  const fleet: ProxyNodeMetricsResponse | null = fleetResult.status === 'fulfilled'
-    ? fleetResult.value
-    : null
-  const onlineNodes = nodes.filter(node => node.status === 'online' || node.tunnel_connected)
-
-  return {
-    totalNodes: nodes.length,
-    onlineNodes: onlineNodes.length,
-    avgCpuPercent: averageFinite(onlineNodes.map(cpuUsedPercent)),
-    avgMemoryPercent: averageFinite(onlineNodes.map(memoryUsedPercent)),
-    wsInBytes: fleet?.summary.ws_in_bytes_delta ?? null,
-    wsOutBytes: fleet?.summary.ws_out_bytes_delta ?? null,
-  }
 }
 
 function formatMetricNumber(value: number | null | undefined): string {
@@ -1413,11 +1293,6 @@ async function performRefresh(refreshAnalytics: boolean) {
     if (canCommitRealtime()) redisCategories.value = value
     return value
   })
-  const resourceRequest = loadResourceSnapshot().then((value) => {
-    if (canCommitRealtime()) resourceSnapshot.value = value
-    return value
-  })
-
   const results = await Promise.allSettled([
     timeSeriesRequest,
     percentilesRequest,
@@ -1427,7 +1302,6 @@ async function performRefresh(refreshAnalytics: boolean) {
     gatewayRequest,
     cacheRequest,
     redisRequest,
-    resourceRequest,
   ])
 
   if (currentRequestId !== requestId) return
@@ -1727,8 +1601,6 @@ const distributedGateVariant = computed<'warning' | 'outline'>(() => (
 const distributedGateText = computed(() => (
   gatewayMetrics.value?.distributed.unavailable ? '全局不可用' : '全局在线'
 ))
-const currentActiveStreams = computed(() => gatewayMetrics.value?.tunnel.activeStreams ?? null)
-const currentProxyConnections = computed(() => gatewayMetrics.value?.tunnel.proxyConnections ?? null)
 const localGateUtilization = computed(() => gateUtilization(gatewayMetrics.value?.local))
 const distributedGateUtilization = computed(() => gateUtilization(gatewayMetrics.value?.distributed))
 const candidatePlanningGateUtilization = computed(() => gateUtilization(gatewayMetrics.value?.candidatePlanning))
@@ -2088,28 +1960,6 @@ const upstreamTargetStatusText = computed(() => {
   return '正常'
 })
 const stageLatencyRows = computed(() => gatewayMetrics.value?.stageLatency.rows ?? [])
-const tunnelQueueRejectedTotal = computed(() => (
-  (gatewayMetrics.value?.tunnel.outboundQueueRejectedFullTotal ?? 0)
-  + (gatewayMetrics.value?.tunnel.outboundQueueRejectedClosedTotal ?? 0)
-))
-const tunnelSelectionPressureTotal = computed(() => (
-  (gatewayMetrics.value?.tunnel.proxyConnectionCongestedTotal ?? 0)
-  + (gatewayMetrics.value?.tunnel.selectionRetryTotal ?? 0)
-  + (gatewayMetrics.value?.tunnel.selectionUnavailableTotal ?? 0)
-))
-const tunnelQueueUtilization = computed(() => {
-  const depth = gatewayMetrics.value?.tunnel.outboundQueueDepthTotal
-  const capacity = gatewayMetrics.value?.tunnel.outboundQueueCapacityTotal
-  if (depth == null || capacity == null || capacity <= 0) return null
-  return Math.max(0, Math.min(100, depth / capacity * 100))
-})
-const tunnelQueueUtilizationText = computed(() => (
-  tunnelQueueUtilization.value == null ? '-' : `${Math.round(tunnelQueueUtilization.value)}%`
-))
-const tunnelQueueUtilizationWidth = computed(() => (
-  tunnelQueueUtilization.value == null ? '0%' : `${tunnelQueueUtilization.value}%`
-))
-
 const slaValueClass = computed(() => successRateClass(providerPerformance.value?.summary.success_rate))
 const errorRateValueClass = computed(() => {
   const rate = providerPerformance.value?.summary.success_rate

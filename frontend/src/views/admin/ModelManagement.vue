@@ -36,7 +36,6 @@
               >
                 <ListChecks class="w-3.5 h-3.5" />
               </Button>
-              <ExternalModelsAccessControl />
               <Button
                 variant="ghost"
                 size="icon"
@@ -692,7 +691,6 @@ import {
 } from 'lucide-vue-next'
 import ModelDetailDrawer from '@/features/models/components/ModelDetailDrawer.vue'
 import GlobalModelFormDialog from '@/features/models/components/GlobalModelFormDialog.vue'
-import ExternalModelsAccessControl from '@/features/models/components/ExternalModelsAccessControl.vue'
 import ProviderModelFormDialog from '@/features/providers/components/ProviderModelFormDialog.vue'
 import type { Model } from '@/api/endpoints'
 import { useToast } from '@/composables/useToast'
@@ -746,7 +744,6 @@ interface ModelProviderDisplay {
   id: string
   model_id?: string | null
   name: string
-  provider_type: string
   target_model: string
   is_active: boolean
   input_price_per_1m?: number | null
@@ -1242,7 +1239,6 @@ async function loadModelProviders(_globalModelId: string) {
       id: p.provider_id,
       model_id: p.model_id,
       name: p.provider_name,
-      provider_type: 'API',
       target_model: p.target_model,
       is_active: p.is_active,
       // 价格信息

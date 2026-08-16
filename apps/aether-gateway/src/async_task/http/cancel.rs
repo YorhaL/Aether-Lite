@@ -237,7 +237,6 @@ async fn persist_cancelled_video_task(
             key_id: task.key_id.clone(),
             client_api_format: task.client_api_format.clone(),
             provider_api_format: task.provider_api_format.clone(),
-            format_converted: task.format_converted,
             model: task.model.clone(),
             prompt: task.prompt.clone(),
             original_request_body: task.original_request_body.clone(),

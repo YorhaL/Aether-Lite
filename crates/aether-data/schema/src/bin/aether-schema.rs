@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use aether_data_schema::dialect::{mysql, postgres, sqlite};
+use aether_data_schema::dialect::{postgres, sqlite};
 use aether_data_schema::{check_generated_dir, generate_loaded_to_dir, load_schema_sources};
 use clap::{Parser, Subcommand, ValueEnum};
 
@@ -39,7 +39,6 @@ enum Command {
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum Driver {
     Postgres,
-    Mysql,
     Sqlite,
 }
 
@@ -66,7 +65,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let schema = load_schema_sources(schema_dir)?.schema;
             let output = match driver {
                 Driver::Postgres => postgres::emit_schema(&schema),
-                Driver::Mysql => mysql::emit_schema(&schema),
                 Driver::Sqlite => sqlite::emit_schema(&schema),
             };
             print!("{output}");

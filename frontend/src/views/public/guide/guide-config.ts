@@ -30,9 +30,7 @@ export const guideNavItems: GuideNavItem[] = [
     subItems: [
       { nameKey: 'guide.nav.overview.production', hash: '#production' },
       { nameKey: 'guide.nav.overview.configSteps', hash: '#config-steps' },
-      { nameKey: 'guide.nav.overview.reverseProxy', hash: '#reverse-proxy' },
-      { nameKey: 'guide.nav.overview.asyncTasks', hash: '#async-tasks' },
-      { nameKey: 'guide.nav.overview.proxyConfig', hash: '#proxy-config' }
+      { nameKey: 'guide.nav.overview.asyncTasks', hash: '#async-tasks' }
     ]
   },
   {
@@ -56,7 +54,6 @@ export const guideNavItems: GuideNavItem[] = [
       { nameKey: 'guide.nav.concepts.modelPermission', hash: '#model-permission' },
       { nameKey: 'guide.nav.concepts.linkModel', hash: '#link-model' },
       { nameKey: 'guide.nav.concepts.modelMapping', hash: '#model-mapping' },
-      { nameKey: 'guide.nav.overview.reverseProxy', hash: '#reverse-proxy' },
       { nameKey: 'guide.nav.concepts.priorityManagement', hash: '#priority-management' }
     ]
   },
@@ -81,7 +78,6 @@ export const guideNavItems: GuideNavItem[] = [
     icon: Settings,
     descriptionKey: 'guide.nav.advanced.description',
     subItems: [
-      { nameKey: 'guide.nav.advanced.formatConversion', hash: '#format-conversion' },
       { nameKey: 'guide.nav.advanced.streamPolicy', hash: '#stream-policy' },
       { nameKey: 'guide.nav.advanced.headerBodyEdit', hash: '#header-body-edit' },
       { nameKey: 'guide.nav.concepts.modelMapping', hash: '#model-mapping' },

@@ -50,7 +50,7 @@ export function getErrorMessage(error: unknown, defaultMessage = '操作失败')
     if (error.response?.data?.error?.message) {
       return error.response.data.error.message
     }
-    // FastAPI 标准 detail 字段
+    // 标准 detail 错误字段
     if (error.response?.data?.detail) {
       return error.response.data.detail
     }

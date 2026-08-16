@@ -9,7 +9,6 @@ mod attempt;
 mod classifier;
 mod effects;
 mod health;
-mod oauth_error;
 mod policy;
 mod recovery;
 mod report_effects;
@@ -19,11 +18,9 @@ pub(crate) use self::adaptive::{
     LocalAdaptiveRateLimitProjection, LocalAdaptiveSuccessProjection,
 };
 pub(crate) use self::attempt::{
-    attempt_identity_from_report_context, build_local_attempt_identities,
-    insert_pool_key_lease_report_context_fields, local_attempt_slot_count,
+    attempt_identity_from_report_context, build_local_attempt_identities, local_attempt_slot_count,
     local_execution_candidate_metadata_from_report_context, ExecutionAttemptIdentity,
-    LocalExecutionCandidateMetadata, ROUTING_POOL_POLICY_OVERRIDE_REPORT_FIELD,
-    SCHEDULER_AFFINITY_EPOCH_REPORT_FIELD,
+    LocalExecutionCandidateMetadata, SCHEDULER_AFFINITY_EPOCH_REPORT_FIELD,
 };
 pub(crate) use self::classifier::{
     classify_anthropic_failure_disposition, classify_failure_disposition, classify_local_failover,
@@ -33,23 +30,19 @@ pub(crate) use self::classifier::{
     LocalTransportFailoverClassification,
 };
 pub(crate) use self::effects::{
-    apply_local_execution_effect, spawn_local_oauth_success_effect, LocalAdaptiveRateLimitEffect,
-    LocalAdaptiveSuccessEffect, LocalAttemptFailureEffect, LocalExecutionEffect,
-    LocalExecutionEffectContext, LocalHealthFailureEffect, LocalHealthSuccessEffect,
-    LocalOAuthInvalidationEffect, LocalOAuthSuccessEffect, LocalPoolErrorEffect,
+    apply_local_execution_effect, LocalAdaptiveRateLimitEffect, LocalAdaptiveSuccessEffect,
+    LocalAttemptFailureEffect, LocalExecutionEffect, LocalExecutionEffectContext,
+    LocalHealthFailureEffect, LocalHealthSuccessEffect,
 };
 pub(crate) use self::health::{
     project_local_failure_health, project_local_key_circuit_closed,
     project_local_key_circuit_failure, project_local_success_health,
 };
-pub(crate) use self::oauth_error::{
-    oauth_status_may_be_invalid, oauth_status_proves_access_token_invalid,
-};
 pub(crate) use self::policy::{
-    append_local_failover_policy_to_value, codex_cyber_flag_passthrough_enabled,
-    cyber_continue_failover_enabled, local_failover_policy_from_report_context,
-    local_failover_policy_from_transport, resolve_local_failover_policy, LocalFailoverPolicy,
-    LocalFailoverRegexRule, CYBER_CONTINUE_FAILOVER_CONFIG_KEY,
+    append_local_failover_policy_to_value, cyber_continue_failover_enabled,
+    local_failover_policy_from_report_context, local_failover_policy_from_transport,
+    resolve_local_failover_policy, LocalFailoverPolicy, LocalFailoverRegexRule,
+    CYBER_CONTINUE_FAILOVER_CONFIG_KEY,
 };
 pub(crate) use self::recovery::{
     analyze_local_failover, analyze_local_transport_error, apply_provider_failure_disposition,

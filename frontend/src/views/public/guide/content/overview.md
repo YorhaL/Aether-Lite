@@ -56,58 +56,9 @@ make dev
 6. **模型映射**
    ![image.png](/Aether%E4%BD%BF%E7%94%A8%E6%95%99%E7%A8%8B/image%207.png)
 
-## 反向代理
-
-添加提供商时, 提供商类型选择对应类型即可, 反向代理默认开启提供商级格式转换。
-
-1. **Codex**
-   - OAuth授权登录
-   - 导入RefreshToken, 支持批量导入
-2. **Kiro**
-   - Build ID
-   - Identity Center
-     - Start URL
-     - Region
-   - 导入 RefreshToken, 支持批量导入
-     - Social 格式要求
-       ```json
-       {
-           "refresh_token": ""
-       }
-       ```
-     - IDC 格式要求
-       ```json
-       {
-           "refresh_token": "",
-           "client_id": "",
-           "client_secret": "",
-           "machine_id": ""
-       }
-       ```
-3. **Antigravity**
-   - OAuth授权登录
-   - 导入RefreshToken, 支持批量导入
-
-![image.png](/Aether%E4%BD%BF%E7%94%A8%E6%95%99%E7%A8%8B/image%208.png)
-
 ## 异步任务
 
 需要有提供商端点支持
 
 1. Veo
 2. Sora
-
-## 代理配置
-
-1. **Aether-Proxy**
-   Rust实现, 超小资源占有, 适合性能低的vps直接使用。
-   [https://github.com/fawney19/Aether/tree/main/aether-tunnel](https://github.com/fawney19/Aether/tree/main/aether-tunnel)
-
-2. **代理节点**
-   在模块管理中, 开启代理模块后可以添加和使用代理功能, 包括手动添加和Aether-Proxy自动连接。
-
-3. **多级代理**
-   优先级: Key代理 > 提供商代理 > 全局代理
-   - 全局代理 - 系统配置
-   - 提供商代理 - 提供商配置
-   - Key代理 - Key配置

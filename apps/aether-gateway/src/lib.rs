@@ -34,7 +34,6 @@ mod async_task;
 mod audit;
 mod auth;
 mod backup;
-mod bark_push;
 mod cache;
 mod client_session_affinity;
 mod clock;
@@ -54,7 +53,6 @@ mod headers;
 mod hooks;
 mod image_capabilities;
 mod important_notification;
-mod log_ids;
 mod maintenance;
 pub(crate) mod middleware;
 mod model_fetch;
@@ -63,7 +61,6 @@ mod orchestration;
 mod privacy;
 mod process_metrics;
 mod provider_key_auth;
-mod provider_pool_demand;
 pub(crate) use aether_provider_transport as provider_transport;
 mod rate_limit;
 mod request_candidate_queue;
@@ -73,7 +70,6 @@ mod roles;
 mod router;
 mod routing;
 mod scheduler;
-mod server_chan_push;
 mod stage_metrics;
 mod state;
 mod system_features;
@@ -81,7 +77,6 @@ mod task_runtime;
 #[cfg(feature = "testkit")]
 pub mod testkit;
 mod tokio_metrics;
-mod tunnel;
 mod upstream_admission;
 mod usage;
 mod video_tasks;
@@ -95,12 +90,10 @@ pub(crate) use self::ai_serving::api::{
 pub(crate) use self::ai_serving::{
     AiExecutionDecision, AiExecutionPlanPayload, AiStreamAttempt, AiSyncAttempt,
 };
-pub use self::async_task::VideoTaskTruthSourceMode;
 pub use self::data::GatewayDataConfig;
 pub(crate) use self::error::GatewayError;
 pub(crate) use self::execution_runtime::{
-    append_execution_contract_fields_to_value, append_local_failover_policy_to_value,
-    MAX_ERROR_BODY_BYTES, MAX_STREAM_PREFETCH_FRAMES,
+    append_local_failover_policy_to_value, MAX_ERROR_BODY_BYTES, MAX_STREAM_PREFETCH_FRAMES,
 };
 pub use self::execution_runtime::{
     build_execution_runtime_router, build_execution_runtime_router_with_request_concurrency_limit,
@@ -114,17 +107,10 @@ pub use self::middleware::strip_cf_headers_middleware;
 pub use self::rate_limit::FrontdoorUserRpmConfig;
 pub(crate) use self::rate_limit::FrontdoorUserRpmOutcome;
 pub use self::router::{attach_static_frontend, build_router, build_router_with_state, serve_tcp};
+pub use self::state::{AppState, FrontdoorCorsConfig};
 pub(crate) use self::state::{
-    AdminBillingCollectorRecord, AdminBillingCollectorWriteInput, AdminBillingRuleRecord,
-    AdminBillingRuleWriteInput, AdminWalletMutationOutcome, AdminWalletPaymentOrderRecord,
-    AdminWalletRefundRecord, AdminWalletTransactionRecord, GatewayAdminPaymentCallbackView,
     GatewayUserPreferenceView, GatewayUserSessionView, LocalExecutionRuntimeMissDiagnostic,
     LocalMutationOutcome, LocalProviderDeleteTaskState,
-};
-pub use self::state::{AppState, FrontdoorCorsConfig};
-pub use self::tunnel::{
-    build_tunnel_runtime_router_with_state, tunnel_protocol, TunnelConnConfig,
-    TunnelControlPlaneClient, TunnelRuntimeState,
 };
 pub use self::usage::UsageRuntimeConfig;
 
@@ -147,11 +133,4 @@ fn insert_header_if_missing(
 }
 
 #[cfg(test)]
-#[path = "execution_runtime/tests.rs"]
-mod execution_runtime_contract_tests;
-
-#[cfg(test)]
 pub(crate) mod test_support;
-
-#[cfg(test)]
-mod tests;

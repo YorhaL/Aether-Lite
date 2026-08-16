@@ -104,9 +104,7 @@ export interface AsyncTaskDetail extends AsyncTaskItem {
   key_id?: string
   client_api_format?: string
   provider_api_format?: string
-  format_converted?: boolean
   original_request_body?: unknown
-  converted_request_body?: unknown
   size?: string | null
   video_urls?: string[] | null
   thumbnail_url?: string | null

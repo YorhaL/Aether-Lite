@@ -57,8 +57,6 @@ pub struct UsageEventData {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_endpoint_kind: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub has_format_conversion: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub is_stream: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input_tokens: Option<u64>,

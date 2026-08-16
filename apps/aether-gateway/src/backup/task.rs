@@ -171,7 +171,7 @@ async fn start_s3_backup_task_with_slot(
         status: BackgroundTaskStatus::Queued,
         attempt: 1,
         max_attempts,
-        owner_instance: Some(app.tunnel.local_instance_id().to_string()),
+        owner_instance: Some(app.gateway_instance_id().to_string()),
         progress_percent: 0,
         progress_message: Some(S3_BACKUP_QUEUED_MESSAGE.to_string()),
         payload_json: Some(s3_backup_task_payload_json(
@@ -449,7 +449,7 @@ async fn acquire_s3_backup_task_lock(
         .runtime_state
         .lock_try_acquire(
             S3_BACKUP_TASK_LOCK_KEY,
-            app.tunnel.local_instance_id(),
+            app.gateway_instance_id(),
             S3_BACKUP_TASK_LOCK_TTL,
         )
         .await
@@ -596,7 +596,7 @@ fn backup_run_result_json(result: &BackupRunResult) -> Value {
 mod tests {
     use std::sync::Arc;
 
-    use aether_crypto::{encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
+    use aether_crypto::{encrypt_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
     use aether_data::repository::background_tasks::InMemoryBackgroundTaskRepository;
     use aether_data_contracts::repository::background_tasks::{
         BackgroundTaskKind, BackgroundTaskStatus, StoredBackgroundTaskRun,
@@ -623,11 +623,10 @@ mod tests {
             ),
             (
                 "backup_s3_secret_access_key".to_string(),
-                serde_json::json!(encrypt_python_fernet_plaintext(
-                    DEVELOPMENT_ENCRYPTION_KEY,
-                    "secret"
-                )
-                .expect("test secret should encrypt")),
+                serde_json::json!(
+                    encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "secret")
+                        .expect("test secret should encrypt")
+                ),
             ),
         ]
     }

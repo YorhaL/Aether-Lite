@@ -353,20 +353,10 @@ fn snapshot_for_gate(target: String, gate: &UpstreamTargetGate) -> UpstreamTarge
 }
 
 pub(crate) fn upstream_target_key(plan: &ExecutionPlan) -> String {
-    let proxy = plan
-        .proxy
-        .as_ref()
-        .and_then(|proxy| proxy.url.as_deref())
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    upstream_target_key_from_url(plan.url.as_str(), proxy)
-        .unwrap_or_else(|| fallback_target_key(plan))
+    upstream_target_key_from_url(plan.url.as_str()).unwrap_or_else(|| fallback_target_key(plan))
 }
 
-pub(crate) fn upstream_target_key_from_url(
-    upstream_url: &str,
-    proxy: Option<&str>,
-) -> Option<String> {
+pub(crate) fn upstream_target_key_from_url(upstream_url: &str) -> Option<String> {
     let parsed = Url::parse(upstream_url).ok();
     let Some(url) = parsed else {
         return None;
@@ -379,11 +369,7 @@ pub(crate) fn upstream_target_key_from_url(
         .port_or_known_default()
         .map(|port| port.to_string())
         .unwrap_or_else(|| "-".to_string());
-    let proxy = proxy
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("-");
-    Some(format!("{scheme}://{host}:{port}|proxy={proxy}"))
+    Some(format!("{scheme}://{host}:{port}"))
 }
 
 fn fallback_target_key(plan: &ExecutionPlan) -> String {
@@ -410,170 +396,4 @@ fn target_queue_budget(fallback: Duration) -> Duration {
             let fallback_ms = u64::try_from(fallback.as_millis()).unwrap_or(u64::MAX);
             Duration::from_millis(fallback_ms.clamp(1, DEFAULT_TARGET_QUEUE_BUDGET_MS))
         })
-}
-
-#[cfg(test)]
-mod tests {
-    use std::time::Duration;
-
-    use aether_contracts::{ExecutionPlan, RequestBody};
-    use serde_json::json;
-
-    use super::*;
-
-    fn test_plan(url: &str) -> ExecutionPlan {
-        ExecutionPlan {
-            request_id: "req-upstream-target".to_string(),
-            candidate_id: Some("cand-upstream-target".to_string()),
-            provider_name: Some("provider".to_string()),
-            provider_id: "provider_id".to_string(),
-            endpoint_id: "endpoint_id".to_string(),
-            key_id: "key_id".to_string(),
-            method: "POST".to_string(),
-            url: url.to_string(),
-            headers: Default::default(),
-            content_type: Some("application/json".to_string()),
-            content_encoding: None,
-            body: RequestBody::from_json(json!({"stream": true})),
-            stream: true,
-            client_api_format: "openai".to_string(),
-            provider_api_format: "openai".to_string(),
-            model_name: Some("model".to_string()),
-            proxy: None,
-            transport_profile: None,
-            timeouts: None,
-        }
-    }
-
-    #[test]
-    fn upstream_target_key_ignores_path_and_query() {
-        let left = test_plan("http://127.0.0.1:18181/v1/chat/completions?x=1");
-        let right = test_plan("http://127.0.0.1:18181/v1/responses");
-
-        assert_eq!(upstream_target_key(&left), upstream_target_key(&right));
-    }
-
-    #[test]
-    fn upstream_target_key_from_url_matches_plan_key_without_proxy() {
-        let plan = test_plan("http://127.0.0.1:18181/v1/chat/completions?x=1");
-
-        assert_eq!(
-            upstream_target_key_from_url("http://127.0.0.1:18181/v1/responses", None)
-                .expect("url should parse"),
-            upstream_target_key(&plan)
-        );
-    }
-
-    #[test]
-    fn upstream_target_key_from_url_includes_proxy() {
-        assert_eq!(
-            upstream_target_key_from_url(
-                "https://api.example.com/v1/chat/completions?x=1",
-                Some("http://proxy.internal:8080")
-            )
-            .expect("url should parse"),
-            "https://api.example.com:443|proxy=http://proxy.internal:8080"
-        );
-    }
-
-    #[test]
-    fn target_queue_budget_defaults_to_short_budget() {
-        assert_eq!(
-            target_queue_budget(Duration::from_millis(250)),
-            Duration::from_millis(DEFAULT_TARGET_QUEUE_BUDGET_MS)
-        );
-    }
-
-    #[tokio::test]
-    async fn acquire_times_out_when_target_gate_is_saturated() {
-        let admission = UpstreamTargetAdmission::new(Some(1), Duration::from_millis(1));
-        let plan = test_plan("http://127.0.0.1:18181/v1/chat/completions");
-        let _first = admission
-            .acquire(&plan, "trace-upstream-target")
-            .await
-            .expect("first acquire should succeed")
-            .expect("gate enabled");
-
-        let err = admission
-            .acquire(&plan, "trace-upstream-target")
-            .await
-            .expect_err("second acquire should time out");
-
-        assert!(matches!(
-            err,
-            GatewayError::AdmissionTimeout {
-                gate: "gateway_upstream_target",
-                ..
-            }
-        ));
-        let snapshot = admission
-            .snapshot_for_plan(&plan)
-            .expect("target snapshot should exist");
-        assert_eq!(snapshot.in_flight, 1);
-        assert_eq!(snapshot.selected_total, 2);
-        assert_eq!(snapshot.saturated_total, 1);
-    }
-
-    #[test]
-    fn try_acquire_returns_none_when_target_is_saturated() {
-        let admission = UpstreamTargetAdmission::new(Some(1), Duration::from_millis(1));
-        let plan = test_plan("http://127.0.0.1:18181/v1/chat/completions");
-        let _first = admission
-            .try_acquire_for_plan(&plan)
-            .expect("first try acquire should not error")
-            .expect("first permit should be acquired");
-
-        assert!(admission
-            .try_acquire_for_plan(&plan)
-            .expect("saturated try acquire should not error")
-            .is_none());
-
-        let snapshot = admission
-            .snapshot_for_plan(&plan)
-            .expect("target snapshot should exist");
-        assert_eq!(snapshot.in_flight, 1);
-        assert_eq!(snapshot.selected_total, 2);
-        assert_eq!(snapshot.saturated_total, 1);
-        let samples = admission.metric_samples();
-        assert!(samples
-            .iter()
-            .any(|sample| sample.name == "upstream_target_selected_total"));
-        assert!(samples
-            .iter()
-            .any(|sample| sample.name == "upstream_target_saturated_total"));
-    }
-
-    #[test]
-    fn preselect_records_selection_pressure_before_acquire() {
-        let admission = UpstreamTargetAdmission::new(Some(10), Duration::from_millis(1));
-        let target = "http://127.0.0.1:18181|proxy=-";
-
-        admission.record_preselect_for_target_key(target);
-        admission.record_preselect_for_target_key(target);
-
-        let snapshot = admission
-            .snapshot_for_target_key(target)
-            .expect("target snapshot should exist");
-        assert_eq!(snapshot.in_flight, 0);
-        assert_eq!(snapshot.raw_seen_total, 0);
-        assert_eq!(snapshot.preselect_total, 2);
-        assert_eq!(snapshot.selected_total, 0);
-        assert_eq!(snapshot.selection_pressure_total, 2);
-    }
-
-    #[test]
-    fn raw_seen_records_target_without_acquire() {
-        let admission = UpstreamTargetAdmission::new(Some(10), Duration::from_millis(1));
-        let target = "http://127.0.0.1:18182|proxy=-";
-
-        admission.record_raw_seen_for_target_key(target);
-
-        let snapshot = admission
-            .snapshot_for_target_key(target)
-            .expect("target snapshot should exist");
-        assert_eq!(snapshot.in_flight, 0);
-        assert_eq!(snapshot.raw_seen_total, 1);
-        assert_eq!(snapshot.preselect_total, 0);
-        assert_eq!(snapshot.selected_total, 0);
-    }
 }

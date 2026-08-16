@@ -141,7 +141,6 @@ pub(crate) fn retain_first_byte_request_metadata(value: Option<Value>) -> Option
                 | "model_id"
                 | "global_model_id"
                 | "global_model_name"
-                | "proxy"
         )
     });
     (!metadata.is_empty()).then_some(Value::Object(metadata))
@@ -381,13 +380,11 @@ fn copy_allowed_metadata_fields(source: &Map<String, Value>, target: &mut Map<St
     copy_non_null_value(source, target, ROUTING_FAILURE_DIAGNOSTIC_METADATA_KEY);
     copy_non_null_value(source, target, "tls_fingerprint");
     copy_number(source, target, "rate_multiplier");
-    copy_bool(source, target, "is_free_tier");
     copy_number(source, target, "input_price_per_1m");
     copy_number(source, target, "output_price_per_1m");
     copy_number(source, target, "cache_creation_price_per_1m");
     copy_number(source, target, "cache_read_price_per_1m");
     copy_number(source, target, "price_per_request");
-    copy_non_null_value(source, target, "proxy");
     copy_non_null_value(source, target, "stage_timings_ms");
     copy_non_null_value(source, target, "db_timings_ms");
     sanitize_request_path_metadata_fields(target);
@@ -443,13 +440,11 @@ fn move_allowed_metadata_fields(mut source: Map<String, Value>, target: &mut Map
     remove_non_null_value(&mut source, target, ROUTING_FAILURE_DIAGNOSTIC_METADATA_KEY);
     remove_non_null_value(&mut source, target, "tls_fingerprint");
     remove_number(&mut source, target, "rate_multiplier");
-    remove_bool(&mut source, target, "is_free_tier");
     remove_number(&mut source, target, "input_price_per_1m");
     remove_number(&mut source, target, "output_price_per_1m");
     remove_number(&mut source, target, "cache_creation_price_per_1m");
     remove_number(&mut source, target, "cache_read_price_per_1m");
     remove_number(&mut source, target, "price_per_request");
-    remove_non_null_value(&mut source, target, "proxy");
     remove_non_null_value(&mut source, target, "stage_timings_ms");
     remove_non_null_value(&mut source, target, "db_timings_ms");
     sanitize_request_path_metadata_fields(target);
@@ -740,7 +735,6 @@ mod tests {
             client_api_format: "openai:chat".to_string(),
             provider_api_format: "openai:chat".to_string(),
             model_name: Some("gpt-5".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         }
@@ -817,7 +811,6 @@ mod tests {
                 "safe_to_show": true
             },
             "rate_multiplier": 1.25,
-            "is_free_tier": false,
             "input_price_per_1m": 3.0,
             "output_price_per_1m": 15.0,
             "cache_creation_price_per_1m": 3.75,
@@ -868,7 +861,6 @@ mod tests {
                     "safe_to_show": true
                 },
                 "rate_multiplier": 1.25,
-                "is_free_tier": false,
                 "input_price_per_1m": 3.0,
                 "output_price_per_1m": 15.0,
                 "cache_creation_price_per_1m": 3.75,
@@ -887,7 +879,6 @@ mod tests {
             "client_ip": "203.0.113.8",
             "request_path": "/v1/chat/completions",
             "upstream_is_stream": true,
-            "proxy": {"mode": "manual", "node_id": "proxy-1"},
             "billing_snapshot": {"dimensions": [1, 2, 3]},
             "settlement_snapshot": {"status": "pending"},
             "stage_timings_ms": {"planning": 12}
@@ -901,8 +892,7 @@ mod tests {
                 "client_ip": "203.0.113.8",
                 "request_path": "/v1/chat/completions",
                 "request_path_and_query": "/v1/chat/completions",
-                "upstream_is_stream": true,
-                "proxy": {"mode": "manual", "node_id": "proxy-1"}
+                "upstream_is_stream": true
             })
         );
     }

@@ -140,7 +140,7 @@ async fn admin_gemini_files_upload_single_key(
         .await
         .map_err(|err| format!("{err:?}"))?
         .ok_or_else(|| "无法读取 Key 传输配置".to_string())?;
-    if !state.supports_local_gemini_transport_with_network(&transport, "gemini:generate_content") {
+    if !state.supports_local_gemini_transport(&transport, "gemini:generate_content") {
         return Err("Key 传输配置不支持 Gemini Files 上传".to_string());
     }
     if crate::provider_transport::body_rules_have_enabled_rules(
@@ -209,9 +209,6 @@ async fn admin_gemini_files_upload_single_key(
         client_api_format: "gemini:files".to_string(),
         provider_api_format: "gemini:files".to_string(),
         model_name: Some("gemini-files".to_string()),
-        proxy: state
-            .resolve_transport_proxy_snapshot_with_tunnel_affinity(&transport)
-            .await,
         transport_profile: state.resolve_transport_profile(&transport),
         timeouts: state.resolve_transport_execution_timeouts(&transport),
     };

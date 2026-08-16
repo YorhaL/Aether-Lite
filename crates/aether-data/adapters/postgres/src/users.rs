@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use futures_util::TryStreamExt;
-use sqlx::{PgPool, Postgres, QueryBuilder, Row};
+use sqlx::{PgPool, Postgres, QueryBuilder, Row, Transaction};
 
 use aether_data_contracts::repository::users::{
     normalize_user_group_name, LdapAuthUserProvisioningOutcome, StoredUserAuthRecord,
@@ -610,8 +610,12 @@ SELECT
   allowed_models_mode,
   rate_limit,
   rate_limit_mode,
-  daily_usage_limit_usd,
-  daily_usage_limit_mode,
+  (SELECT daily_usage_limit_usd
+   FROM aether_lite.user_group_daily_usage_limits AS lite_limits
+   WHERE lite_limits.user_group_id = user_groups.id) AS daily_usage_limit_usd,
+  COALESCE((SELECT daily_usage_limit_mode
+            FROM aether_lite.user_group_daily_usage_limits AS lite_limits
+            WHERE lite_limits.user_group_id = user_groups.id), 'inherit') AS daily_usage_limit_mode,
   created_at,
   updated_at
 FROM user_groups
@@ -742,6 +746,9 @@ impl SqlxUserReadRepository {
         let id = uuid::Uuid::new_v4().to_string();
         let name = normalize_user_group_name(&record.name);
         let normalized_name = name.to_ascii_lowercase();
+        let daily_usage_limit_usd = record.daily_usage_limit_usd;
+        let daily_usage_limit_mode = record.daily_usage_limit_mode.clone();
+        let mut tx = self.pool.begin().await.map_postgres_err()?;
         let result = sqlx::query(
             r#"
 INSERT INTO user_groups (
@@ -749,9 +756,9 @@ INSERT INTO user_groups (
   allowed_providers, allowed_providers_mode,
   allowed_api_formats, allowed_api_formats_mode,
   allowed_models, allowed_models_mode,
-  rate_limit, rate_limit_mode, daily_usage_limit_usd, daily_usage_limit_mode
+  rate_limit, rate_limit_mode
 )
-VALUES ($1, $2, $3, $4, $5, $6::json, $7, $8::json, $9, $10::json, $11, $12, $13, $14, $15)
+VALUES ($1, $2, $3, $4, $5, $6::json, $7, $8::json, $9, $10::json, $11, $12, $13)
 "#,
         )
         .bind(&id)
@@ -767,12 +774,20 @@ VALUES ($1, $2, $3, $4, $5, $6::json, $7, $8::json, $9, $10::json, $11, $12, $13
         .bind(record.allowed_models_mode)
         .bind(record.rate_limit)
         .bind(record.rate_limit_mode)
-        .bind(record.daily_usage_limit_usd)
-        .bind(record.daily_usage_limit_mode)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await;
         match result {
-            Ok(_) => self.find_user_group_by_id(&id).await,
+            Ok(_) => {
+                upsert_postgres_user_group_daily_usage_limit(
+                    &mut tx,
+                    &id,
+                    daily_usage_limit_usd,
+                    &daily_usage_limit_mode,
+                )
+                .await?;
+                tx.commit().await.map_postgres_err()?;
+                self.find_user_group_by_id(&id).await
+            }
             Err(sqlx::Error::Database(err)) if err.is_unique_violation() => Err(
                 DataLayerError::InvalidInput("duplicate user group name".to_string()),
             ),
@@ -787,6 +802,9 @@ VALUES ($1, $2, $3, $4, $5, $6::json, $7, $8::json, $9, $10::json, $11, $12, $13
     ) -> Result<Option<StoredUserGroup>, DataLayerError> {
         let name = normalize_user_group_name(&record.name);
         let normalized_name = name.to_ascii_lowercase();
+        let daily_usage_limit_usd = record.daily_usage_limit_usd;
+        let daily_usage_limit_mode = record.daily_usage_limit_mode.clone();
+        let mut tx = self.pool.begin().await.map_postgres_err()?;
         let result = sqlx::query(
             r#"
 UPDATE user_groups
@@ -802,8 +820,6 @@ SET name = $2,
     allowed_models_mode = $11,
     rate_limit = $12,
     rate_limit_mode = $13,
-    daily_usage_limit_usd = $14,
-    daily_usage_limit_mode = $15,
     updated_at = now()
 WHERE id = $1
 "#,
@@ -821,13 +837,21 @@ WHERE id = $1
         .bind(record.allowed_models_mode)
         .bind(record.rate_limit)
         .bind(record.rate_limit_mode)
-        .bind(record.daily_usage_limit_usd)
-        .bind(record.daily_usage_limit_mode)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await;
         match result {
             Ok(result) if result.rows_affected() == 0 => Ok(None),
-            Ok(_) => self.find_user_group_by_id(group_id).await,
+            Ok(_) => {
+                upsert_postgres_user_group_daily_usage_limit(
+                    &mut tx,
+                    group_id,
+                    daily_usage_limit_usd,
+                    &daily_usage_limit_mode,
+                )
+                .await?;
+                tx.commit().await.map_postgres_err()?;
+                self.find_user_group_by_id(group_id).await
+            }
             Err(sqlx::Error::Database(err)) if err.is_unique_violation() => Err(
                 DataLayerError::InvalidInput("duplicate user group name".to_string()),
             ),
@@ -836,11 +860,22 @@ WHERE id = $1
     }
 
     pub async fn delete_user_group(&self, group_id: &str) -> Result<bool, DataLayerError> {
+        let mut tx = self.pool.begin().await.map_postgres_err()?;
         let result = sqlx::query("DELETE FROM user_groups WHERE id = $1")
             .bind(group_id)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_postgres_err()?;
+        if result.rows_affected() > 0 {
+            sqlx::query(
+                "DELETE FROM aether_lite.user_group_daily_usage_limits WHERE user_group_id = $1",
+            )
+            .bind(group_id)
+            .execute(&mut *tx)
+            .await
+            .map_postgres_err()?;
+        }
+        tx.commit().await.map_postgres_err()?;
         Ok(result.rows_affected() > 0)
     }
 
@@ -2273,6 +2308,34 @@ fn map_user_auth_row(row: &sqlx::postgres::PgRow) -> Result<StoredUserAuthRecord
             row.try_get("allowed_models_mode").map_postgres_err()?,
         )
     })
+}
+
+async fn upsert_postgres_user_group_daily_usage_limit(
+    tx: &mut Transaction<'_, Postgres>,
+    group_id: &str,
+    daily_usage_limit_usd: Option<f64>,
+    daily_usage_limit_mode: &str,
+) -> Result<(), DataLayerError> {
+    sqlx::query(
+        r#"
+INSERT INTO aether_lite.user_group_daily_usage_limits (
+    user_group_id,
+    daily_usage_limit_usd,
+    daily_usage_limit_mode
+)
+VALUES ($1, $2, $3)
+ON CONFLICT (user_group_id) DO UPDATE
+SET daily_usage_limit_usd = EXCLUDED.daily_usage_limit_usd,
+    daily_usage_limit_mode = EXCLUDED.daily_usage_limit_mode
+"#,
+    )
+    .bind(group_id)
+    .bind(daily_usage_limit_usd)
+    .bind(daily_usage_limit_mode)
+    .execute(&mut **tx)
+    .await
+    .map_postgres_err()?;
+    Ok(())
 }
 
 fn map_user_group_row(row: &sqlx::postgres::PgRow) -> Result<StoredUserGroup, DataLayerError> {

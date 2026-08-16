@@ -374,7 +374,6 @@ mod tests {
                 client_api_format: "openai:responses".to_string(),
                 provider_api_format: "openai:responses".to_string(),
                 model_name: Some("gpt-5.6-sol".to_string()),
-                proxy: None,
                 transport_profile: None,
                 timeouts: None,
             },

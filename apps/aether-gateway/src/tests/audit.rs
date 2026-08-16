@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use aether_crypto::{encrypt_python_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
+use aether_crypto::{encrypt_fernet_plaintext, DEVELOPMENT_ENCRYPTION_KEY};
 use aether_data::repository::auth::{
     InMemoryAuthApiKeySnapshotRepository, StoredAuthApiKeySnapshot,
 };
@@ -167,7 +167,7 @@ fn sample_local_openai_key() -> StoredProviderCatalogKey {
     .expect("key should build")
     .with_transport_fields(
         Some(serde_json::json!(["openai:chat"])),
-        encrypt_python_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-upstream-openai")
+        encrypt_fernet_plaintext(DEVELOPMENT_ENCRYPTION_KEY, "sk-upstream-openai")
             .expect("api key should encrypt"),
         None,
         None,

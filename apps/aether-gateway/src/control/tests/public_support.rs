@@ -246,22 +246,6 @@ fn classifies_user_monitoring_audit_logs_as_public_support_route() {
 }
 
 #[test]
-fn classifies_wallet_redeem_as_public_support_route() {
-    let headers = headers(&[("authorization", "Bearer sk-test")]);
-    let uri: Uri = "/api/wallet/redeem".parse().expect("uri should parse");
-    let decision =
-        classify_control_route(&http::Method::POST, &uri, &headers).expect("route should classify");
-
-    assert_eq!(decision.route_class.as_deref(), Some("public_support"));
-    assert_eq!(decision.route_family.as_deref(), Some("wallet"));
-    assert_eq!(decision.route_kind.as_deref(), Some("redeem"));
-    assert_eq!(
-        decision.auth_endpoint_signature.as_deref(),
-        Some("user:wallet")
-    );
-}
-
-#[test]
 fn classifies_announcement_unread_count_as_public_support_route() {
     let headers = headers(&[]);
     let uri: Uri = "/api/announcements/users/me/unread-count"
@@ -321,60 +305,18 @@ fn classifies_announcement_read_all_as_public_support_route() {
 #[test]
 fn classifies_wallet_routes_as_public_support_route() {
     let headers = headers(&[]);
-    for (method, uri, route_kind) in [
-        (http::Method::GET, "/api/wallet/balance", "balance"),
-        (
-            http::Method::GET,
-            "/api/wallet/transactions?limit=20",
-            "transactions",
-        ),
-        (http::Method::GET, "/api/wallet/flow?limit=20", "flow"),
-        (http::Method::GET, "/api/wallet/today-cost", "today_cost"),
-        (
-            http::Method::GET,
-            "/api/wallet/recharge?limit=20",
-            "list_recharge_orders",
-        ),
-        (
-            http::Method::POST,
-            "/api/wallet/recharge",
-            "create_recharge_order",
-        ),
-        (
-            http::Method::GET,
-            "/api/wallet/recharge/order-1",
-            "recharge_detail",
-        ),
-        (
-            http::Method::GET,
-            "/api/wallet/refunds?limit=20",
-            "list_refunds",
-        ),
-        (
-            http::Method::GET,
-            "/api/wallet/refunds/eligible-providers",
-            "refund_eligible_providers",
-        ),
-        (http::Method::POST, "/api/wallet/refunds", "create_refund"),
-        (
-            http::Method::GET,
-            "/api/wallet/refunds/refund-1",
-            "refund_detail",
-        ),
-    ] {
-        let uri: Uri = uri.parse().expect("uri should parse");
-        let decision =
-            classify_control_route(&method, &uri, &headers).expect("route should classify");
+    let uri: Uri = "/api/wallet/balance".parse().expect("uri should parse");
+    let decision = classify_control_route(&http::Method::GET, &uri, &headers)
+        .expect("route should classify");
 
-        assert_eq!(decision.route_class.as_deref(), Some("public_support"));
-        assert_eq!(decision.route_family.as_deref(), Some("wallet"));
-        assert_eq!(decision.route_kind.as_deref(), Some(route_kind));
-        assert_eq!(
-            decision.auth_endpoint_signature.as_deref(),
-            Some("user:wallet")
-        );
-        assert!(!decision.is_execution_runtime_candidate());
-    }
+    assert_eq!(decision.route_class.as_deref(), Some("public_support"));
+    assert_eq!(decision.route_family.as_deref(), Some("wallet"));
+    assert_eq!(decision.route_kind.as_deref(), Some("balance"));
+    assert_eq!(
+        decision.auth_endpoint_signature.as_deref(),
+        Some("user:wallet")
+    );
+    assert!(!decision.is_execution_runtime_candidate());
 }
 
 #[test]
@@ -523,133 +465,6 @@ fn user_api_key_install_session_create_buffers_request_body() {
         classify_control_route(&http::Method::POST, &uri, &headers).expect("route should classify");
     let context = GatewayPublicRequestContext::from_request_parts(
         "trace-install-session",
-        &http::Method::POST,
-        &uri,
-        &headers,
-        Some(decision),
-    );
-
-    assert!(local_proxy_route_requires_buffered_body(&context));
-}
-
-#[test]
-fn classifies_payment_callback_as_public_support_route() {
-    let headers = headers(&[]);
-    let uri: Uri = "/api/payment/callback/alipay"
-        .parse()
-        .expect("uri should parse");
-    let decision =
-        classify_control_route(&http::Method::POST, &uri, &headers).expect("route should classify");
-
-    assert_eq!(decision.route_class.as_deref(), Some("public_support"));
-    assert_eq!(decision.route_family.as_deref(), Some("payment_callback"));
-    assert_eq!(decision.route_kind.as_deref(), Some("callback"));
-    assert_eq!(
-        decision.auth_endpoint_signature.as_deref(),
-        Some("public:payment")
-    );
-    assert!(!decision.is_execution_runtime_candidate());
-}
-
-#[test]
-fn classifies_epay_callback_routes_as_public_support_route() {
-    let headers = headers(&[]);
-    for (method, uri, route_kind) in [
-        (http::Method::GET, "/api/payment/epay/notify", "epay_notify"),
-        (
-            http::Method::POST,
-            "/api/payment/epay/notify",
-            "epay_notify",
-        ),
-        (http::Method::GET, "/api/payment/epay/return", "epay_return"),
-        (
-            http::Method::POST,
-            "/api/payment/epay/return",
-            "epay_return",
-        ),
-    ] {
-        let uri: Uri = uri.parse().expect("uri should parse");
-        let decision =
-            classify_control_route(&method, &uri, &headers).expect("route should classify");
-
-        assert_eq!(decision.route_class.as_deref(), Some("public_support"));
-        assert_eq!(decision.route_family.as_deref(), Some("payment_callback"));
-        assert_eq!(decision.route_kind.as_deref(), Some(route_kind));
-        assert_eq!(
-            decision.auth_endpoint_signature.as_deref(),
-            Some("public:payment")
-        );
-        assert!(!decision.is_execution_runtime_candidate());
-    }
-}
-
-#[test]
-fn epay_post_callback_routes_buffer_request_body() {
-    let headers = headers(&[]);
-    for path in ["/api/payment/epay/notify", "/api/payment/epay/return"] {
-        let uri: Uri = path.parse().expect("uri should parse");
-        let decision = classify_control_route(&http::Method::POST, &uri, &headers)
-            .expect("route should classify");
-        let context = GatewayPublicRequestContext::from_request_parts(
-            "trace-epay-callback",
-            &http::Method::POST,
-            &uri,
-            &headers,
-            Some(decision),
-        );
-
-        assert!(
-            local_proxy_route_requires_buffered_body(&context),
-            "POST {path} should buffer request body"
-        );
-    }
-}
-
-#[test]
-fn classifies_billing_plan_routes_as_public_support_routes() {
-    let headers = headers(&[]);
-    for (method, uri, route_kind, signature) in [
-        (
-            http::Method::GET,
-            "/api/billing/plans",
-            "plans",
-            "public:billing",
-        ),
-        (
-            http::Method::POST,
-            "/api/billing/plans/plan-1/checkout",
-            "plan_checkout",
-            "user:billing",
-        ),
-        (
-            http::Method::GET,
-            "/api/billing/entitlements",
-            "entitlements",
-            "user:billing",
-        ),
-    ] {
-        let uri: Uri = uri.parse().expect("uri should parse");
-        let decision =
-            classify_control_route(&method, &uri, &headers).expect("route should classify");
-
-        assert_eq!(decision.route_class.as_deref(), Some("public_support"));
-        assert_eq!(decision.route_family.as_deref(), Some("billing"));
-        assert_eq!(decision.route_kind.as_deref(), Some(route_kind));
-        assert_eq!(decision.auth_endpoint_signature.as_deref(), Some(signature));
-        assert!(!decision.is_execution_runtime_candidate());
-    }
-}
-
-#[test]
-fn billing_plan_checkout_buffers_request_body() {
-    let headers = headers(&[]);
-    let uri: Uri = "/api/billing/plans/plan-1/checkout"
-        .parse()
-        .expect("uri should parse");
-    let decision =
-        classify_control_route(&http::Method::POST, &uri, &headers).expect("route should classify");
-    let context = GatewayPublicRequestContext::from_request_parts(
-        "trace-billing-checkout",
         &http::Method::POST,
         &uri,
         &headers,

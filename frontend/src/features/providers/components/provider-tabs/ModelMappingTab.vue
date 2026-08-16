@@ -167,25 +167,6 @@
               <span class="font-mono text-sm truncate">
                 {{ mapping.name }}
               </span>
-              <!-- 测试按钮（直连测试） -->
-              <Button
-                v-if="!item.group || item.group.operations.length === 0"
-                variant="ghost"
-                size="icon"
-                class="h-7 w-7 shrink-0"
-                title="测试映射"
-                :disabled="testingMapping === `${item.key}-${mapping.name}`"
-                @click="testMapping(item, mapping)"
-              >
-                <Loader2
-                  v-if="testingMapping === `${item.key}-${mapping.name}`"
-                  class="w-3 h-3 animate-spin"
-                />
-                <Play
-                  v-else
-                  class="w-3 h-3"
-                />
-              </Button>
             </div>
           </div>
 
@@ -234,23 +215,6 @@
                   class="flex items-center justify-between gap-2 py-1"
                 >
                   <span class="font-mono text-sm truncate">{{ match.name }}</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    class="h-7 w-7 shrink-0"
-                    title="测试映射"
-                    :disabled="testingMapping === `${item.key}-${keyItem.keyId}-${match.name}`"
-                    @click="testRegexMapping(item, keyItem, match)"
-                  >
-                    <Loader2
-                      v-if="testingMapping === `${item.key}-${keyItem.keyId}-${match.name}`"
-                      class="w-3 h-3 animate-spin"
-                    />
-                    <Play
-                      v-else
-                      class="w-3 h-3"
-                    />
-                  </Button>
                 </div>
               </div>
             </div>
@@ -326,46 +290,17 @@
     @confirm="confirmDelete"
     @cancel="deleteConfirmOpen = false"
   />
-
-  <!-- 模型测试对话框 -->
-  <ModelTestDialog
-    :open="modelTest.dialogOpen.value"
-    :result="modelTest.testResult.value"
-    mode="direct"
-    :provider-type="provider.provider_type"
-    :selecting-model-name="testingModelName"
-    :endpoints="selectableTestEndpoints"
-    :selected-endpoint="selectedTestEndpoint"
-    :testing="modelTest.testing.value"
-    :trace="modelTest.testTrace.value"
-    :request-id="modelTest.requestId.value"
-    :request-headers-draft="testRequestHeadersDraft"
-    :request-headers-reset-value="testRequestHeadersResetValue"
-    :request-headers-error="testRequestHeadersError"
-    :request-body-draft="testRequestBodyDraft"
-    :request-body-reset-value="testRequestBodyResetValue"
-    :request-body-error="testRequestBodyError"
-    :start-disabled="!selectedTestEndpoint || !!testRequestHeadersError || !!testRequestBodyError"
-    @close="handleTestDialogClose"
-    @back="handleTestDialogBack"
-    @select-endpoint="handleSelectTestEndpoint"
-    @start="handleStartMappingTest"
-    @update:request-headers-draft="testRequestHeadersDraft = $event"
-    @update:request-body-draft="testRequestBodyDraft = $event"
-  />
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useSmartPagination } from '@/composables/useSmartPagination'
-import { useModelTest } from '@/composables/useModelTest'
-import { Tag, Plus, Edit, Trash2, ChevronRight, Loader2, Play } from 'lucide-vue-next'
+import { Tag, Plus, Edit, Trash2, ChevronRight } from 'lucide-vue-next'
 import {
   Card, Button, Badge,
 } from '@/components/ui'
 import AlertDialog from '@/components/common/AlertDialog.vue'
 import ModelMappingDialog, { type AliasGroup } from '../ModelMappingDialog.vue'
-import ModelTestDialog from './ModelTestDialog.vue'
 import { useToast } from '@/composables/useToast'
 import {
   type Model,
@@ -384,17 +319,6 @@ import {
   modelMappingOperationsKey,
   normalizeModelMappingOperations,
 } from '../../utils/modelMappingScope'
-import {
-  buildDefaultModelTestRequestHeaders,
-  buildDefaultModelTestRequestBody,
-  isModelTestableApiFormat,
-  isModelTestableEndpoint,
-  modelTestMappingScopeMatchesEndpoint,
-  parseModelTestRequestHeadersDraft,
-  parseModelTestRequestBodyDraft,
-  selectPreferredModelTestEndpoint,
-  syncModelTestRequestBodyDraft,
-} from './model-test-request'
 
 interface MappingItem {
   name: string
@@ -436,42 +360,14 @@ const emit = defineEmits<{
 const { error: showError, success: showSuccess } = useToast()
 const { t } = useI18n()
 
-// 模型测试 composable
-const modelTest = useModelTest({ providerId: () => props.provider.id })
-
 // 状态
 const localLoading = ref(false)
 const dialogOpen = ref(false)
 const deleteConfirmOpen = ref(false)
 const editingGroup = ref<AliasGroup | null>(null)
 const deletingGroup = ref<AliasGroup | null>(null)
-const testingMapping = ref<string | null>(null)
-const pendingMappingKey = ref<string | null>(null)
-const testingModelName = ref<string | null>(null)
-const testingSourceModel = ref<Model | null>(null)
 const preselectedModelId = ref<string | null>(null)
-const selectedTestEndpoint = ref<ProviderEndpoint | null>(null)
-const testRequestHeadersDraft = ref('')
-const testRequestHeadersResetValue = ref('')
-const testRequestBodyDraft = ref('')
-const testRequestBodyResetValue = ref('')
-const mappingTestEndpoints = ref<ProviderEndpoint[] | null>(null)
 const providerKeysState = computed(() => props.providerKeys ?? [])
-const activeEndpoints = computed(() => (props.endpoints ?? [])
-  .filter(endpoint => {
-    if (typeof endpoint.active_keys === 'number') {
-      return endpoint.is_active !== false
-        && isModelTestableApiFormat(endpoint.api_format)
-        && (endpoint.active_keys > 0
-          || isModelTestableEndpoint(endpoint, providerKeysState.value, props.provider.provider_type))
-    }
-    return isModelTestableEndpoint(endpoint, providerKeysState.value, props.provider.provider_type)
-  }))
-const selectableTestEndpoints = computed(() => mappingTestEndpoints.value ?? activeEndpoints.value)
-const parsedTestRequestHeaders = computed(() => parseModelTestRequestHeadersDraft(testRequestHeadersDraft.value))
-const testRequestHeadersError = computed(() => parsedTestRequestHeaders.value.error)
-const parsedTestRequestBody = computed(() => parseModelTestRequestBodyDraft(testRequestBodyDraft.value))
-const testRequestBodyError = computed(() => parsedTestRequestBody.value.error)
 const isLoading = computed(() => Boolean(props.loading) || localLoading.value)
 
 // 使用 props 传入的数据
@@ -784,161 +680,6 @@ async function confirmDelete() {
 // 对话框保存后回调
 async function onDialogSaved() {
   emit('refresh')
-}
-
-function handleTestDialogClose() {
-  modelTest.resetState()
-  pendingMappingKey.value = null
-  testingModelName.value = null
-  testingSourceModel.value = null
-  testingMapping.value = null
-  selectedTestEndpoint.value = null
-  mappingTestEndpoints.value = null
-  testRequestHeadersDraft.value = ''
-  testRequestHeadersResetValue.value = ''
-  testRequestBodyDraft.value = ''
-  testRequestBodyResetValue.value = ''
-}
-
-function handleTestDialogBack() {
-  if (modelTest.testing.value) return
-  modelTest.testResult.value = null
-  modelTest.stopPolling()
-}
-
-function handleSelectTestEndpoint(endpointId: string) {
-  const endpoint = selectableTestEndpoints.value.find(item => item.id === endpointId)
-  if (!endpoint) return
-  selectedTestEndpoint.value = endpoint
-  syncMappingTestRequestBody()
-}
-
-function findMappingTestModel(modelName: string): Model | null {
-  const normalized = modelName.trim()
-  if (!normalized) return null
-
-  return models.value.find(model => (
-    model.provider_model_name === normalized
-    || model.global_model_name === normalized
-    || model.global_model_display_name === normalized
-    || (model.provider_model_mappings ?? []).some(alias => alias.name === normalized)
-  )) ?? null
-}
-
-// 测试映射（直连测试，带故障转移和实时进度）
-function runMappingTest(
-  testingKey: string,
-  modelName: string,
-  endpointsOverride?: ProviderEndpoint[],
-  sourceModel?: Model | null,
-) {
-  const endpoints = endpointsOverride ?? activeEndpoints.value
-  if (endpoints.length === 0) {
-    showError('暂无可用于测试的活跃端点')
-    return
-  }
-  pendingMappingKey.value = testingKey
-  modelTest.testResult.value = null
-  modelTest.dialogOpen.value = true
-  testingMapping.value = null
-  testingModelName.value = modelName
-  testingSourceModel.value = sourceModel ?? findMappingTestModel(modelName)
-  mappingTestEndpoints.value = endpointsOverride ?? null
-  selectedTestEndpoint.value = selectPreferredModelTestEndpoint(
-    testingSourceModel.value,
-    endpoints,
-  )
-  testRequestHeadersResetValue.value = buildDefaultModelTestRequestHeaders()
-  testRequestHeadersDraft.value = testRequestHeadersResetValue.value
-  resetMappingTestRequestBody()
-}
-
-function resetMappingTestRequestBody() {
-  if (!testingModelName.value) return
-
-  testRequestBodyResetValue.value = buildDefaultModelTestRequestBody(
-    testingModelName.value,
-    selectedTestEndpoint.value?.api_format,
-    testingSourceModel.value,
-  )
-  testRequestBodyDraft.value = testRequestBodyResetValue.value
-}
-
-function syncMappingTestRequestBody() {
-  if (!testingModelName.value) return
-
-  const nextResetValue = buildDefaultModelTestRequestBody(
-    testingModelName.value,
-    selectedTestEndpoint.value?.api_format,
-    testingSourceModel.value,
-  )
-  const next = syncModelTestRequestBodyDraft(
-    testRequestBodyDraft.value,
-    testRequestBodyResetValue.value,
-    nextResetValue,
-    testingModelName.value,
-  )
-  testRequestBodyResetValue.value = next.resetValue
-  testRequestBodyDraft.value = next.draft
-}
-
-async function handleStartMappingTest() {
-  if (modelTest.testing.value || !testingModelName.value) return
-  const endpoint = selectedTestEndpoint.value || selectableTestEndpoints.value[0]
-  if (!endpoint) {
-    showError('请选择要测试的端点')
-    return
-  }
-
-  const { value: requestHeaders, error: requestHeadersError } = parsedTestRequestHeaders.value
-  if (!requestHeaders || requestHeadersError) {
-    showError(`测试请求头无效: ${requestHeadersError || '无效 JSON'}`)
-    return
-  }
-
-  const { value: requestBody, error } = parsedTestRequestBody.value
-  if (!requestBody || error) {
-    showError(`测试请求体无效: ${error || '无效 JSON'}`)
-    return
-  }
-
-  const currentMappingKey = pendingMappingKey.value || testingModelName.value
-  testingMapping.value = pendingMappingKey.value ? currentMappingKey : null
-  await modelTest.startTest({
-    mode: 'direct',
-    modelName: testingModelName.value,
-    displayLabel: `[${endpoint.api_format}] 映射 "${testingModelName.value}"`,
-    apiFormat: endpoint.api_format,
-    endpointId: endpoint.id,
-    endpointBaseUrl: endpoint.base_url,
-    requestHeaders,
-    requestBody,
-  })
-  if (pendingMappingKey.value === currentMappingKey) {
-    pendingMappingKey.value = null
-  }
-  testingMapping.value = null
-}
-
-function scopedMappingEndpoints(item: CombinedMapping): ProviderEndpoint[] {
-  const group = item.group
-  if (!group) return activeEndpoints.value
-
-  return activeEndpoints.value.filter(endpoint => modelTestMappingScopeMatchesEndpoint(
-    group.apiFormats,
-    group.endpointIds,
-    endpoint,
-  ))
-}
-
-// 测试精确映射
-function testMapping(item: CombinedMapping, mapping: MappingItem) {
-  runMappingTest(`${item.key}-${mapping.name}`, mapping.name, scopedMappingEndpoints(item), item.group?.model)
-}
-
-// 测试正则映射
-function testRegexMapping(item: CombinedMapping, keyItem: MatchedKeyInfo, match: MappingItem) {
-  runMappingTest(`${item.key}-${keyItem.keyId}-${match.name}`, match.name)
 }
 
 // 暴露给父组件

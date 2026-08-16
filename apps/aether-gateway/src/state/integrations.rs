@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use aether_contracts::{ExecutionPlan, ExecutionResult, ProxySnapshot};
+use aether_contracts::{ExecutionPlan, ExecutionResult};
 use aether_data_contracts::repository::candidates::{
     StoredRequestCandidate, UpsertRequestCandidateRecord,
 };
@@ -9,233 +9,26 @@ use aether_data_contracts::repository::global_models::{
     StoredAdminProviderModel, UpsertAdminProviderModelRecord,
 };
 use aether_data_contracts::repository::provider_catalog::{
-    ProviderCatalogUpstreamMetadataNamespaceUpdate, StoredProviderCatalogEndpoint,
-    StoredProviderCatalogKey, StoredProviderCatalogProvider,
+    StoredProviderCatalogEndpoint, StoredProviderCatalogKey, StoredProviderCatalogProvider,
 };
-use aether_data_contracts::repository::quota::StoredProviderQuotaSnapshot;
 use aether_model_fetch::{
-    aggregate_models_for_cache, build_antigravity_load_code_assist_plan,
-    fetch_models_from_transports, merge_upstream_metadata, model_fetch_interval_minutes,
-    ModelFetchAssociationStore, ModelFetchTransportRuntime,
+    aggregate_models_for_cache, model_fetch_interval_minutes, ModelFetchAssociationStore,
+    ModelFetchTransportRuntime,
 };
 use aether_scheduler_core::SchedulerAffinityTarget;
 use async_trait::async_trait;
 use serde_json::Value;
-use tracing::{debug, warn};
+use tracing::debug;
 
 use super::{AppState, GatewayError};
-use crate::clock::current_unix_secs;
 use crate::model_fetch::ModelFetchRuntimeState;
-use crate::provider_transport::{GatewayProviderTransportSnapshot, LocalResolvedOAuthRequestAuth};
+use crate::provider_transport::GatewayProviderTransportSnapshot;
 use crate::request_candidate_runtime::{
     RequestCandidateRuntimeCapabilityReader, RequestCandidateRuntimeReader,
     RequestCandidateRuntimeWriter,
 };
 use crate::scheduler::state::SchedulerRuntimeState;
 use crate::{execution_runtime, provider_transport};
-
-impl AppState {
-    pub(crate) async fn hydrate_antigravity_project_metadata_for_transport(
-        &self,
-        transport: &GatewayProviderTransportSnapshot,
-    ) -> Option<GatewayProviderTransportSnapshot> {
-        if !provider_transport::antigravity::is_antigravity_provider_transport(transport) {
-            return None;
-        }
-        if matches!(
-            provider_transport::antigravity::resolve_local_antigravity_request_auth(transport),
-            provider_transport::antigravity::AntigravityRequestAuthSupport::Supported(_)
-        ) {
-            return Some(transport.clone());
-        }
-
-        let plan = match build_antigravity_load_code_assist_plan(self, transport).await {
-            Ok(plan) => plan,
-            Err(err) => {
-                warn!(
-                    provider_id = %transport.provider.id,
-                    endpoint_id = %transport.endpoint.id,
-                    key_id = %transport.key.id,
-                    error = %err,
-                    "antigravity project metadata hydration failed"
-                );
-                return None;
-            }
-        };
-        let result =
-            match execution_runtime::execute_execution_runtime_sync_plan(self, None, &plan).await {
-                Ok(result) => result,
-                Err(err) => {
-                    warn!(
-                        provider_id = %transport.provider.id,
-                        endpoint_id = %transport.endpoint.id,
-                        key_id = %transport.key.id,
-                        error = ?err,
-                        "antigravity project metadata hydration request failed"
-                    );
-                    return None;
-                }
-            };
-        if !(200..300).contains(&result.status_code) {
-            warn!(
-                provider_id = %transport.provider.id,
-                endpoint_id = %transport.endpoint.id,
-                key_id = %transport.key.id,
-                status_code = result.status_code,
-                "antigravity project metadata hydration returned non-success status"
-            );
-            return None;
-        }
-        let Some(project_id) = result
-            .body
-            .as_ref()
-            .and_then(|body| body.json_body.as_ref())
-            .and_then(extract_antigravity_load_code_assist_project_id)
-        else {
-            warn!(
-                provider_id = %transport.provider.id,
-                endpoint_id = %transport.endpoint.id,
-                key_id = %transport.key.id,
-                "antigravity project metadata hydration response missing project"
-            );
-            return None;
-        };
-        let upstream_metadata = serde_json::json!({
-            "antigravity": {
-                "project_id": project_id,
-                "updated_at": current_unix_secs(),
-            }
-        });
-        let merged_metadata =
-            merge_upstream_metadata(transport.key.upstream_metadata.as_ref(), &upstream_metadata);
-
-        let mut hydrated = transport.clone();
-        hydrated.key.upstream_metadata = Some(merged_metadata.clone());
-        if !matches!(
-            provider_transport::antigravity::resolve_local_antigravity_request_auth(&hydrated),
-            provider_transport::antigravity::AntigravityRequestAuthSupport::Supported(_)
-        ) {
-            return None;
-        }
-
-        if let Err(err) = self
-            .update_provider_catalog_key_upstream_metadata(
-                &transport.key.id,
-                Some(&merged_metadata),
-                Some(current_unix_secs()),
-            )
-            .await
-        {
-            warn!(
-                provider_id = %transport.provider.id,
-                endpoint_id = %transport.endpoint.id,
-                key_id = %transport.key.id,
-                error = ?err,
-                "antigravity project metadata hydration could not persist metadata"
-            );
-        }
-
-        Some(hydrated)
-    }
-
-    pub(crate) async fn hydrate_gemini_cli_project_metadata_for_transport(
-        &self,
-        transport: &GatewayProviderTransportSnapshot,
-    ) -> Option<GatewayProviderTransportSnapshot> {
-        if !provider_transport::is_gemini_cli_provider_transport(transport) {
-            return None;
-        }
-        if provider_transport::resolve_gemini_cli_project_id(transport).is_some() {
-            return Some(transport.clone());
-        }
-
-        let outcome =
-            match fetch_models_from_transports(self, std::slice::from_ref(transport)).await {
-                Ok(outcome) => outcome,
-                Err(err) => {
-                    warn!(
-                        provider_id = %transport.provider.id,
-                        endpoint_id = %transport.endpoint.id,
-                        key_id = %transport.key.id,
-                        error = %err,
-                        "gemini_cli project metadata hydration failed"
-                    );
-                    return None;
-                }
-            };
-        let upstream_metadata = outcome.upstream_metadata.as_ref()?;
-        let merged_metadata =
-            merge_upstream_metadata(transport.key.upstream_metadata.as_ref(), upstream_metadata);
-
-        let mut hydrated = transport.clone();
-        hydrated.key.upstream_metadata = Some(merged_metadata.clone());
-        if provider_transport::resolve_gemini_cli_project_id(&hydrated).is_none() {
-            return None;
-        }
-
-        if let Err(err) = self
-            .update_provider_catalog_key_upstream_metadata(
-                &transport.key.id,
-                Some(&merged_metadata),
-                Some(current_unix_secs()),
-            )
-            .await
-        {
-            warn!(
-                provider_id = %transport.provider.id,
-                endpoint_id = %transport.endpoint.id,
-                key_id = %transport.key.id,
-                error = ?err,
-                "gemini_cli project metadata hydration could not persist metadata"
-            );
-        }
-
-        Some(hydrated)
-    }
-}
-
-fn extract_antigravity_load_code_assist_project_id(value: &Value) -> Option<String> {
-    let raw = value
-        .get("cloudaicompanionProject")
-        .or_else(|| value.get("cloudAiCompanionProject"))?;
-    if let Some(project_id) = raw
-        .as_str()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        return Some(project_id.to_string());
-    }
-    raw.as_object()
-        .and_then(|object| {
-            object
-                .get("id")
-                .or_else(|| object.get("project_id"))
-                .or_else(|| object.get("projectId"))
-        })
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-}
-
-#[async_trait]
-impl provider_transport::TransportTunnelAffinityLookup for AppState {
-    async fn lookup_tunnel_attachment_owner(
-        &self,
-        node_id: &str,
-    ) -> Result<Option<provider_transport::TransportTunnelAttachmentOwner>, String> {
-        self.tunnel
-            .lookup_attachment_owner(self.data.as_ref(), node_id)
-            .await
-            .map(|owner| {
-                owner.map(|owner| provider_transport::TransportTunnelAttachmentOwner {
-                    gateway_instance_id: owner.gateway_instance_id,
-                    relay_base_url: owner.relay_base_url,
-                    observed_at_unix_secs: owner.observed_at_unix_secs,
-                })
-            })
-    }
-}
 
 #[async_trait]
 impl provider_transport::VideoTaskTransportSnapshotLookup for AppState {
@@ -253,23 +46,6 @@ impl provider_transport::VideoTaskTransportSnapshotLookup for AppState {
 
 #[async_trait]
 impl ModelFetchTransportRuntime for AppState {
-    async fn resolve_local_oauth_request_auth(
-        &self,
-        transport: &GatewayProviderTransportSnapshot,
-    ) -> Result<Option<LocalResolvedOAuthRequestAuth>, String> {
-        AppState::resolve_local_oauth_request_auth(self, transport)
-            .await
-            .map_err(GatewayError::into_message)
-    }
-
-    async fn resolve_model_fetch_proxy(
-        &self,
-        transport: &GatewayProviderTransportSnapshot,
-    ) -> Option<ProxySnapshot> {
-        self.resolve_transport_proxy_snapshot_with_tunnel_affinity(transport)
-            .await
-    }
-
     async fn execute_model_fetch_execution_plan(
         &self,
         plan: &ExecutionPlan,
@@ -334,26 +110,6 @@ impl ModelFetchRuntimeState for AppState {
             allowed_models,
             last_models_fetch_at_unix_secs,
             last_models_fetch_error,
-            updated_at_unix_secs,
-        )
-        .await?;
-        Ok(())
-    }
-
-    async fn update_provider_catalog_key_model_fetch_success(
-        &self,
-        key_id: &str,
-        allowed_models: Option<&Value>,
-        last_models_fetch_at_unix_secs: u64,
-        upstream_metadata_updates: &[ProviderCatalogUpstreamMetadataNamespaceUpdate],
-        updated_at_unix_secs: Option<u64>,
-    ) -> Result<(), GatewayError> {
-        AppState::update_provider_catalog_key_model_fetch_success(
-            self,
-            key_id,
-            allowed_models,
-            last_models_fetch_at_unix_secs,
-            upstream_metadata_updates,
             updated_at_unix_secs,
         )
         .await?;
@@ -503,13 +259,6 @@ impl RequestCandidateRuntimeWriter for AppState {
 
 #[async_trait]
 impl SchedulerRuntimeState for AppState {
-    async fn read_provider_quota_snapshot(
-        &self,
-        provider_id: &str,
-    ) -> Result<Option<StoredProviderQuotaSnapshot>, GatewayError> {
-        AppState::read_provider_quota_snapshot(self, provider_id).await
-    }
-
     async fn read_provider_catalog_providers_by_ids(
         &self,
         provider_ids: &[String],

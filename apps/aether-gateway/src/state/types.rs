@@ -54,14 +54,6 @@ impl LocalExecutionRuntimeMissDiagnostic {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum AdminWalletMutationOutcome<T> {
-    Applied(T),
-    NotFound,
-    Invalid(String),
-    Unavailable,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct GatewayUserSessionView {
     pub(crate) id: String,
     pub(crate) user_id: String,
@@ -304,43 +296,6 @@ impl From<GatewayUserPreferenceView> for crate::data::state::StoredUserPreferenc
             email_notifications: value.email_notifications,
             usage_alerts: value.usage_alerts,
             announcement_notifications: value.announcement_notifications,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub(crate) struct GatewayAdminPaymentCallbackView {
-    pub(crate) id: String,
-    pub(crate) payment_order_id: Option<String>,
-    pub(crate) payment_method: String,
-    pub(crate) callback_key: String,
-    pub(crate) order_no: Option<String>,
-    pub(crate) gateway_order_id: Option<String>,
-    pub(crate) payload_hash: Option<String>,
-    pub(crate) signature_valid: bool,
-    pub(crate) status: String,
-    pub(crate) payload: Option<serde_json::Value>,
-    pub(crate) error_message: Option<String>,
-    pub(crate) created_at_unix_ms: u64,
-    pub(crate) processed_at_unix_secs: Option<u64>,
-}
-
-impl From<super::AdminPaymentCallbackRecord> for GatewayAdminPaymentCallbackView {
-    fn from(value: super::AdminPaymentCallbackRecord) -> Self {
-        Self {
-            id: value.id,
-            payment_order_id: value.payment_order_id,
-            payment_method: value.payment_method,
-            callback_key: value.callback_key,
-            order_no: value.order_no,
-            gateway_order_id: value.gateway_order_id,
-            payload_hash: value.payload_hash,
-            signature_valid: value.signature_valid,
-            status: value.status,
-            payload: value.payload,
-            error_message: value.error_message,
-            created_at_unix_ms: value.created_at_unix_ms,
-            processed_at_unix_secs: value.processed_at_unix_secs,
         }
     }
 }

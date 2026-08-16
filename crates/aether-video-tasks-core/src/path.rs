@@ -5,7 +5,7 @@ use aether_data_contracts::repository::video_tasks::VideoTaskStatus as StoredVid
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::{LocalVideoTaskRegistryMutation, LocalVideoTaskStatus, VideoTaskTruthSourceMode};
+use crate::{LocalVideoTaskRegistryMutation, LocalVideoTaskStatus};
 
 pub fn extract_openai_task_id_from_path(path: &str) -> Option<&str> {
     let suffix = path.strip_prefix("/v1/videos/")?;
@@ -168,14 +168,9 @@ pub fn build_local_sync_finalize_request_path(
 }
 
 pub fn resolve_local_video_registry_mutation(
-    truth_source_mode: VideoTaskTruthSourceMode,
     request_path: &str,
     report_kind: &str,
 ) -> Option<LocalVideoTaskRegistryMutation> {
-    if truth_source_mode != VideoTaskTruthSourceMode::RustAuthoritative {
-        return None;
-    }
-
     match report_kind {
         "openai_video_delete_sync_finalize" => {
             let task_id = extract_openai_task_id_from_path(request_path)?;

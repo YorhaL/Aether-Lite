@@ -752,28 +752,11 @@ WHERE user_id IN ({non_admin_users})
         summary,
     )
     .await?;
-    for (table, column, key) in [
-        (
-            "wallet_transactions",
-            "operator_id",
-            "wallet_transaction_operator_refs_cleared",
-        ),
-        (
-            "payment_orders",
-            "user_id",
-            "payment_order_user_refs_cleared",
-        ),
-        (
-            "announcements",
-            "author_id",
-            "announcement_author_refs_cleared",
-        ),
-        (
-            "proxy_nodes",
-            "registered_by",
-            "proxy_node_registrant_refs_cleared",
-        ),
-    ] {
+    for (table, column, key) in [(
+        "announcements",
+        "author_id",
+        "announcement_author_refs_cleared",
+    )] {
         pg_execute_if_table(
             tx,
             table,
@@ -785,26 +768,6 @@ WHERE user_id IN ({non_admin_users})
         )
         .await?;
     }
-    pg_execute_if_table(
-        tx,
-        "refund_requests",
-        "refund_request_user_refs_cleared",
-        &format!(
-            r#"
-UPDATE public.refund_requests
-SET user_id = CASE WHEN user_id IN ({non_admin_users}) THEN NULL ELSE user_id END,
-    requested_by = CASE WHEN requested_by IN ({non_admin_users}) THEN NULL ELSE requested_by END,
-    approved_by = CASE WHEN approved_by IN ({non_admin_users}) THEN NULL ELSE approved_by END,
-    processed_by = CASE WHEN processed_by IN ({non_admin_users}) THEN NULL ELSE processed_by END
-WHERE user_id IN ({non_admin_users})
-   OR requested_by IN ({non_admin_users})
-   OR approved_by IN ({non_admin_users})
-   OR processed_by IN ({non_admin_users})
-"#
-        ),
-        summary,
-    )
-    .await?;
     pg_delete_non_admin_api_key_rows(tx, "stats_daily_api_key", summary).await?;
     for table in ADMIN_USER_SCOPED_TABLES {
         pg_delete_non_admin_user_rows(tx, table, summary).await?;

@@ -10,22 +10,15 @@ mod core;
 mod cors;
 mod integrations;
 mod oauth;
-mod proxy;
 mod routing_profiles;
 mod runtime;
 #[cfg(test)]
 mod testing;
+mod transport_snapshots;
 mod types;
 mod video;
 
-pub(crate) use self::admin_types::{
-    AdminBillingCollectorRecord, AdminBillingCollectorWriteInput, AdminBillingMutationOutcome,
-    AdminBillingPresetApplyResult, AdminBillingRuleRecord, AdminBillingRuleWriteInput,
-    AdminPaymentCallbackRecord, AdminSecurityBlacklistEntry, AdminWalletPaymentOrderRecord,
-    AdminWalletRefundRecord, AdminWalletTransactionRecord, BillingPlanRecord,
-    BillingPlanWriteInput, PaymentGatewayConfigRecord, PaymentGatewayConfigWriteInput,
-    UserDailyQuotaAvailabilityRecord, UserPlanEntitlementRecord,
-};
+pub(crate) use self::admin_types::AdminSecurityBlacklistEntry;
 pub use self::app::AppState;
 pub(crate) use self::app::{
     upstream_target_gate_auto_limit, upstream_target_gate_limit_from_env,
@@ -38,14 +31,8 @@ pub(crate) use self::cache::{
     PROVIDER_TRANSPORT_SNAPSHOT_CACHE_STALE_TTL, PROVIDER_TRANSPORT_SNAPSHOT_CACHE_TTL,
 };
 pub use self::cors::FrontdoorCorsConfig;
-pub(crate) use self::oauth::{
-    provider_transport_context_allows_credential_rotation, AgentIdentityAuthConfigFence,
-    CodexRuntimeOAuthObservation, ProviderTransportCredentialFence,
-};
 pub(crate) use self::types::{
-    AdminWalletMutationOutcome, GatewayAdminPaymentCallbackView, GatewayUserPreferenceView,
-    GatewayUserSessionView, LocalExecutionRuntimeMissDiagnostic, LocalMutationOutcome,
-    LocalProviderDeleteTaskState,
+    GatewayUserPreferenceView, GatewayUserSessionView, LocalExecutionRuntimeMissDiagnostic,
+    LocalMutationOutcome, LocalProviderDeleteTaskState,
 };
-use super::provider_transport::provider_transport_snapshot_looks_refreshed;
 pub(crate) use super::provider_transport::ProviderTransportSnapshotCacheKey;

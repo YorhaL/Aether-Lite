@@ -111,7 +111,6 @@ emit_tree_for_hash() {
         ! -path '*/node_modules/*' \
         ! -path '*/target/*' \
         ! -path '*/dist/*' \
-        ! -path '*/.mypy_cache/*' \
         ! -path '*/.vite/*' \
         2>/dev/null | sort | while IFS= read -r path; do
         emit_file_for_hash "$path"

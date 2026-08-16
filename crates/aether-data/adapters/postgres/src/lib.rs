@@ -16,10 +16,7 @@ mod management_tokens;
 mod migrations;
 mod oauth_providers;
 mod pool;
-mod pool_scores;
 mod provider_catalog;
-mod proxy_nodes;
-mod quota;
 mod routing_profiles;
 mod settlement;
 mod tx;
@@ -53,10 +50,7 @@ pub use migrations::{
 };
 pub use oauth_providers::SqlxOAuthProviderRepository;
 pub use pool::{PostgresPool, PostgresPoolFactory};
-pub use pool_scores::PostgresPoolMemberScoreRepository;
 pub use provider_catalog::SqlxProviderCatalogReadRepository;
-pub use proxy_nodes::SqlxProxyNodeRepository;
-pub use quota::SqlxProviderQuotaRepository;
 pub use routing_profiles::PostgresRoutingGroupRepository;
 pub use settlement::SqlxSettlementRepository;
 pub use tx::{

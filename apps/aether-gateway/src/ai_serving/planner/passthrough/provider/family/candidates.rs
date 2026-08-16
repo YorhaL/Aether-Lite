@@ -2,13 +2,11 @@ use tracing::warn;
 
 use crate::ai_serving::planner::candidate_materialization::{
     build_local_execution_candidate_attempt_source_with_serving,
-    materialize_local_execution_candidates_with_serving, LocalCandidateResolutionMode,
-    LocalExecutionCandidateAttemptSource,
+    materialize_local_execution_candidates_with_serving, LocalExecutionCandidateAttemptSource,
 };
 use crate::ai_serving::planner::candidate_metadata::{
-    build_local_execution_candidate_contract_metadata,
-    build_local_execution_candidate_contract_metadata_for_candidate,
-    LocalExecutionCandidateMetadataParts,
+    build_local_execution_candidate_metadata,
+    build_local_execution_candidate_metadata_for_candidate, LocalExecutionCandidateMetadataParts,
 };
 use crate::ai_serving::planner::candidate_resolution::SkippedLocalExecutionCandidate;
 use crate::ai_serving::planner::common::extract_requested_model_from_request;
@@ -21,7 +19,6 @@ use crate::ai_serving::planner::materialization_policy::{
 };
 use crate::ai_serving::planner::spec_metadata::local_same_format_provider_spec_metadata;
 use crate::ai_serving::{
-    ai_local_execution_contract_for_formats, extract_pool_sticky_session_token,
     resolve_local_decision_execution_runtime_auth_context, GatewayControlDecision, PlannerAppState,
 };
 use crate::client_session_affinity::client_session_affinity_from_api_request;
@@ -117,7 +114,6 @@ pub(crate) async fn materialize_local_same_format_provider_candidate_attempts(
 ) -> Result<(Vec<LocalSameFormatProviderCandidateAttempt>, usize), GatewayError> {
     let spec_metadata = local_same_format_provider_spec_metadata(spec);
     let planner_state = PlannerAppState::new(state);
-    let sticky_session_token = extract_pool_sticky_session_token(body_json);
     let persistence_policy = build_local_candidate_persistence_policy(
         &input.auth_context,
         input.required_capabilities.as_ref(),
@@ -151,7 +147,6 @@ pub(crate) async fn materialize_local_same_format_provider_candidate_attempts(
         input.client_session_affinity.as_ref(),
         input.required_capabilities.as_ref(),
         input.routing_policy.as_ref(),
-        sticky_session_token.as_deref(),
         input.request_auth_channel.as_deref(),
         persistence_policy,
         candidates,
@@ -165,23 +160,15 @@ pub(crate) async fn materialize_local_same_format_provider_candidate_attempts(
                 extra_data: None,
             })
             .collect(),
-        LocalCandidateResolutionMode::Standard,
         |eligible| {
             let provider_api_format = eligible.provider_api_format.clone();
-            let (execution_strategy, conversion_mode) = ai_local_execution_contract_for_formats(
-                spec_metadata.api_format,
-                &provider_api_format,
-            );
-            Some(build_local_execution_candidate_contract_metadata(
+            Some(build_local_execution_candidate_metadata(
                 LocalExecutionCandidateMetadataParts {
                     eligible,
                     provider_api_format: provider_api_format.as_str(),
                     client_api_format: spec_metadata.api_format,
                     extra_fields: serde_json::Map::new(),
                 },
-                execution_strategy,
-                conversion_mode,
-                provider_api_format.as_str(),
             ))
         },
         |mut skipped_candidate| {
@@ -190,22 +177,14 @@ pub(crate) async fn materialize_local_same_format_provider_candidate_attempts(
                 .as_ref()
                 .map(|transport| transport.endpoint.api_format.trim().to_ascii_lowercase())
                 .unwrap_or_else(|| spec_metadata.api_format.to_string());
-            let (execution_strategy, conversion_mode) = ai_local_execution_contract_for_formats(
-                spec_metadata.api_format,
-                provider_api_format.as_str(),
-            );
-            skipped_candidate.extra_data = Some(
-                build_local_execution_candidate_contract_metadata_for_candidate(
+            skipped_candidate.extra_data =
+                Some(build_local_execution_candidate_metadata_for_candidate(
                     &skipped_candidate.candidate,
                     skipped_candidate.transport_ref(),
                     provider_api_format.as_str(),
                     spec_metadata.api_format,
                     serde_json::Map::new(),
-                    execution_strategy,
-                    conversion_mode,
-                    provider_api_format.as_str(),
-                ),
-            );
+                ));
             skipped_candidate
         },
     )
@@ -223,7 +202,6 @@ pub(crate) async fn build_local_same_format_provider_candidate_attempt_source<'a
 ) -> Result<(LocalExecutionCandidateAttemptSource<'a>, usize), GatewayError> {
     let spec_metadata = local_same_format_provider_spec_metadata(spec);
     let planner_state = PlannerAppState::new(state);
-    let sticky_session_token = extract_pool_sticky_session_token(body_json);
     let persistence_policy = build_local_candidate_persistence_policy(
         &input.auth_context,
         input.required_capabilities.as_ref(),
@@ -258,7 +236,6 @@ pub(crate) async fn build_local_same_format_provider_candidate_attempt_source<'a
         input.client_session_affinity.as_ref(),
         input.required_capabilities.as_ref(),
         input.routing_policy.as_ref(),
-        sticky_session_token.as_deref(),
         input.request_auth_channel.as_deref(),
         persistence_policy,
         candidates,
@@ -272,23 +249,15 @@ pub(crate) async fn build_local_same_format_provider_candidate_attempt_source<'a
                 extra_data: None,
             })
             .collect(),
-        LocalCandidateResolutionMode::Standard,
         |eligible| {
             let provider_api_format = eligible.provider_api_format.clone();
-            let (execution_strategy, conversion_mode) = ai_local_execution_contract_for_formats(
-                spec_metadata.api_format,
-                &provider_api_format,
-            );
-            Some(build_local_execution_candidate_contract_metadata(
+            Some(build_local_execution_candidate_metadata(
                 LocalExecutionCandidateMetadataParts {
                     eligible,
                     provider_api_format: provider_api_format.as_str(),
                     client_api_format: spec_metadata.api_format,
                     extra_fields: serde_json::Map::new(),
                 },
-                execution_strategy,
-                conversion_mode,
-                provider_api_format.as_str(),
             ))
         },
         |mut skipped_candidate| {
@@ -297,22 +266,14 @@ pub(crate) async fn build_local_same_format_provider_candidate_attempt_source<'a
                 .as_ref()
                 .map(|transport| transport.endpoint.api_format.trim().to_ascii_lowercase())
                 .unwrap_or_else(|| spec_metadata.api_format.to_string());
-            let (execution_strategy, conversion_mode) = ai_local_execution_contract_for_formats(
-                spec_metadata.api_format,
-                provider_api_format.as_str(),
-            );
-            skipped_candidate.extra_data = Some(
-                build_local_execution_candidate_contract_metadata_for_candidate(
+            skipped_candidate.extra_data =
+                Some(build_local_execution_candidate_metadata_for_candidate(
                     &skipped_candidate.candidate,
                     skipped_candidate.transport_ref(),
                     provider_api_format.as_str(),
                     spec_metadata.api_format,
                     serde_json::Map::new(),
-                    execution_strategy,
-                    conversion_mode,
-                    provider_api_format.as_str(),
-                ),
-            );
+                ));
             skipped_candidate
         },
     )

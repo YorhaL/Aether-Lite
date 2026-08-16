@@ -2,8 +2,6 @@
 build/
 target/
 *.so
-*.egg
-*.egg-info/
 
 # Frontend
 frontend/node_modules/
@@ -25,14 +23,6 @@ frontend/.vite/
 *.swo
 *~
 .DS_Store
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.mypy_cache/
-.ruff_cache/
 
 # Logs
 logs/

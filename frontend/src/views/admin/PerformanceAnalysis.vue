@@ -36,7 +36,7 @@
               实时运行状态
             </h2>
             <p class="text-xs text-muted-foreground">
-              聚合系统健康、并发保护、代理通道与降级切换
+              聚合系统健康、并发保护与降级切换
             </p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
@@ -208,96 +208,6 @@
                 >
                   全局并发保护暂不可用，请检查 Redis 连接。
                 </p>
-              </section>
-
-              <section class="rounded-xl border border-border/70 bg-card/60 p-4">
-                <div class="flex items-center justify-between gap-3">
-                  <h3 class="text-sm font-semibold">
-                    代理通道
-                  </h3>
-                  <Badge variant="outline">
-                    实时连接
-                  </Badge>
-                </div>
-                <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <div class="text-xs text-muted-foreground">
-                      节点数
-                    </div>
-                    <div class="mt-1 text-lg font-semibold">
-                      {{ formatMetricNumber(currentTunnelNodes) }}
-                    </div>
-                  </div>
-                  <div>
-                    <div class="text-xs text-muted-foreground">
-                      可用连接
-                    </div>
-                    <div class="mt-1 text-lg font-semibold">
-                      {{ formatMetricNumber(gatewayMetrics?.tunnel.availableProxyConnections) }}
-                    </div>
-                  </div>
-                  <div>
-                    <div class="text-xs text-muted-foreground">
-                      活跃流
-                    </div>
-                    <div class="mt-1 text-lg font-semibold">
-                      {{ formatMetricNumber(currentActiveStreams) }}
-                    </div>
-                  </div>
-                  <div>
-                    <div class="text-xs text-muted-foreground">
-                      避让连接
-                    </div>
-                    <div class="mt-1 text-lg font-semibold">
-                      {{ formatMetricNumber(gatewayMetrics?.tunnel.softAvoidProxyConnections) }}
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <section class="rounded-xl border border-border/70 bg-card/60 p-4">
-                <div class="flex items-center justify-between gap-3">
-                  <h3 class="text-sm font-semibold">
-                    代理通道压力
-                  </h3>
-                  <Badge variant="outline">
-                    排队 {{ tunnelQueueUtilizationText }}
-                  </Badge>
-                </div>
-                <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <div class="text-xs text-muted-foreground">
-                      排队中
-                    </div>
-                    <div class="mt-1 text-lg font-semibold">
-                      {{ formatMetricNumber(gatewayMetrics?.tunnel.outboundQueueDepthTotal) }}
-                    </div>
-                  </div>
-                  <div>
-                    <div class="text-xs text-muted-foreground">
-                      峰值排队
-                    </div>
-                    <div class="mt-1 text-lg font-semibold">
-                      {{ formatMetricNumber(gatewayMetrics?.tunnel.outboundQueueDepthMax) }}
-                    </div>
-                  </div>
-                  <div>
-                    <div class="text-xs text-muted-foreground">
-                      队列满拒绝
-                    </div>
-                    <div class="mt-1 text-lg font-semibold">
-                      {{ formatMetricNumber(tunnelQueueRejectedTotal) }}
-                    </div>
-                  </div>
-                  <div>
-                    <div class="text-xs text-muted-foreground">
-                      无可用通道
-                    </div>
-                    <div class="mt-1 text-lg font-semibold">
-                      {{ formatMetricNumber(tunnelSelectionPressureTotal) }}
-                    </div>
-                  </div>
-                </div>
               </section>
             </div>
 
@@ -570,22 +480,6 @@
             </SelectItem>
           </SelectContent>
         </Select>
-        <Select v-model="providerPerformanceHasFormatConversion">
-          <SelectTrigger class="h-8 text-xs border-border/60">
-            <SelectValue placeholder="格式转换" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">
-              全部转换
-            </SelectItem>
-            <SelectItem value="true">
-              仅转换
-            </SelectItem>
-            <SelectItem value="false">
-              不转换
-            </SelectItem>
-          </SelectContent>
-        </Select>
         <Input
           v-model="providerPerformanceSlowThresholdMs"
           size="sm"
@@ -830,7 +724,6 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   Activity,
   AlertTriangle,
-  Cable,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -904,7 +797,6 @@ const providerPerformanceModel = ref('')
 const providerPerformanceApiFormat = ref('')
 const providerPerformanceEndpointKind = ref('')
 const providerPerformanceIsStream = ref<ProviderPerformanceBooleanFilter>('all')
-const providerPerformanceHasFormatConversion = ref<ProviderPerformanceBooleanFilter>('all')
 const providerPerformanceSlowThresholdMs = ref(String(DEFAULT_PROVIDER_PERFORMANCE_SLOW_THRESHOLD_MS))
 
 const systemStatus = ref<AdminMonitoringSystemStatus | null>(null)
@@ -992,10 +884,7 @@ const providerPerformanceActiveFilterCount = computed(() => {
     providerPerformanceEndpointKind.value,
   ].filter(value => normalizeProviderPerformanceFilter(value)).length
 
-  const booleanFilterCount = [
-    providerPerformanceIsStream.value,
-    providerPerformanceHasFormatConversion.value,
-  ].filter(value => value !== 'all').length
+  const booleanFilterCount = providerPerformanceIsStream.value === 'all' ? 0 : 1
 
   const thresholdFilterCount = providerPerformanceSlowThresholdValue.value === DEFAULT_PROVIDER_PERFORMANCE_SLOW_THRESHOLD_MS
     ? 0
@@ -1029,13 +918,6 @@ function buildProviderPerformanceParams(): ProviderPerformanceParams {
   const isStream = parseProviderPerformanceBooleanFilter(providerPerformanceIsStream.value)
   if (isStream !== undefined) params.is_stream = isStream
 
-  const hasFormatConversion = parseProviderPerformanceBooleanFilter(
-    providerPerformanceHasFormatConversion.value
-  )
-  if (hasFormatConversion !== undefined) {
-    params.has_format_conversion = hasFormatConversion
-  }
-
   return params
 }
 
@@ -1045,7 +927,6 @@ function resetProviderPerformanceFilters() {
   providerPerformanceApiFormat.value = ''
   providerPerformanceEndpointKind.value = ''
   providerPerformanceIsStream.value = 'all'
-  providerPerformanceHasFormatConversion.value = 'all'
   providerPerformanceSlowThresholdMs.value = String(DEFAULT_PROVIDER_PERFORMANCE_SLOW_THRESHOLD_MS)
 }
 
@@ -1292,40 +1173,6 @@ const liveLastUpdatedLabel = computed(() => (
   liveLastUpdatedAt.value ? formatDate(liveLastUpdatedAt.value) : '尚未刷新'
 ))
 
-const currentActiveStreams = computed(() => (
-  gatewayMetrics.value?.tunnel.activeStreams ?? systemStatus.value?.tunnel.active_streams ?? null
-))
-
-const currentProxyConnections = computed(() => (
-  gatewayMetrics.value?.tunnel.proxyConnections ?? systemStatus.value?.tunnel.proxy_connections ?? null
-))
-
-const currentTunnelNodes = computed(() => (
-  gatewayMetrics.value?.tunnel.nodes ?? systemStatus.value?.tunnel.nodes ?? null
-))
-
-const tunnelQueueRejectedTotal = computed(() => {
-  const full = gatewayMetrics.value?.tunnel.outboundQueueRejectedFullTotal ?? 0
-  const closed = gatewayMetrics.value?.tunnel.outboundQueueRejectedClosedTotal ?? 0
-  return full + closed
-})
-
-const tunnelSelectionPressureTotal = computed(() => {
-  const congested = gatewayMetrics.value?.tunnel.proxyConnectionCongestedTotal ?? 0
-  const retry = gatewayMetrics.value?.tunnel.selectionRetryTotal ?? 0
-  const unavailable = gatewayMetrics.value?.tunnel.selectionUnavailableTotal ?? 0
-  return congested + retry + unavailable
-})
-
-const tunnelQueueUtilizationText = computed(() => {
-  const depth = gatewayMetrics.value?.tunnel.outboundQueueDepthTotal
-  const capacity = gatewayMetrics.value?.tunnel.outboundQueueCapacityTotal
-  if (depth == null || capacity == null || capacity <= 0) {
-    return '-'
-  }
-  return `${Math.round(depth / capacity * 100)}%`
-})
-
 const fallbackRows = computed(() => {
   const items = gatewayMetrics.value?.fallbacks ?? []
   const maxValue = Math.max(...items.map(item => item.total), 0)
@@ -1462,13 +1309,6 @@ const liveSummaryCards = computed(() => [
     iconClass: 'text-yellow-500',
   },
   {
-    title: '代理活跃流',
-    value: formatMetricNumber(currentActiveStreams.value),
-    hint: `代理连接 ${formatMetricNumber(currentProxyConnections.value)}`,
-    icon: Cable,
-    iconClass: 'text-sky-500',
-  },
-  {
     title: '当前节点处理中',
     value: formatMetricNumber(gatewayMetrics.value?.local.inFlight),
     hint: `可接入 ${formatMetricNumber(gatewayMetrics.value?.local.availablePermits)}`,
@@ -1560,7 +1400,6 @@ watch(
     providerPerformanceApiFormat,
     providerPerformanceEndpointKind,
     providerPerformanceIsStream,
-    providerPerformanceHasFormatConversion,
     providerPerformanceSlowThresholdMs,
   ],
   scheduleProviderPerformanceLoad

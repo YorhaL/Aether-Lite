@@ -129,9 +129,7 @@ pub(super) async fn maybe_handle(
             Json(serde_json::Value::Array(
                 created
                     .iter()
-                    .map(|model| {
-                        build_admin_provider_model_response(&provider, model, now_unix_secs)
-                    })
+                    .map(|model| build_admin_provider_model_response(model, now_unix_secs))
                     .collect(),
             ))
             .into_response(),

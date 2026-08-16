@@ -7,7 +7,7 @@ use sqlx::{
 use tracing::{error, info, warn};
 
 use super::types::PendingBackfillInfo;
-use crate::driver::sqlite::SqlitePool;
+use aether_data_sqlite::SqlitePool;
 
 static BACKFILL_MIGRATOR: Migrator = sqlx::migrate!("./backfills/sqlite");
 

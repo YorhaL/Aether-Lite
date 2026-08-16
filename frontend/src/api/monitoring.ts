@@ -26,11 +26,6 @@ export interface AdminMonitoringSystemStatus {
     tokens: number
     cost_usd: string
   }
-  tunnel: {
-    proxy_connections: number
-    nodes: number
-    active_streams: number
-  }
   internal_gateway: {
     status: string
     path_prefixes: string[]
@@ -133,24 +128,6 @@ export interface GatewayMetricsSummary {
   requestCandidateQueue: GatewayRequestCandidateQueueMetrics
   upstreamTargets: GatewayUpstreamTargetMetrics
   stageLatency: GatewayStageLatencyMetrics
-  tunnel: {
-    proxyConnections: number | null
-    availableProxyConnections: number | null
-    closingProxyConnections: number | null
-    drainingProxyConnections: number | null
-    softAvoidProxyConnections: number | null
-    nodes: number | null
-    activeStreams: number | null
-    outboundQueueDepthTotal: number | null
-    outboundQueueDepthMax: number | null
-    outboundQueueCapacityTotal: number | null
-    outboundQueueRejectedFullTotal: number | null
-    outboundQueueRejectedClosedTotal: number | null
-    proxyConnectionCongestedTotal: number | null
-    softAvoidSelectionTotal: number | null
-    selectionRetryTotal: number | null
-    selectionUnavailableTotal: number | null
-  }
   fallbackTotal: number
   fallbacks: GatewayFallbackMetricSummary[]
 }
@@ -860,24 +837,6 @@ export function buildGatewayMetricsSummary(text: string): GatewayMetricsSummary 
     requestCandidateQueue: buildRequestCandidateQueueMetrics(samples),
     upstreamTargets: buildUpstreamTargetMetrics(samples),
     stageLatency: buildStageLatencyMetrics(samples),
-    tunnel: {
-      proxyConnections: findMetricValueNumber(samples, 'tunnel_proxy_connections'),
-      availableProxyConnections: findMetricValueNumber(samples, 'tunnel_proxy_connections_available'),
-      closingProxyConnections: findMetricValueNumber(samples, 'tunnel_proxy_connections_closing'),
-      drainingProxyConnections: findMetricValueNumber(samples, 'tunnel_proxy_connections_draining'),
-      softAvoidProxyConnections: findMetricValueNumber(samples, 'tunnel_proxy_connections_soft_avoid'),
-      nodes: findMetricValueNumber(samples, 'tunnel_nodes'),
-      activeStreams: findMetricValueNumber(samples, 'tunnel_active_streams'),
-      outboundQueueDepthTotal: findMetricValueNumber(samples, 'tunnel_proxy_outbound_queue_depth_total'),
-      outboundQueueDepthMax: findMetricValueNumber(samples, 'tunnel_proxy_outbound_queue_depth_max'),
-      outboundQueueCapacityTotal: findMetricValueNumber(samples, 'tunnel_proxy_outbound_queue_capacity_total'),
-      outboundQueueRejectedFullTotal: findMetricValueNumber(samples, 'tunnel_proxy_outbound_queue_rejected_full_total'),
-      outboundQueueRejectedClosedTotal: findMetricValueNumber(samples, 'tunnel_proxy_outbound_queue_rejected_closed_total'),
-      proxyConnectionCongestedTotal: findMetricValueNumber(samples, 'tunnel_proxy_connection_congested_total'),
-      softAvoidSelectionTotal: findMetricValueNumber(samples, 'tunnel_proxy_soft_avoid_selection_total'),
-      selectionRetryTotal: findMetricValueNumber(samples, 'tunnel_proxy_selection_retry_total'),
-      selectionUnavailableTotal: findMetricValueNumber(samples, 'tunnel_proxy_selection_unavailable_total'),
-    },
     fallbackTotal: fallbacks.reduce((total, item) => total + item.total, 0),
     fallbacks,
   }

@@ -9,9 +9,8 @@ use sqlx::{
 };
 
 use aether_data_contracts::repository::provider_catalog::{
-    ProviderCatalogKeyAdaptiveStateUpdate, ProviderCatalogKeyAdminCasUpdate,
-    ProviderCatalogKeyHealthStateUpdate, ProviderCatalogKeyListOrder, ProviderCatalogKeyListQuery,
-    ProviderCatalogKeyOAuthCredentialCasDelete, ProviderCatalogKeyOAuthRuntimeStateCasUpdate,
+    ProviderCatalogKeyAdaptiveStateUpdate, ProviderCatalogKeyHealthStateUpdate,
+    ProviderCatalogKeyListOrder, ProviderCatalogKeyListQuery,
     ProviderCatalogKeyRuntimeMetadataUpdate, ProviderCatalogKeyStatusSnapshotUpdate,
     ProviderCatalogReadRepository, ProviderCatalogUpstreamMetadataNamespaceUpdate,
     ProviderCatalogWriteRepository, StoredProviderCatalogEndpoint, StoredProviderCatalogKey,
@@ -32,20 +31,10 @@ SELECT
   name,
   description,
   website,
-  provider_type,
-  CAST(billing_type AS TEXT) AS billing_type,
-  CAST(monthly_quota_usd AS DOUBLE PRECISION) AS monthly_quota_usd,
-  CAST(monthly_used_usd AS DOUBLE PRECISION) AS monthly_used_usd,
-  quota_reset_day,
-  CAST(EXTRACT(EPOCH FROM quota_last_reset_at) AS BIGINT) AS quota_last_reset_at_unix_secs,
-  CAST(EXTRACT(EPOCH FROM quota_expires_at) AS BIGINT) AS quota_expires_at_unix_secs,
   provider_priority,
   is_active,
-  keep_priority_on_conversion,
-  enable_format_conversion,
   concurrent_limit,
   max_retries,
-  proxy,
   request_timeout,
   stream_first_byte_timeout,
   config,
@@ -70,8 +59,6 @@ SELECT
   max_retries,
   custom_path,
   config,
-  format_acceptance_config,
-  proxy,
   EXTRACT(EPOCH FROM created_at)::bigint AS created_at_unix_ms,
   EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at_unix_secs
 FROM provider_endpoints
@@ -92,8 +79,6 @@ SELECT
   max_retries,
   custom_path,
   config,
-  format_acceptance_config,
-  proxy,
   EXTRACT(EPOCH FROM created_at)::bigint AS created_at_unix_ms,
   EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at_unix_secs
 FROM provider_endpoints
@@ -115,8 +100,6 @@ SELECT
   max_retries,
   custom_path,
   config,
-  format_acceptance_config,
-  proxy,
   EXTRACT(EPOCH FROM created_at)::bigint AS created_at_unix_ms,
   EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at_unix_secs
 FROM provider_endpoints
@@ -137,8 +120,6 @@ SELECT
   max_retries,
   custom_path,
   config,
-  format_acceptance_config,
-  proxy,
   EXTRACT(EPOCH FROM created_at)::bigint AS created_at_unix_ms,
   EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at_unix_secs
 FROM provider_endpoints
@@ -154,10 +135,7 @@ SELECT
   capabilities,
   is_active,
   api_formats,
-  auth_type_by_format,
-  allow_auth_channel_mismatch_formats,
   COALESCE(api_key, encrypted_key) AS api_key,
-  auth_config,
   note,
   internal_priority,
   rate_multipliers,
@@ -166,7 +144,6 @@ SELECT
   EXTRACT(EPOCH FROM expires_at)::bigint AS expires_at_unix_secs,
   cache_ttl_minutes,
   max_probe_interval_minutes,
-  proxy,
   fingerprint,
   rpm_limit,
   concurrent_limit,
@@ -193,8 +170,6 @@ SELECT
   model_include_patterns,
   model_exclude_patterns,
   upstream_metadata,
-  EXTRACT(EPOCH FROM oauth_invalid_at)::bigint AS oauth_invalid_at_unix_secs,
-  oauth_invalid_reason,
   status_snapshot,
   EXTRACT(EPOCH FROM created_at)::bigint AS created_at_unix_ms,
   EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at_unix_secs,
@@ -213,10 +188,7 @@ SELECT
   capabilities,
   is_active,
   api_formats,
-  auth_type_by_format,
-  allow_auth_channel_mismatch_formats,
   COALESCE(api_key, encrypted_key) AS api_key,
-  auth_config,
   note,
   internal_priority,
   rate_multipliers,
@@ -225,7 +197,6 @@ SELECT
   EXTRACT(EPOCH FROM expires_at)::bigint AS expires_at_unix_secs,
   cache_ttl_minutes,
   max_probe_interval_minutes,
-  proxy,
   fingerprint,
   rpm_limit,
   concurrent_limit,
@@ -252,8 +223,6 @@ SELECT
   model_include_patterns,
   model_exclude_patterns,
   upstream_metadata,
-  EXTRACT(EPOCH FROM oauth_invalid_at)::bigint AS oauth_invalid_at_unix_secs,
-  oauth_invalid_reason,
   status_snapshot,
   EXTRACT(EPOCH FROM created_at)::bigint AS created_at_unix_ms,
   EXTRACT(EPOCH FROM updated_at)::bigint AS updated_at_unix_secs,
@@ -272,12 +241,7 @@ SELECT
   NULL::jsonb AS capabilities,
   is_active,
   api_formats,
-  NULL::jsonb AS auth_type_by_format,
   'summary' AS api_key,
-  CASE
-    WHEN auth_config IS NULL THEN NULL
-    ELSE '{}'::text
-  END AS auth_config,
   NULL::text AS note,
   NULL::integer AS internal_priority,
   NULL::jsonb AS rate_multipliers,
@@ -286,7 +250,6 @@ SELECT
   NULL::bigint AS expires_at_unix_secs,
   NULL::integer AS cache_ttl_minutes,
   NULL::integer AS max_probe_interval_minutes,
-  NULL::jsonb AS proxy,
   NULL::jsonb AS fingerprint,
   NULL::integer AS rpm_limit,
   NULL::integer AS concurrent_limit,
@@ -313,8 +276,6 @@ SELECT
   NULL::jsonb AS model_include_patterns,
   NULL::jsonb AS model_exclude_patterns,
   NULL::jsonb AS upstream_metadata,
-  NULL::bigint AS oauth_invalid_at_unix_secs,
-  NULL::text AS oauth_invalid_reason,
   NULL::jsonb AS status_snapshot,
   NULL::bigint AS created_at_unix_ms,
   NULL::bigint AS updated_at_unix_secs,
@@ -350,40 +311,35 @@ SET
   api_formats = $3,
   auth_type = $4,
   api_key = $5,
-  auth_config = $6,
-  name = $7,
-  note = $8,
-  rate_multipliers = $9,
-  internal_priority = $10,
-  global_priority_by_format = $11,
-  rpm_limit = $12,
-  concurrent_limit = $13,
-  allowed_models = $14,
-  capabilities = $15,
-  cache_ttl_minutes = $16,
-  max_probe_interval_minutes = $17,
-  auto_fetch_models = $18,
-  locked_models = $19,
-  model_include_patterns = $20,
-  model_exclude_patterns = $21,
-  proxy = $22,
-  fingerprint = $23,
+  name = $6,
+  note = $7,
+  rate_multipliers = $8,
+  internal_priority = $9,
+  global_priority_by_format = $10,
+  rpm_limit = $11,
+  concurrent_limit = $12,
+  allowed_models = $13,
+  capabilities = $14,
+  cache_ttl_minutes = $15,
+  max_probe_interval_minutes = $16,
+  auto_fetch_models = $17,
+  locked_models = $18,
+  model_include_patterns = $19,
+  model_exclude_patterns = $20,
+  fingerprint = $21,
   expires_at = CASE
-    WHEN $24::double precision IS NULL THEN NULL
-    ELSE TO_TIMESTAMP($24::double precision)
+    WHEN $22::double precision IS NULL THEN NULL
+    ELSE TO_TIMESTAMP($22::double precision)
   END,
-  is_active = $25,
+  is_active = $23,
   updated_at = CASE
-    WHEN $26::double precision IS NULL THEN NOW()
-    ELSE TO_TIMESTAMP($26::double precision)
-  END,
-  auth_type_by_format = $27,
-  allow_auth_channel_mismatch_formats = $28
+    WHEN $24::double precision IS NULL THEN NOW()
+    ELSE TO_TIMESTAMP($24::double precision)
+  END
 WHERE id = $1
   AND provider_id = $2
   AND auth_type = $4
   AND api_key IS NOT DISTINCT FROM $5
-  AND auth_config IS NOT DISTINCT FROM $6
 "#;
 
 const KEY_RUNTIME_HEALTH_CAS_SQL: &str = r#"
@@ -395,7 +351,6 @@ SET
 WHERE id = $1
   AND health_by_format::jsonb IS NOT DISTINCT FROM $4::jsonb
   AND circuit_breaker_by_format::jsonb IS NOT DISTINCT FROM $5::jsonb
-  AND ($6::text IS NULL OR auth_config IS NOT DISTINCT FROM $6)
 "#;
 
 const KEY_RUNTIME_METADATA_CAS_SQL: &str = r#"
@@ -480,7 +435,6 @@ fn key_update_query(key: &StoredProviderCatalogKey) -> Query<'_, Postgres, PgArg
         .bind(&key.api_formats)
         .bind(&key.auth_type)
         .bind(&key.encrypted_api_key)
-        .bind(&key.encrypted_auth_config)
         .bind(&key.name)
         .bind(&key.note)
         .bind(&key.rate_multipliers)
@@ -496,119 +450,10 @@ fn key_update_query(key: &StoredProviderCatalogKey) -> Query<'_, Postgres, PgArg
         .bind(&key.locked_models)
         .bind(&key.model_include_patterns)
         .bind(&key.model_exclude_patterns)
-        .bind(&key.proxy)
         .bind(&key.fingerprint)
         .bind(key.expires_at_unix_secs.map(|value| value as f64))
         .bind(key.is_active)
         .bind(key.updated_at_unix_secs.map(|value| value as f64))
-        .bind(&key.auth_type_by_format)
-        .bind(&key.allow_auth_channel_mismatch_formats)
-}
-
-fn push_admin_key_assignments<'args>(
-    builder: &mut QueryBuilder<'args, Postgres>,
-    key: &'args StoredProviderCatalogKey,
-) {
-    builder
-        .push_bind(&key.provider_id)
-        .push(", api_formats = ")
-        .push_bind(&key.api_formats)
-        .push(", auth_type = ")
-        .push_bind(&key.auth_type)
-        .push(", api_key = ")
-        .push_bind(&key.encrypted_api_key)
-        .push(", auth_config = ")
-        .push_bind(&key.encrypted_auth_config)
-        .push(", name = ")
-        .push_bind(&key.name)
-        .push(", note = ")
-        .push_bind(&key.note)
-        .push(", rate_multipliers = ")
-        .push_bind(&key.rate_multipliers)
-        .push(", internal_priority = ")
-        .push_bind(key.internal_priority)
-        .push(", global_priority_by_format = ")
-        .push_bind(&key.global_priority_by_format)
-        .push(", rpm_limit = ")
-        .push_bind(key.rpm_limit.map(|value| value as i32))
-        .push(", concurrent_limit = ")
-        .push_bind(key.concurrent_limit)
-        .push(", allowed_models = ")
-        .push_bind(&key.allowed_models)
-        .push(", capabilities = ")
-        .push_bind(&key.capabilities)
-        .push(", cache_ttl_minutes = ")
-        .push_bind(key.cache_ttl_minutes)
-        .push(", max_probe_interval_minutes = ")
-        .push_bind(key.max_probe_interval_minutes)
-        .push(", auto_fetch_models = ")
-        .push_bind(key.auto_fetch_models)
-        .push(", locked_models = ")
-        .push_bind(&key.locked_models)
-        .push(", model_include_patterns = ")
-        .push_bind(&key.model_include_patterns)
-        .push(", model_exclude_patterns = ")
-        .push_bind(&key.model_exclude_patterns)
-        .push(", proxy = ")
-        .push_bind(&key.proxy)
-        .push(", fingerprint = ")
-        .push_bind(&key.fingerprint)
-        .push(", expires_at = CASE WHEN ")
-        .push_bind(key.expires_at_unix_secs.map(|value| value as f64))
-        .push("::double precision IS NULL THEN NULL ELSE TO_TIMESTAMP(")
-        .push_bind(key.expires_at_unix_secs.map(|value| value as f64))
-        .push("::double precision) END, is_active = ")
-        .push_bind(key.is_active)
-        .push(", updated_at = CASE WHEN ")
-        .push_bind(key.updated_at_unix_secs.map(|value| value as f64))
-        .push("::double precision IS NULL THEN NOW() ELSE TO_TIMESTAMP(")
-        .push_bind(key.updated_at_unix_secs.map(|value| value as f64))
-        .push("::double precision) END, auth_type_by_format = ")
-        .push_bind(&key.auth_type_by_format)
-        .push(", allow_auth_channel_mismatch_formats = ")
-        .push_bind(&key.allow_auth_channel_mismatch_formats);
-}
-
-fn validate_admin_key_cas_update(
-    update: &ProviderCatalogKeyAdminCasUpdate,
-) -> Result<(), DataLayerError> {
-    validate_key_for_update(&update.key)?;
-    let expected = &update.expected_credential;
-    if update.key.name.trim().is_empty()
-        || update.key.auth_type.trim().is_empty()
-        || expected.auth_type.trim().is_empty()
-        || expected.provider_id.trim().is_empty()
-        || expected.provider_type.trim().is_empty()
-        || expected
-            .encrypted_api_key
-            .as_deref()
-            .is_some_and(|value| value.trim().is_empty())
-        || update
-            .expected_encrypted_auth_config
-            .as_deref()
-            .is_some_and(|value| value.trim().is_empty())
-    {
-        return Err(DataLayerError::InvalidInput(
-            "provider catalog admin credential fence contains empty fields".to_string(),
-        ));
-    }
-    let Some(rotation) = update.codex_rotation.as_ref() else {
-        return Ok(());
-    };
-    let valid_rotation = expected.provider_type.eq_ignore_ascii_case("codex")
-        && rotation.as_object().is_some_and(|object| {
-            object.len() == 1
-                && object
-                    .get("credential_generation")
-                    .and_then(serde_json::Value::as_str)
-                    .is_some_and(|generation| !generation.trim().is_empty())
-        });
-    if !valid_rotation {
-        return Err(DataLayerError::InvalidInput(
-            "provider catalog Codex rotation must contain only credential_generation".to_string(),
-        ));
-    }
-    Ok(())
 }
 
 #[derive(Debug, Clone)]
@@ -907,261 +752,6 @@ impl SqlxProviderCatalogReadRepository {
         .await
     }
 
-    pub async fn update_key_oauth_credentials(
-        &self,
-        key_id: &str,
-        encrypted_api_key: &str,
-        encrypted_auth_config: Option<&str>,
-        expires_at_unix_secs: Option<u64>,
-    ) -> Result<bool, DataLayerError> {
-        if key_id.trim().is_empty() {
-            return Err(DataLayerError::InvalidInput(
-                "provider catalog key_id is empty".to_string(),
-            ));
-        }
-        if encrypted_api_key.trim().is_empty() {
-            return Err(DataLayerError::InvalidInput(
-                "provider catalog oauth api_key is empty".to_string(),
-            ));
-        }
-
-        let rows_affected = sqlx::query(
-            r#"
-UPDATE provider_api_keys
-SET
-  api_key = $2,
-  auth_config = $3,
-  expires_at = CASE
-    WHEN $4::double precision IS NULL THEN NULL
-    ELSE TO_TIMESTAMP($4::double precision)
-  END,
-  updated_at = NOW()
-WHERE id = $1
-"#,
-        )
-        .bind(key_id)
-        .bind(encrypted_api_key)
-        .bind(encrypted_auth_config)
-        .bind(expires_at_unix_secs.map(|value| value as f64))
-        .execute(&self.pool)
-        .await
-        .map_postgres_err()?
-        .rows_affected();
-
-        Ok(rows_affected > 0)
-    }
-
-    pub async fn update_key_oauth_runtime_state(
-        &self,
-        key_id: &str,
-        oauth_invalid_at_unix_secs: Option<u64>,
-        oauth_invalid_reason: Option<&str>,
-        encrypted_auth_config_update: Option<&str>,
-        updated_at_unix_secs: Option<u64>,
-    ) -> Result<bool, DataLayerError> {
-        if key_id.trim().is_empty() {
-            return Err(DataLayerError::InvalidInput(
-                "provider catalog key_id is empty".to_string(),
-            ));
-        }
-        let rows_affected = sqlx::query(
-            r#"
-UPDATE provider_api_keys
-SET
-  oauth_invalid_at = CASE
-    WHEN $2::double precision IS NULL THEN NULL
-    ELSE TO_TIMESTAMP($2::double precision)
-  END,
-  oauth_invalid_reason = $3,
-  auth_config = COALESCE($4, auth_config),
-  updated_at = CASE
-    WHEN $5::double precision IS NULL THEN NOW()
-    ELSE TO_TIMESTAMP($5::double precision)
-  END
-WHERE id = $1
-"#,
-        )
-        .bind(key_id)
-        .bind(oauth_invalid_at_unix_secs.map(|value| value as f64))
-        .bind(oauth_invalid_reason)
-        .bind(encrypted_auth_config_update)
-        .bind(updated_at_unix_secs.map(|value| value as f64))
-        .execute(&self.pool)
-        .await
-        .map_postgres_err()?
-        .rows_affected();
-        Ok(rows_affected > 0)
-    }
-
-    pub async fn compare_and_update_key_oauth_runtime_state(
-        &self,
-        update: &ProviderCatalogKeyOAuthRuntimeStateCasUpdate,
-    ) -> Result<bool, DataLayerError> {
-        if update.key_id.trim().is_empty()
-            || update.encrypted_auth_config.trim().is_empty()
-            || update
-                .encrypted_api_key_update
-                .as_deref()
-                .is_some_and(|value| value.trim().is_empty())
-            || update.expected_credential.as_ref().is_some_and(|expected| {
-                expected
-                    .encrypted_api_key
-                    .as_deref()
-                    .is_some_and(|value| value.trim().is_empty())
-                    || expected.auth_type.trim().is_empty()
-                    || expected.provider_id.trim().is_empty()
-                    || expected.provider_type.trim().is_empty()
-            })
-            || update
-                .expected_upstream_metadata_namespace
-                .as_ref()
-                .is_some_and(|expected| expected.namespace.trim().is_empty())
-            || update
-                .upstream_metadata_namespace_to_remove
-                .as_deref()
-                .is_some_and(|namespace| namespace.trim().is_empty())
-            || !update.status_snapshot_patch.is_object()
-            || update
-                .upstream_metadata_patch
-                .as_ref()
-                .is_some_and(|patch| !patch.is_object())
-            || update
-                .upstream_metadata_namespace_to_remove
-                .as_ref()
-                .is_some_and(|namespace| {
-                    update
-                        .upstream_metadata_patch
-                        .as_ref()
-                        .and_then(serde_json::Value::as_object)
-                        .is_some_and(|patch| patch.contains_key(namespace))
-                })
-        {
-            return Err(DataLayerError::InvalidInput(
-                "provider catalog OAuth runtime CAS requires key_id, auth_config, and object status patch"
-                    .to_string(),
-            ));
-        }
-        let rows_affected = sqlx::query(
-            r#"
-UPDATE provider_api_keys
-SET
-  oauth_invalid_at = CASE
-    WHEN $2::double precision IS NULL THEN NULL
-    ELSE TO_TIMESTAMP($2::double precision)
-  END,
-  oauth_invalid_reason = $3,
-  auth_config = $4,
-  api_key = CASE
-    WHEN $5::text IS NULL THEN api_key
-    ELSE $5
-  END,
-  expires_at = CASE
-    WHEN $6::boolean IS FALSE THEN expires_at
-    WHEN $7::double precision IS NULL THEN NULL
-    ELSE TO_TIMESTAMP($7::double precision)
-  END,
-  upstream_metadata = CASE
-    WHEN $8::jsonb IS NULL AND $9::text IS NULL THEN upstream_metadata
-    WHEN $9::text IS NULL THEN COALESCE(upstream_metadata, '{}'::jsonb) || $8::jsonb
-    ELSE (COALESCE(upstream_metadata, '{}'::jsonb) || COALESCE($8::jsonb, '{}'::jsonb)) - $9
-  END,
-  status_snapshot = (COALESCE(status_snapshot::jsonb, '{}'::jsonb) || $10::jsonb)::json,
-  error_count = CASE WHEN $11::boolean THEN 0 ELSE error_count END,
-  updated_at = CASE
-    WHEN $12::double precision IS NULL THEN NOW()
-    ELSE TO_TIMESTAMP($12::double precision)
-  END
-WHERE id = $1
-  AND auth_config IS NOT DISTINCT FROM $13
-  AND (
-    ($8::jsonb IS NULL AND $9::text IS NULL)
-    OR jsonb_typeof(COALESCE(upstream_metadata, '{}'::jsonb)) = 'object'
-  )
-  AND ($14::boolean IS FALSE OR api_key IS NOT DISTINCT FROM $15)
-  AND ($16::text IS NULL OR auth_type = $16)
-  AND ($17::text IS NULL OR provider_id = $17)
-  AND (
-    $18::text IS NULL
-    OR EXISTS (
-      SELECT 1
-      FROM providers
-      WHERE providers.id = provider_api_keys.provider_id
-        AND providers.provider_type = $18
-    )
-  )
-  AND (
-    $19::boolean IS FALSE
-    OR (
-      jsonb_typeof(COALESCE(upstream_metadata, '{}'::jsonb)) = 'object'
-      AND (COALESCE(upstream_metadata, '{}'::jsonb) -> $20)
-        IS NOT DISTINCT FROM $21::jsonb
-    )
-  )
-"#,
-        )
-        .bind(&update.key_id)
-        .bind(update.oauth_invalid_at_unix_secs.map(|value| value as f64))
-        .bind(update.oauth_invalid_reason.as_deref())
-        .bind(&update.encrypted_auth_config)
-        .bind(update.encrypted_api_key_update.as_deref())
-        .bind(update.expires_at_unix_secs_update.is_some())
-        .bind(
-            update
-                .expires_at_unix_secs_update
-                .flatten()
-                .map(|value| value as f64),
-        )
-        .bind(update.upstream_metadata_patch.as_ref())
-        .bind(update.upstream_metadata_namespace_to_remove.as_deref())
-        .bind(&update.status_snapshot_patch)
-        .bind(update.reset_error_count)
-        .bind(update.updated_at_unix_secs.map(|value| value as f64))
-        .bind(update.expected_encrypted_auth_config.as_deref())
-        .bind(update.expected_credential.is_some())
-        .bind(
-            update
-                .expected_credential
-                .as_ref()
-                .and_then(|expected| expected.encrypted_api_key.as_deref()),
-        )
-        .bind(
-            update
-                .expected_credential
-                .as_ref()
-                .map(|expected| expected.auth_type.as_str()),
-        )
-        .bind(
-            update
-                .expected_credential
-                .as_ref()
-                .map(|expected| expected.provider_id.as_str()),
-        )
-        .bind(
-            update
-                .expected_credential
-                .as_ref()
-                .map(|expected| expected.provider_type.as_str()),
-        )
-        .bind(update.expected_upstream_metadata_namespace.is_some())
-        .bind(
-            update
-                .expected_upstream_metadata_namespace
-                .as_ref()
-                .map(|expected| expected.namespace.as_str()),
-        )
-        .bind(
-            update
-                .expected_upstream_metadata_namespace
-                .as_ref()
-                .and_then(|expected| expected.expected_value.as_ref()),
-        )
-        .execute(&self.pool)
-        .await
-        .map_postgres_err()?
-        .rows_affected();
-        Ok(rows_affected > 0)
-    }
-
     pub async fn create_provider(
         &self,
         provider: &StoredProviderCatalogProvider,
@@ -1177,22 +767,6 @@ WHERE id = $1
                 "provider catalog provider.name is empty".to_string(),
             ));
         }
-        if provider.provider_type.trim().is_empty() {
-            return Err(DataLayerError::InvalidInput(
-                "provider catalog provider.provider_type is empty".to_string(),
-            ));
-        }
-        if provider
-            .billing_type
-            .as_deref()
-            .map(str::trim)
-            .is_some_and(str::is_empty)
-        {
-            return Err(DataLayerError::InvalidInput(
-                "provider catalog provider.billing_type is empty".to_string(),
-            ));
-        }
-
         let mut tx = self.pool.begin().await.map_postgres_err()?;
 
         if let Some(target_priority) = shift_existing_priorities_from {
@@ -1217,20 +791,10 @@ INSERT INTO providers (
   name,
   description,
   website,
-  provider_type,
-  billing_type,
-  monthly_quota_usd,
-  monthly_used_usd,
-  quota_reset_day,
-  quota_last_reset_at,
-  quota_expires_at,
   provider_priority,
   is_active,
-  keep_priority_on_conversion,
-  enable_format_conversion,
   concurrent_limit,
   max_retries,
-  proxy,
   request_timeout,
   stream_first_byte_timeout,
   config,
@@ -1242,35 +806,19 @@ INSERT INTO providers (
   $3,
   $4,
   $5,
-  CAST($6 AS providerbillingtype),
+  $6,
   $7,
   $8,
   $9,
+  $10,
+  $11,
   CASE
-    WHEN $10::double precision IS NULL THEN NULL
-    ELSE TO_TIMESTAMP($10::double precision)
+    WHEN $12::double precision IS NULL THEN NOW()
+    ELSE TO_TIMESTAMP($12::double precision)
   END,
   CASE
-    WHEN $11::double precision IS NULL THEN NULL
-    ELSE TO_TIMESTAMP($11::double precision)
-  END,
-  $12,
-  $13,
-  $14,
-  $15,
-  $16,
-  $17,
-  $18,
-  $19,
-  $20,
-  $21,
-  CASE
-    WHEN $22::double precision IS NULL THEN NOW()
-    ELSE TO_TIMESTAMP($22::double precision)
-  END,
-  CASE
-    WHEN $23::double precision IS NULL THEN NOW()
-    ELSE TO_TIMESTAMP($23::double precision)
+    WHEN $13::double precision IS NULL THEN NOW()
+    ELSE TO_TIMESTAMP($13::double precision)
   END
 )
 "#,
@@ -1279,33 +827,10 @@ INSERT INTO providers (
         .bind(&provider.name)
         .bind(&provider.description)
         .bind(&provider.website)
-        .bind(&provider.provider_type)
-        .bind(
-            provider
-                .billing_type
-                .clone()
-                .unwrap_or_else(|| "pay_as_you_go".to_string()),
-        )
-        .bind(provider.monthly_quota_usd)
-        .bind(provider.monthly_used_usd)
-        .bind(provider.quota_reset_day.map(|value| value as i32))
-        .bind(
-            provider
-                .quota_last_reset_at_unix_secs
-                .map(|value| value as f64),
-        )
-        .bind(
-            provider
-                .quota_expires_at_unix_secs
-                .map(|value| value as f64),
-        )
         .bind(provider.provider_priority)
         .bind(provider.is_active)
-        .bind(provider.keep_priority_on_conversion)
-        .bind(provider.enable_format_conversion)
         .bind(provider.concurrent_limit)
         .bind(provider.max_retries)
-        .bind(&provider.proxy)
         .bind(provider.request_timeout_secs)
         .bind(provider.stream_first_byte_timeout_secs)
         .bind(&provider.config)
@@ -1343,22 +868,6 @@ INSERT INTO providers (
                 "provider catalog provider.name is empty".to_string(),
             ));
         }
-        if provider.provider_type.trim().is_empty() {
-            return Err(DataLayerError::InvalidInput(
-                "provider catalog provider.provider_type is empty".to_string(),
-            ));
-        }
-        if provider
-            .billing_type
-            .as_deref()
-            .map(str::trim)
-            .is_some_and(str::is_empty)
-        {
-            return Err(DataLayerError::InvalidInput(
-                "provider catalog provider.billing_type is empty".to_string(),
-            ));
-        }
-
         let rows_affected = sqlx::query(
             r#"
 UPDATE providers
@@ -1366,32 +875,16 @@ SET
   name = $2,
   description = $3,
   website = $4,
-  provider_type = $5,
-  billing_type = CAST($6 AS providerbillingtype),
-  monthly_quota_usd = $7,
-  monthly_used_usd = COALESCE($8, monthly_used_usd),
-  quota_reset_day = $9,
-  quota_last_reset_at = CASE
-    WHEN $10::double precision IS NULL THEN NULL
-    ELSE TO_TIMESTAMP($10::double precision)
-  END,
-  quota_expires_at = CASE
-    WHEN $11::double precision IS NULL THEN NULL
-    ELSE TO_TIMESTAMP($11::double precision)
-  END,
-  provider_priority = $12,
-  is_active = $13,
-  keep_priority_on_conversion = $14,
-  enable_format_conversion = $15,
-  concurrent_limit = $16,
-  max_retries = $17,
-  proxy = $18,
-  request_timeout = $19,
-  stream_first_byte_timeout = $20,
-  config = $21,
+  provider_priority = $5,
+  is_active = $6,
+  concurrent_limit = $7,
+  max_retries = $8,
+  request_timeout = $9,
+  stream_first_byte_timeout = $10,
+  config = $11,
   updated_at = CASE
-    WHEN $22::double precision IS NULL THEN NOW()
-    ELSE TO_TIMESTAMP($22::double precision)
+    WHEN $12::double precision IS NULL THEN NOW()
+    ELSE TO_TIMESTAMP($12::double precision)
   END
 WHERE id = $1
 "#,
@@ -1400,33 +893,10 @@ WHERE id = $1
         .bind(&provider.name)
         .bind(&provider.description)
         .bind(&provider.website)
-        .bind(&provider.provider_type)
-        .bind(
-            provider
-                .billing_type
-                .clone()
-                .unwrap_or_else(|| "pay_as_you_go".to_string()),
-        )
-        .bind(provider.monthly_quota_usd)
-        .bind(provider.monthly_used_usd)
-        .bind(provider.quota_reset_day.map(|value| value as i32))
-        .bind(
-            provider
-                .quota_last_reset_at_unix_secs
-                .map(|value| value as f64),
-        )
-        .bind(
-            provider
-                .quota_expires_at_unix_secs
-                .map(|value| value as f64),
-        )
         .bind(provider.provider_priority)
         .bind(provider.is_active)
-        .bind(provider.keep_priority_on_conversion)
-        .bind(provider.enable_format_conversion)
         .bind(provider.concurrent_limit)
         .bind(provider.max_retries)
-        .bind(&provider.proxy)
         .bind(provider.request_timeout_secs)
         .bind(provider.stream_first_byte_timeout_secs)
         .bind(&provider.config)
@@ -1555,35 +1025,6 @@ WHERE id = $1
         Ok(())
     }
 
-    pub async fn clear_key_oauth_invalid_marker(
-        &self,
-        key_id: &str,
-    ) -> Result<bool, DataLayerError> {
-        if key_id.trim().is_empty() {
-            return Err(DataLayerError::InvalidInput(
-                "provider catalog key_id is empty".to_string(),
-            ));
-        }
-
-        let rows_affected = sqlx::query(
-            r#"
-UPDATE provider_api_keys
-SET
-  oauth_invalid_at = NULL,
-  oauth_invalid_reason = NULL,
-  updated_at = NOW()
-WHERE id = $1
-"#,
-        )
-        .bind(key_id)
-        .execute(&self.pool)
-        .await
-        .map_postgres_err()?
-        .rows_affected();
-
-        Ok(rows_affected > 0)
-    }
-
     pub async fn create_key(
         &self,
         key: &StoredProviderCatalogKey,
@@ -1605,10 +1046,8 @@ INSERT INTO provider_api_keys (
   id,
   provider_id,
   api_formats,
-  auth_type_by_format,
   auth_type,
   api_key,
-  auth_config,
   name,
   note,
   rate_multipliers,
@@ -1625,12 +1064,9 @@ INSERT INTO provider_api_keys (
   locked_models,
   model_include_patterns,
   model_exclude_patterns,
-  proxy,
   fingerprint,
   upstream_metadata,
   expires_at,
-  oauth_invalid_at,
-  oauth_invalid_reason,
   status_snapshot,
   concurrent_429_count,
   rpm_429_count,
@@ -1653,8 +1089,7 @@ INSERT INTO provider_api_keys (
   circuit_breaker_by_format,
   is_active,
   created_at,
-  updated_at,
-  allow_auth_channel_mismatch_formats
+  updated_at
 ) VALUES (
   $1,
   $2,
@@ -1679,70 +1114,59 @@ INSERT INTO provider_api_keys (
   $21,
   $22,
   $23,
-  $24,
-  $25,
-  $26,
   CASE
-    WHEN $27::double precision IS NULL THEN NULL
-    ELSE TO_TIMESTAMP($27::double precision)
+    WHEN $24::double precision IS NULL THEN NULL
+    ELSE TO_TIMESTAMP($24::double precision)
   END,
+  $25,
+  COALESCE($26, 0),
+  COALESCE($27, 0),
   CASE
     WHEN $28::double precision IS NULL THEN NULL
     ELSE TO_TIMESTAMP($28::double precision)
   END,
   $29,
   $30,
-  COALESCE($31, 0),
-  COALESCE($32, 0),
+  $31,
   CASE
-    WHEN $33::double precision IS NULL THEN NULL
-    ELSE TO_TIMESTAMP($33::double precision)
+    WHEN $32::double precision IS NULL THEN NULL
+    ELSE TO_TIMESTAMP($32::double precision)
   END,
-  $34,
-  $35,
-  $36,
-  CASE
-    WHEN $37::double precision IS NULL THEN NULL
-    ELSE TO_TIMESTAMP($37::double precision)
-  END,
+  COALESCE($33, 0),
+  COALESCE($34, 0),
+  COALESCE($35, 0),
+  COALESCE($36, 0),
+  COALESCE($37, 0),
   COALESCE($38, 0),
   COALESCE($39, 0),
-  COALESCE($40, 0),
-  COALESCE($41, 0),
-  COALESCE($42, 0),
-  COALESCE($43, 0),
-  COALESCE($44, 0),
   CASE
-    WHEN $45::double precision IS NULL THEN NULL
-    ELSE TO_TIMESTAMP($45::double precision)
+    WHEN $40::double precision IS NULL THEN NULL
+    ELSE TO_TIMESTAMP($40::double precision)
   END,
   CASE
-    WHEN $46::double precision IS NULL THEN NULL
+    WHEN $41::double precision IS NULL THEN NULL
+    ELSE TO_TIMESTAMP($41::double precision)
+  END,
+  $42,
+  $43,
+  $44,
+  $45,
+  CASE
+    WHEN $46::double precision IS NULL THEN NOW()
     ELSE TO_TIMESTAMP($46::double precision)
   END,
-  $47,
-  $48,
-  $49,
-  $50,
   CASE
-    WHEN $51::double precision IS NULL THEN NOW()
-    ELSE TO_TIMESTAMP($51::double precision)
-  END,
-  CASE
-    WHEN $52::double precision IS NULL THEN NOW()
-    ELSE TO_TIMESTAMP($52::double precision)
-  END,
-  $53
+    WHEN $47::double precision IS NULL THEN NOW()
+    ELSE TO_TIMESTAMP($47::double precision)
+  END
 )
 "#,
         )
         .bind(&key.id)
         .bind(&key.provider_id)
         .bind(&key.api_formats)
-        .bind(&key.auth_type_by_format)
         .bind(&key.auth_type)
         .bind(&key.encrypted_api_key)
-        .bind(&key.encrypted_auth_config)
         .bind(&key.name)
         .bind(&key.note)
         .bind(&key.rate_multipliers)
@@ -1759,12 +1183,9 @@ INSERT INTO provider_api_keys (
         .bind(&key.locked_models)
         .bind(&key.model_include_patterns)
         .bind(&key.model_exclude_patterns)
-        .bind(&key.proxy)
         .bind(&key.fingerprint)
         .bind(&key.upstream_metadata)
         .bind(key.expires_at_unix_secs.map(|value| value as f64))
-        .bind(key.oauth_invalid_at_unix_secs.map(|value| value as f64))
-        .bind(&key.oauth_invalid_reason)
         .bind(&key.status_snapshot)
         .bind(key.concurrent_429_count.map(|value| value as i32))
         .bind(key.rpm_429_count.map(|value| value as i32))
@@ -1806,7 +1227,6 @@ INSERT INTO provider_api_keys (
         .bind(key.is_active)
         .bind(key.created_at_unix_ms.map(|value| value as f64))
         .bind(key.updated_at_unix_secs.map(|value| value as f64))
-        .bind(&key.allow_auth_channel_mismatch_formats)
         .execute(&self.pool)
         .await
         .map_postgres_err()?;
@@ -1854,8 +1274,6 @@ INSERT INTO provider_endpoints (
   max_retries,
   custom_path,
   config,
-  format_acceptance_config,
-  proxy,
   created_at,
   updated_at
 ) VALUES (
@@ -1872,15 +1290,13 @@ INSERT INTO provider_endpoints (
   $11,
   $12,
   $13,
-  $14,
-  $15,
   CASE
-    WHEN $16::double precision IS NULL THEN NOW()
-    ELSE TO_TIMESTAMP($16::double precision)
+    WHEN $14::double precision IS NULL THEN NOW()
+    ELSE TO_TIMESTAMP($14::double precision)
   END,
   CASE
-    WHEN $17::double precision IS NULL THEN NOW()
-    ELSE TO_TIMESTAMP($17::double precision)
+    WHEN $15::double precision IS NULL THEN NOW()
+    ELSE TO_TIMESTAMP($15::double precision)
   END
 )
 "#,
@@ -1898,8 +1314,6 @@ INSERT INTO provider_endpoints (
         .bind(endpoint.max_retries)
         .bind(&endpoint.custom_path)
         .bind(&endpoint.config)
-        .bind(&endpoint.format_acceptance_config)
-        .bind(&endpoint.proxy)
         .bind(endpoint.created_at_unix_ms.map(|value| value as f64))
         .bind(endpoint.updated_at_unix_secs.map(|value| value as f64))
         .execute(&self.pool)
@@ -1922,8 +1336,6 @@ INSERT INTO provider_endpoints (
   max_retries,
   custom_path,
   config,
-  format_acceptance_config,
-  proxy,
   created_at,
   updated_at
 ) VALUES (
@@ -1939,15 +1351,13 @@ INSERT INTO provider_endpoints (
   $10,
   $11,
   $12,
-  $13,
-  $14,
   CASE
-    WHEN $15::double precision IS NULL THEN NOW()
-    ELSE TO_TIMESTAMP($15::double precision)
+    WHEN $13::double precision IS NULL THEN NOW()
+    ELSE TO_TIMESTAMP($13::double precision)
   END,
   CASE
-    WHEN $16::double precision IS NULL THEN NOW()
-    ELSE TO_TIMESTAMP($16::double precision)
+    WHEN $14::double precision IS NULL THEN NOW()
+    ELSE TO_TIMESTAMP($14::double precision)
   END
 )
 "#,
@@ -1964,8 +1374,6 @@ INSERT INTO provider_endpoints (
                 .bind(endpoint.max_retries)
                 .bind(&endpoint.custom_path)
                 .bind(&endpoint.config)
-                .bind(&endpoint.format_acceptance_config)
-                .bind(&endpoint.proxy)
                 .bind(endpoint.created_at_unix_ms.map(|value| value as f64))
                 .bind(endpoint.updated_at_unix_secs.map(|value| value as f64))
                 .execute(&self.pool)
@@ -2018,11 +1426,9 @@ SET
   max_retries = $11,
   custom_path = $12,
   config = $13,
-  format_acceptance_config = $14,
-  proxy = $15,
   updated_at = CASE
-    WHEN $16::double precision IS NULL THEN NOW()
-    ELSE TO_TIMESTAMP($16::double precision)
+    WHEN $14::double precision IS NULL THEN NOW()
+    ELSE TO_TIMESTAMP($14::double precision)
   END
 WHERE id = $1
 "#,
@@ -2040,8 +1446,6 @@ WHERE id = $1
         .bind(endpoint.max_retries)
         .bind(&endpoint.custom_path)
         .bind(&endpoint.config)
-        .bind(&endpoint.format_acceptance_config)
-        .bind(&endpoint.proxy)
         .bind(endpoint.updated_at_unix_secs.map(|value| value as f64))
         .execute(&self.pool)
         .await
@@ -2062,11 +1466,9 @@ SET
   max_retries = $10,
   custom_path = $11,
   config = $12,
-  format_acceptance_config = $13,
-  proxy = $14,
   updated_at = CASE
-    WHEN $15::double precision IS NULL THEN NOW()
-    ELSE TO_TIMESTAMP($15::double precision)
+    WHEN $13::double precision IS NULL THEN NOW()
+    ELSE TO_TIMESTAMP($13::double precision)
   END
 WHERE id = $1
 "#,
@@ -2083,8 +1485,6 @@ WHERE id = $1
             .bind(endpoint.max_retries)
             .bind(&endpoint.custom_path)
             .bind(&endpoint.config)
-            .bind(&endpoint.format_acceptance_config)
-            .bind(&endpoint.proxy)
             .bind(endpoint.updated_at_unix_secs.map(|value| value as f64))
             .execute(&self.pool)
             .await
@@ -2164,76 +1564,6 @@ WHERE id = $1
             })
     }
 
-    pub async fn compare_and_update_key_admin_state(
-        &self,
-        update: &ProviderCatalogKeyAdminCasUpdate,
-    ) -> Result<bool, DataLayerError> {
-        validate_admin_key_cas_update(update)?;
-        let key = &update.key;
-        let mut builder =
-            QueryBuilder::<Postgres>::new("UPDATE provider_api_keys SET provider_id = ");
-        push_admin_key_assignments(&mut builder, key);
-        if update.reset_oauth_runtime {
-            builder.push(", oauth_invalid_at = NULL, oauth_invalid_reason = NULL, error_count = 0");
-        }
-        if let Some(rotation) = update.codex_rotation.as_ref() {
-            builder
-                .push(", upstream_metadata = jsonb_set(COALESCE(upstream_metadata, '{}'::jsonb), '{codex}', ")
-                .push_bind(rotation)
-                .push("::jsonb, true)");
-        }
-        if update.codex_rotation.is_some() || update.reset_oauth_runtime {
-            builder.push(", status_snapshot = ");
-            match (update.codex_rotation.is_some(), update.reset_oauth_runtime) {
-                (true, true) => builder.push("jsonb_set(jsonb_set(COALESCE(status_snapshot::jsonb, '{}'::jsonb), '{quota}', 'null'::jsonb, true), '{oauth}', 'null'::jsonb, true)::json"),
-                (true, false) => builder.push("jsonb_set(COALESCE(status_snapshot::jsonb, '{}'::jsonb), '{quota}', 'null'::jsonb, true)::json"),
-                (false, true) => builder.push("jsonb_set(COALESCE(status_snapshot::jsonb, '{}'::jsonb), '{oauth}', 'null'::jsonb, true)::json"),
-                (false, false) => unreachable!(),
-            };
-        }
-        builder
-            .push(" WHERE id = ")
-            .push_bind(&key.id)
-            .push(" AND api_key IS NOT DISTINCT FROM ")
-            .push_bind(update.expected_credential.encrypted_api_key.as_deref())
-            .push(" AND auth_config IS NOT DISTINCT FROM ")
-            .push_bind(update.expected_encrypted_auth_config.as_deref())
-            .push(" AND auth_type = ")
-            .push_bind(&update.expected_credential.auth_type)
-            .push(" AND provider_id = ")
-            .push_bind(&update.expected_credential.provider_id)
-            .push(
-                " AND EXISTS (SELECT 1 FROM providers WHERE providers.id = provider_api_keys.provider_id AND providers.provider_type = ",
-            )
-            .push_bind(&update.expected_credential.provider_type)
-            .push(")");
-        if update.codex_rotation.is_some() {
-            builder
-                .push(" AND jsonb_typeof(COALESCE(upstream_metadata, '{}'::jsonb)) = 'object'")
-                .push(" AND NOT (api_key IS NOT DISTINCT FROM ")
-                .push_bind(key.encrypted_api_key.as_deref())
-                .push(" AND auth_config IS NOT DISTINCT FROM ")
-                .push_bind(key.encrypted_auth_config.as_deref())
-                .push(" AND auth_type = ")
-                .push_bind(&key.auth_type)
-                .push(" AND provider_id = ")
-                .push_bind(&key.provider_id)
-                .push(")");
-        }
-        if update.codex_rotation.is_some() || update.reset_oauth_runtime {
-            builder.push(
-                " AND jsonb_typeof(COALESCE(status_snapshot::jsonb, '{}'::jsonb)) = 'object'",
-            );
-        }
-        let rows_affected = builder
-            .build()
-            .execute(&self.pool)
-            .await
-            .map_postgres_err()?
-            .rows_affected();
-        Ok(rows_affected > 0)
-    }
-
     pub async fn update_keys(
         &self,
         keys: &[StoredProviderCatalogKey],
@@ -2298,78 +1628,6 @@ WHERE id = $1
         .map_postgres_err()?
         .rows_affected();
 
-        Ok(rows_affected > 0)
-    }
-
-    pub async fn compare_and_delete_key_oauth_credential(
-        &self,
-        delete: &ProviderCatalogKeyOAuthCredentialCasDelete,
-    ) -> Result<bool, DataLayerError> {
-        let expected = &delete.expected_credential;
-        if delete.key_id.trim().is_empty()
-            || expected
-                .encrypted_api_key
-                .as_deref()
-                .is_some_and(|value| value.trim().is_empty())
-            || expected.auth_type.trim().is_empty()
-            || expected.provider_id.trim().is_empty()
-            || expected.provider_type.trim().is_empty()
-            || delete
-                .expected_upstream_metadata_namespace
-                .as_ref()
-                .is_some_and(|expected| expected.namespace.trim().is_empty())
-        {
-            return Err(DataLayerError::InvalidInput(
-                "provider catalog OAuth credential CAS delete contains empty fields".to_string(),
-            ));
-        }
-        let rows_affected = sqlx::query(
-            r#"
-DELETE FROM provider_api_keys
-WHERE id = $1
-  AND auth_config IS NOT DISTINCT FROM $2
-  AND api_key IS NOT DISTINCT FROM $3
-  AND auth_type = $4
-  AND provider_id = $5
-  AND EXISTS (
-    SELECT 1
-    FROM providers
-    WHERE providers.id = provider_api_keys.provider_id
-      AND providers.provider_type = $6
-  )
-  AND (
-    $7::boolean IS FALSE
-    OR (
-      jsonb_typeof(COALESCE(upstream_metadata, '{}'::jsonb)) = 'object'
-      AND (COALESCE(upstream_metadata, '{}'::jsonb) -> $8)
-        IS NOT DISTINCT FROM $9::jsonb
-    )
-  )
-"#,
-        )
-        .bind(&delete.key_id)
-        .bind(delete.expected_encrypted_auth_config.as_deref())
-        .bind(expected.encrypted_api_key.as_deref())
-        .bind(&expected.auth_type)
-        .bind(&expected.provider_id)
-        .bind(&expected.provider_type)
-        .bind(delete.expected_upstream_metadata_namespace.is_some())
-        .bind(
-            delete
-                .expected_upstream_metadata_namespace
-                .as_ref()
-                .map(|expected| expected.namespace.as_str()),
-        )
-        .bind(
-            delete
-                .expected_upstream_metadata_namespace
-                .as_ref()
-                .and_then(|expected| expected.expected_value.as_ref()),
-        )
-        .execute(&self.pool)
-        .await
-        .map_postgres_err()?
-        .rows_affected();
         Ok(rows_affected > 0)
     }
 
@@ -2654,7 +1912,6 @@ WHERE id = $1
   AND CAST(EXTRACT(EPOCH FROM last_probe_increase_at) AS BIGINT) IS NOT DISTINCT FROM $19
   AND last_rpm_peak IS NOT DISTINCT FROM $20
   AND concurrent_429_count IS NOT DISTINCT FROM $21
-  AND ($22::text IS NULL OR auth_config IS NOT DISTINCT FROM $22)
 "#,
         )
         .bind(&update.key_id)
@@ -2689,7 +1946,6 @@ WHERE id = $1
         )
         .bind(expected.last_rpm_peak.map(|value| value as i32))
         .bind(expected.concurrent_429_count.map(|value| value as i32))
-        .bind(update.expected_encrypted_auth_config.as_deref())
         .execute(&self.pool)
         .await
         .map_postgres_err()?
@@ -2762,7 +2018,6 @@ WHERE id = $1
             .bind(&update.circuit_breaker_by_format)
             .bind(&update.expected_health_by_format)
             .bind(&update.expected_circuit_breaker_by_format)
-            .bind(update.expected_encrypted_auth_config.as_deref())
             .execute(&self.pool)
             .await
             .map_postgres_err()?
@@ -2914,13 +2169,6 @@ impl ProviderCatalogWriteRepository for SqlxProviderCatalogReadRepository {
         Self::update_key(self, key).await
     }
 
-    async fn compare_and_update_key_admin_state(
-        &self,
-        update: &ProviderCatalogKeyAdminCasUpdate,
-    ) -> Result<bool, DataLayerError> {
-        Self::compare_and_update_key_admin_state(self, update).await
-    }
-
     async fn update_keys(
         &self,
         keys: &[StoredProviderCatalogKey],
@@ -2995,60 +2243,6 @@ impl ProviderCatalogWriteRepository for SqlxProviderCatalogReadRepository {
 
     async fn delete_key(&self, key_id: &str) -> Result<bool, DataLayerError> {
         Self::delete_key(self, key_id).await
-    }
-
-    async fn compare_and_delete_key_oauth_credential(
-        &self,
-        delete: &ProviderCatalogKeyOAuthCredentialCasDelete,
-    ) -> Result<bool, DataLayerError> {
-        Self::compare_and_delete_key_oauth_credential(self, delete).await
-    }
-
-    async fn clear_key_oauth_invalid_marker(&self, key_id: &str) -> Result<bool, DataLayerError> {
-        Self::clear_key_oauth_invalid_marker(self, key_id).await
-    }
-
-    async fn update_key_oauth_credentials(
-        &self,
-        key_id: &str,
-        encrypted_api_key: &str,
-        encrypted_auth_config: Option<&str>,
-        expires_at_unix_secs: Option<u64>,
-    ) -> Result<bool, DataLayerError> {
-        Self::update_key_oauth_credentials(
-            self,
-            key_id,
-            encrypted_api_key,
-            encrypted_auth_config,
-            expires_at_unix_secs,
-        )
-        .await
-    }
-
-    async fn update_key_oauth_runtime_state(
-        &self,
-        key_id: &str,
-        oauth_invalid_at_unix_secs: Option<u64>,
-        oauth_invalid_reason: Option<&str>,
-        encrypted_auth_config_update: Option<&str>,
-        updated_at_unix_secs: Option<u64>,
-    ) -> Result<bool, DataLayerError> {
-        Self::update_key_oauth_runtime_state(
-            self,
-            key_id,
-            oauth_invalid_at_unix_secs,
-            oauth_invalid_reason,
-            encrypted_auth_config_update,
-            updated_at_unix_secs,
-        )
-        .await
-    }
-
-    async fn compare_and_update_key_oauth_runtime_state(
-        &self,
-        update: &ProviderCatalogKeyOAuthRuntimeStateCasUpdate,
-    ) -> Result<bool, DataLayerError> {
-        Self::compare_and_update_key_oauth_runtime_state(self, update).await
     }
 
     async fn update_key_health_state(
@@ -3164,15 +2358,6 @@ where
 }
 
 fn map_provider_row(row: &PgRow) -> Result<StoredProviderCatalogProvider, DataLayerError> {
-    let quota_reset_day = row_get::<Option<i32>>(row, "quota_reset_day")?
-        .map(|value| {
-            u64::try_from(value).map_err(|_| {
-                DataLayerError::UnexpectedValue(format!(
-                    "invalid providers.quota_reset_day: {value}"
-                ))
-            })
-        })
-        .transpose()?;
     let created_at_unix_ms = row_get::<Option<i64>>(row, "created_at_unix_ms")?
         .map(|value| {
             u64::try_from(value).map_err(|_| {
@@ -3195,25 +2380,13 @@ fn map_provider_row(row: &PgRow) -> Result<StoredProviderCatalogProvider, DataLa
         row_get(row, "id")?,
         row_get(row, "name")?,
         row_get(row, "website")?,
-        row_get(row, "provider_type")?,
     )?
     .with_description(row_get(row, "description")?)
-    .with_billing_fields(
-        row_get(row, "billing_type")?,
-        row_get(row, "monthly_quota_usd")?,
-        row_get(row, "monthly_used_usd")?,
-        quota_reset_day,
-        row_get::<Option<i64>>(row, "quota_last_reset_at_unix_secs")?.map(|value| value as u64),
-        row_get::<Option<i64>>(row, "quota_expires_at_unix_secs")?.map(|value| value as u64),
-    )
     .with_routing_fields(row_get(row, "provider_priority")?)
     .with_transport_fields(
         row_get(row, "is_active")?,
-        row_get(row, "keep_priority_on_conversion")?,
-        row_get(row, "enable_format_conversion")?,
         row_get(row, "concurrent_limit")?,
         row_get(row, "max_retries")?,
-        row_get(row, "proxy")?,
         row_get(row, "request_timeout")?,
         row_get(row, "stream_first_byte_timeout")?,
         row_get(row, "config")?,
@@ -3262,8 +2435,6 @@ fn map_endpoint_row(row: &PgRow) -> Result<StoredProviderCatalogEndpoint, DataLa
         row_get(row, "max_retries")?,
         row_get(row, "custom_path")?,
         row_get(row, "config")?,
-        row_get(row, "format_acceptance_config")?,
-        row_get(row, "proxy")?,
     )
 }
 
@@ -3435,15 +2606,6 @@ fn map_key_row(row: &PgRow) -> Result<StoredProviderCatalogKey, DataLayerError> 
                 })
             })
             .transpose()?;
-    let oauth_invalid_at_unix_secs = row_get::<Option<i64>>(row, "oauth_invalid_at_unix_secs")?
-        .map(|value| {
-            u64::try_from(value).map_err(|_| {
-                DataLayerError::UnexpectedValue(format!(
-                    "invalid provider_api_keys.oauth_invalid_at_unix_secs: {value}"
-                ))
-            })
-        })
-        .transpose()?;
     let last_used_at_unix_secs = row_get::<Option<i64>>(row, "last_used_at_unix_secs")?
         .map(|value| {
             u64::try_from(value).map_err(|_| {
@@ -3483,13 +2645,11 @@ fn map_key_row(row: &PgRow) -> Result<StoredProviderCatalogKey, DataLayerError> 
     .with_transport_fields(
         row_get(row, "api_formats")?,
         row_get::<Option<String>>(row, "api_key")?,
-        row_get(row, "auth_config")?,
         row_get(row, "rate_multipliers")?,
         row_get(row, "global_priority_by_format")?,
         row_get(row, "allowed_models")?,
         row_get::<Option<i64>>(row, "expires_at_unix_secs")?
             .and_then(|value| u64::try_from(value).ok()),
-        row_get(row, "proxy")?,
         row_get(row, "fingerprint")?,
     )
     .map(|key| {
@@ -3515,9 +2675,6 @@ fn map_key_row(row: &PgRow) -> Result<StoredProviderCatalogKey, DataLayerError> 
                 row.try_get("circuit_breaker_by_format").ok(),
             );
         key.note = row.try_get("note").ok();
-        key.auth_type_by_format = row.try_get("auth_type_by_format").ok();
-        key.allow_auth_channel_mismatch_formats =
-            row.try_get("allow_auth_channel_mismatch_formats").ok();
         key.internal_priority = row.try_get("internal_priority").unwrap_or(50);
         key.cache_ttl_minutes = row.try_get("cache_ttl_minutes").unwrap_or(5);
         key.max_probe_interval_minutes = row.try_get("max_probe_interval_minutes").unwrap_or(32);
@@ -3533,8 +2690,6 @@ fn map_key_row(row: &PgRow) -> Result<StoredProviderCatalogKey, DataLayerError> 
         key.model_include_patterns = row.try_get("model_include_patterns").ok();
         key.model_exclude_patterns = row.try_get("model_exclude_patterns").ok();
         key.upstream_metadata = row.try_get("upstream_metadata").ok();
-        key.oauth_invalid_at_unix_secs = oauth_invalid_at_unix_secs;
-        key.oauth_invalid_reason = row.try_get("oauth_invalid_reason").ok();
         key.status_snapshot = row.try_get("status_snapshot").ok();
         key.created_at_unix_ms = created_at_unix_ms;
         key.updated_at_unix_secs = updated_at_unix_secs;
@@ -3615,40 +2770,17 @@ mod tests {
     }
 
     #[test]
-    fn provider_api_keys_auth_channel_mismatch_list_queries_include_field() {
-        for sql in [
-            super::LIST_KEYS_BY_IDS_PREFIX,
-            super::LIST_KEYS_BY_PROVIDER_IDS_PREFIX,
-        ] {
-            assert!(sql.contains("allow_auth_channel_mismatch_formats"));
-        }
-
-        let source = include_str!("provider_catalog.rs").replace("\r\n", "\n");
-        assert!(
-            source
-                .matches(
-                    "auth_type_by_format,\n  allow_auth_channel_mismatch_formats,\n  COALESCE(api_key, encrypted_key) AS api_key",
-                )
-                .count()
-                >= 2
-        );
-        assert!(source.contains("QueryBuilder::<Postgres>::new(select_prefix_for_in("));
-        assert!(source.contains(".bind(&key.allow_auth_channel_mismatch_formats)"));
-        assert!(source.contains("row.try_get(\"allow_auth_channel_mismatch_formats\").ok()"));
-    }
-
-    #[test]
     fn provider_api_keys_create_key_insert_placeholders_match_bind_order() {
         let source = include_str!("provider_catalog.rs").replace("\r\n", "\n");
         assert!(source.contains(
-            "  $24,\n  $25,\n  $26,\n  CASE\n    WHEN $27::double precision IS NULL THEN NULL"
+            "  $21,\n  $22,\n  $23,\n  CASE\n    WHEN $24::double precision IS NULL THEN NULL"
         ));
-        assert!(source.contains("  $29,\n  $30,\n  COALESCE($31, 0),"));
+        assert!(source.contains("  $25,\n  COALESCE($26, 0),\n  COALESCE($27, 0),"));
         assert!(source.contains(
-            "  COALESCE($42, 0),\n  COALESCE($43, 0),\n  COALESCE($44, 0),\n  CASE\n    WHEN $45::double precision IS NULL THEN NULL"
+            "  COALESCE($37, 0),\n  COALESCE($38, 0),\n  COALESCE($39, 0),\n  CASE\n    WHEN $40::double precision IS NULL THEN NULL"
         ));
         assert!(source.contains(
-            "  CASE\n    WHEN $52::double precision IS NULL THEN NOW()\n    ELSE TO_TIMESTAMP($52::double precision)\n  END,\n  $53"
+            "  CASE\n    WHEN $46::double precision IS NULL THEN NOW()\n    ELSE TO_TIMESTAMP($46::double precision)\n  END,\n  CASE\n    WHEN $47::double precision IS NULL THEN NOW()"
         ));
     }
 
@@ -3693,28 +2825,8 @@ mod tests {
                 "ordinary key update unexpectedly owns {runtime_assignment}"
             );
         }
-        assert!(sql.contains("is_active = $25"));
-        assert!(sql.contains("rpm_limit = $12"));
+        assert!(sql.contains("is_active = $23"));
+        assert!(sql.contains("rpm_limit = $11"));
         assert!(sql.contains("api_key is not distinct from $5"));
-        assert!(sql.contains("auth_config is not distinct from $6"));
-    }
-
-    #[test]
-    fn admin_credential_cas_has_atomic_rotation_guards() {
-        let source = include_str!("provider_catalog.rs");
-        for predicate in [
-            "api_key IS NOT DISTINCT FROM ",
-            "auth_config IS NOT DISTINCT FROM ",
-            "jsonb_typeof(COALESCE(upstream_metadata, '{}'::jsonb)) = 'object'",
-            "jsonb_typeof(COALESCE(status_snapshot::jsonb, '{}'::jsonb)) = 'object'",
-            "jsonb_set(COALESCE(upstream_metadata, '{}'::jsonb), '{codex}'",
-            "jsonb_set(COALESCE(status_snapshot::jsonb, '{}'::jsonb), '{quota}', 'null'::jsonb, true)::json",
-            "oauth_invalid_at = NULL, oauth_invalid_reason = NULL, error_count = 0",
-        ] {
-            assert!(
-                source.contains(predicate),
-                "missing admin CAS guard: {predicate}"
-            );
-        }
     }
 }

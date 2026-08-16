@@ -43,7 +43,7 @@
               管理员只配置功能是否启用和匹配规则。用户、用户 Key、独立余额 Key 可在各自配置中附加此功能。
             </p>
             <p class="max-w-3xl text-xs text-muted-foreground">
-              当前支持 OpenAI Chat Completions、OpenAI Responses、Claude Messages；同格式转发和已支持的跨格式转换都会在发送给供应商前替换占位符。
+              当前支持 OpenAI Chat Completions、OpenAI Responses、Claude Messages；同格式请求会在发送给供应商前替换占位符。
             </p>
           </div>
           <div class="flex items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3">

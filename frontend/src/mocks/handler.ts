@@ -453,7 +453,6 @@ const MOCK_PROVIDER_HEALTH_STATUS = {
     {
       provider_id: 'provider-001',
       provider_name: 'OpenAI Official',
-      provider_type: 'codex',
       is_active: true,
       total_attempts: 2021,
       success_count: 2000,
@@ -472,7 +471,6 @@ const MOCK_PROVIDER_HEALTH_STATUS = {
     {
       provider_id: 'provider-002',
       provider_name: 'Anthropic Official',
-      provider_type: 'claude_code',
       is_active: true,
       total_attempts: 1684,
       success_count: 1642,
@@ -491,7 +489,6 @@ const MOCK_PROVIDER_HEALTH_STATUS = {
     {
       provider_id: 'provider-003',
       provider_name: 'Google AI',
-      provider_type: 'gemini_cli',
       is_active: true,
       total_attempts: 932,
       success_count: 887,
@@ -510,7 +507,6 @@ const MOCK_PROVIDER_HEALTH_STATUS = {
     {
       provider_id: 'provider-004',
       provider_name: 'AWS Bedrock',
-      provider_type: 'custom',
       is_active: true,
       total_attempts: 0,
       success_count: 0,
@@ -590,7 +586,6 @@ function relatedProviderMonitor(provider: typeof MOCK_PROVIDER_HEALTH_STATUS.pro
     kind: 'provider',
     key: provider.provider_name,
     display_name: provider.provider_name,
-    meta_text: provider.provider_type || 'custom',
     total_attempts: provider.total_attempts,
     success_count: provider.success_count,
     failed_count: provider.failed_count,
@@ -976,7 +971,6 @@ const MOCK_ROUTING_GROUPS: MockRoutingGroup[] = [
       default_policy: {
         priority_mode: 'provider',
         scheduling_mode: 'cache_affinity',
-        keep_priority_on_conversion: false,
       },
       model_policies: [
         {
@@ -985,7 +979,6 @@ const MOCK_ROUTING_GROUPS: MockRoutingGroup[] = [
           allowed_keys: [],
           provider_priority_overrides: { 'provider-002': 0 },
           key_priority_overrides: {},
-          pool_policy_overrides: {},
         },
       ],
       rules: [],
@@ -1049,13 +1042,6 @@ function getMockEndpointExtras(apiFormat: string) {
     extras.header_rules = [
       { action: 'set', key: 'x-client', value: 'demo' }
     ]
-    extras.format_acceptance_config = {
-      enabled: true,
-      accept_formats: ['openai:chat', 'claude:messages']
-    }
-    extras.config = { upstream_stream_policy: 'force_stream' }
-  } else if (normalizedFormat === 'openai:responses') {
-    extras.config = { upstream_stream_policy: 'force_non_stream' }
   } else if (normalizedFormat === 'openai:embedding') {
     extras.config = { route_kind: 'embedding' }
   } else if (normalizedFormat === 'openai:rerank' || normalizedFormat === 'jina:rerank') {
@@ -1075,7 +1061,7 @@ function getMockEndpointExtras(apiFormat: string) {
 const MOCK_ENDPOINT_KEYS = [
   { id: 'ekey-001', provider_id: 'provider-001', api_formats: ['claude:messages'], api_key_masked: 'sk-ant...abc1', auth_type: 'api_key', name: 'Primary Key', rate_multiplier: 1.0, internal_priority: 1, health_score: 0.98, consecutive_failures: 0, request_count: 5000, success_count: 4950, error_count: 50, success_rate: 0.99, avg_response_time_ms: 1200, cache_ttl_minutes: 5, max_probe_interval_minutes: 32, is_active: true, created_at: '2024-01-01T00:00:00Z', updated_at: new Date().toISOString() },
   { id: 'ekey-002', provider_id: 'provider-001', api_formats: ['claude:messages'], api_key_masked: 'sk-ant...def2', auth_type: 'api_key', name: 'Backup Key', rate_multiplier: 1.0, internal_priority: 2, health_score: 0.95, consecutive_failures: 1, request_count: 2000, success_count: 1950, error_count: 50, success_rate: 0.975, avg_response_time_ms: 1350, cache_ttl_minutes: 5, max_probe_interval_minutes: 32, is_active: true, created_at: '2024-02-01T00:00:00Z', updated_at: new Date().toISOString() },
-  { id: 'ekey-003', provider_id: 'provider-002', api_formats: ['openai:chat'], api_key_masked: 'sk-oai...ghi3', auth_type: 'oauth', name: 'OpenAI OAuth', oauth_email: 'oauth-demo@aether.dev', oauth_expires_at: Math.floor(Date.now() / 1000) + 6 * 3600, oauth_plan_type: 'pro', oauth_account_id: 'acct-demo-002', rate_multiplier: 1.0, internal_priority: 1, health_score: 0.97, consecutive_failures: 0, request_count: 3500, success_count: 3450, error_count: 50, success_rate: 0.986, avg_response_time_ms: 900, cache_ttl_minutes: 5, max_probe_interval_minutes: 32, is_active: true, created_at: '2024-01-15T00:00:00Z', updated_at: new Date().toISOString() }
+  { id: 'ekey-003', provider_id: 'provider-002', api_formats: ['openai:chat'], api_key_masked: 'sk-oai...ghi3', auth_type: 'api_key', name: 'OpenAI Key', rate_multiplier: 1.0, internal_priority: 1, health_score: 0.97, consecutive_failures: 0, request_count: 3500, success_count: 3450, error_count: 50, success_rate: 0.986, avg_response_time_ms: 900, cache_ttl_minutes: 5, max_probe_interval_minutes: 32, is_active: true, created_at: '2024-01-15T00:00:00Z', updated_at: new Date().toISOString() }
 ]
 
 // Mock Endpoints
@@ -1090,204 +1076,6 @@ const MOCK_CAPABILITIES = [
   { name: 'cache_1h', display_name: '1小时缓存', description: '支持1小时prompt缓存', match_mode: 'exclusive', short_name: '1h' },
   { name: 'context_1m', display_name: '1M上下文', description: '支持1M上下文窗口', match_mode: 'compatible', short_name: '1M' }
 ]
-
-const MOCK_CODEX_POOL_PROVIDER_ID = 'provider-codex-pool-demo'
-const MOCK_CODEX_POOL_PROVIDER = {
-  id: MOCK_CODEX_POOL_PROVIDER_ID,
-  name: 'Codex 周期额度演示',
-  provider_type: 'codex',
-  description: '展示 5H、周、月及组合额度窗口',
-  website: 'https://openai.com/codex',
-  provider_priority: 0,
-  billing_type: 'free_tier',
-  monthly_used_usd: 0,
-  is_active: true,
-  total_endpoints: 1,
-  active_endpoints: 1,
-  total_keys: 4,
-  active_keys: 4,
-  total_models: 3,
-  active_models: 3,
-  avg_health_score: 0.97,
-  unhealthy_endpoints: 0,
-  api_formats: ['openai:responses'],
-  endpoint_health_details: [
-    { api_format: 'openai:responses', health_score: 0.97, is_active: true, active_keys: 4 }
-  ],
-  pool_advanced: {
-    enabled: true,
-    probing_enabled: true,
-  },
-  claude_code_advanced: null,
-  proxy: null,
-  created_at: '2026-07-01T00:00:00Z',
-  updated_at: new Date().toISOString(),
-}
-
-function createMockCodexQuotaWindow(
-  code: string,
-  label: string,
-  windowMinutes: number,
-  remainingRatio: number,
-  resetSeconds: number,
-  observedAt: number,
-  requestCount: number,
-) {
-  return {
-    code,
-    label,
-    scope: 'account',
-    unit: 'percent',
-    used_ratio: 1 - remainingRatio,
-    remaining_ratio: remainingRatio,
-    reset_at: resetSeconds > 0 ? observedAt + resetSeconds : null,
-    reset_seconds: resetSeconds,
-    window_minutes: windowMinutes,
-    usage: {
-      request_count: requestCount,
-      total_tokens: requestCount * 1250,
-      total_cost_usd: (requestCount * 0.0025).toFixed(8),
-    },
-  }
-}
-
-function createMockCodexPoolKeys() {
-  const nowSeconds = Math.floor(Date.now() / 1000)
-  const common = {
-    provider_type: 'codex',
-    is_active: true,
-    auth_type: 'oauth',
-    credential_kind: 'oauth_session',
-    runtime_auth_kind: 'bearer',
-    oauth_managed: true,
-    oauth_header_auth: true,
-    can_refresh_oauth: true,
-    can_export_oauth: true,
-    can_edit_oauth: true,
-    oauth_expires_at: nowSeconds + 14 * 24 * 3600,
-    api_formats: ['openai:responses'],
-    rate_multipliers: null,
-    internal_priority: 50,
-    rpm_limit: null,
-    cache_ttl_minutes: 5,
-    max_probe_interval_minutes: 32,
-    health_score: 0.97,
-    circuit_breaker_open: false,
-    proxy: null,
-    cooldown_reason: null,
-    cooldown_ttl_seconds: null,
-    cost_window_usage: 0,
-    cost_limit: null,
-    sticky_sessions: 0,
-    lru_score: null,
-    created_at: '2026-07-01T00:00:00Z',
-    imported_at: '2026-07-01T00:00:00Z',
-    last_used_at: new Date(nowSeconds * 1000 - 10 * 60 * 1000).toISOString(),
-    scheduling_status: 'available',
-    scheduling_reason: 'available',
-    scheduling_label: '可调度',
-    scheduling_reasons: [],
-  }
-
-  const buildKey = (
-    keyId: string,
-    keyName: string,
-    planType: string,
-    accountQuota: string,
-    windows: ReturnType<typeof createMockCodexQuotaWindow>[],
-    requestCount: number,
-  ) => ({
-    ...common,
-    key_id: keyId,
-    key_name: keyName,
-    oauth_plan_type: planType,
-    oauth_account_id: `acct-${keyId}`,
-    oauth_account_name: keyName,
-    quota_updated_at: nowSeconds - 10 * 60,
-    account_quota: accountQuota,
-    request_count: requestCount,
-    total_tokens: requestCount * 2400,
-    total_cost_usd: (requestCount * 0.004).toFixed(8),
-    status_snapshot: {
-      oauth: {
-        code: 'valid',
-        label: '有效',
-        expires_at: nowSeconds + 14 * 24 * 3600,
-        requires_reauth: false,
-        expiring_soon: false,
-      },
-      account: {
-        code: 'ok',
-        label: null,
-        reason: null,
-        blocked: false,
-        source: null,
-        recoverable: false,
-      },
-      quota: {
-        version: 2,
-        provider_type: 'codex',
-        code: 'ok',
-        label: null,
-        reason: null,
-        freshness: 'fresh',
-        source: 'response_headers',
-        observed_at: nowSeconds,
-        updated_at: nowSeconds,
-        exhausted: false,
-        usage_ratio: windows.reduce((max, window) => Math.max(max, window.used_ratio), 0),
-        plan_type: planType,
-        credits: { has_credits: false, unlimited: false },
-        windows,
-      },
-    },
-  })
-
-  return [
-    buildKey(
-      'codex-pool-plus-dual',
-      'Plus · 5H + 周',
-      'plus',
-      '5H剩余 62.0% | 周剩余 84.0%',
-      [
-        createMockCodexQuotaWindow('5h', '5H', 300, 0.62, 3 * 3600, nowSeconds, 18),
-        createMockCodexQuotaWindow('weekly', '周', 10_080, 0.84, 5 * 24 * 3600, nowSeconds, 42),
-      ],
-      128,
-    ),
-    buildKey(
-      'codex-pool-team-weekly',
-      'Team · 仅周',
-      'team',
-      '周剩余 71.0%',
-      [
-        createMockCodexQuotaWindow('weekly', '周', 10_080, 0.71, 4 * 24 * 3600, nowSeconds, 31),
-      ],
-      96,
-    ),
-    buildKey(
-      'codex-pool-business-monthly',
-      'Codex · 仅月（含空占位）',
-      'self_serve_business_usage_based',
-      '月剩余 86.0%',
-      [
-        createMockCodexQuotaWindow('monthly', '月', 43_800, 0.86, 2_627_672, nowSeconds, 54),
-        createMockCodexQuotaWindow('weekly', '周', 0, 1, 0, nowSeconds, 0),
-      ],
-      214,
-    ),
-    buildKey(
-      'codex-pool-free-five-hour',
-      'Free · 仅5H',
-      'free',
-      '5H剩余 93.0%',
-      [
-        createMockCodexQuotaWindow('5h', '5H', 300, 0.93, 4 * 3600, nowSeconds, 7),
-      ],
-      37,
-    ),
-  ]
-}
 
 /**
  * Mock API 路由处理器
@@ -1483,17 +1271,11 @@ const mockHandlers: Record<string, (config: AxiosRequestConfig) => Promise<Axios
       billing: {
         id: 'wallet-demo-user',
         balance: Number((100 - totalCost * 20).toFixed(2)),
-        recharge_balance: Number((100 - totalCost * 20).toFixed(2)),
-        gift_balance: 0,
-        refundable_balance: Number((100 - totalCost * 20).toFixed(2)),
         currency: 'USD',
         status: 'active',
         limit_mode: 'finite',
         unlimited: false,
-        total_recharged: 100,
         total_consumed: Number((totalCost * 20).toFixed(2)),
-        total_refunded: 0,
-        total_adjusted: 0,
         updated_at: new Date().toISOString(),
       },
       activity_heatmap: heatmap,
@@ -1709,33 +1491,6 @@ const mockHandlers: Record<string, (config: AxiosRequestConfig) => Promise<Axios
     await delay()
     requireAdmin()
     return createMockResponse(MOCK_PROVIDERS)
-  },
-
-  'GET /api/admin/pool/overview': async () => {
-    await delay()
-    requireAdmin()
-    return createMockResponse({
-      items: [{
-        provider_id: MOCK_CODEX_POOL_PROVIDER_ID,
-        provider_name: MOCK_CODEX_POOL_PROVIDER.name,
-        provider_type: 'codex',
-        total_keys: 4,
-        active_keys: 4,
-        cooldown_count: 0,
-        pool_enabled: true,
-        provider_hot_count: 2,
-        provider_desired_hot: 3,
-        provider_in_flight: 1,
-        provider_ema_in_flight: 0.8,
-        provider_burst_pending: false,
-      }]
-    })
-  },
-
-  'GET /api/admin/pool/scheduling-presets': async () => {
-    await delay()
-    requireAdmin()
-    return createMockResponse([])
   },
 
   'POST /api/admin/providers': async (config) => {
@@ -2380,35 +2135,15 @@ const PROVIDER_KEYS_CACHE: Record<string, Record<string, unknown>[]> = {}
 function generateMockKeysForProvider(providerId: string, count: number = 2) {
   const provider = MOCK_PROVIDERS.find(p => p.id === providerId)
   const formats = provider?.api_formats || []
-  const nowSec = Math.floor(Date.now() / 1000)
 
   return Array.from({ length: count }, (_, i) => {
-    const isOAuth = i === 1
-    const markInvalid = isOAuth && providerId.endsWith('3')
-    const oauthFields = isOAuth ? {
-      auth_type: 'oauth',
-      oauth_email: 'oauth-demo@aether.dev',
-      oauth_expires_at: markInvalid ? null : nowSec + 6 * 3600,
-      oauth_invalid_at: markInvalid ? nowSec - 3600 : null,
-      oauth_invalid_reason: markInvalid ? '[ACCOUNT_BLOCK] Demo verification required' : null,
-      status_snapshot: {
-        oauth: { code: 'valid', label: '有效', reason: null, expires_at: nowSec + 6 * 3600, invalid_at: null, requires_reauth: false, expiring_soon: false },
-        account: markInvalid
-          ? { code: 'account_verification', label: '需要验证', reason: 'Demo verification required', blocked: true, source: 'oauth_invalid', recoverable: false }
-          : { code: 'ok', label: null, reason: null, blocked: false, source: null, recoverable: false },
-        quota: { code: 'unknown', label: null, reason: null, exhausted: false, usage_ratio: null, updated_at: null, reset_seconds: null, plan_type: null }
-      },
-      oauth_plan_type: 'pro',
-      oauth_account_id: `acct-${providerId}`
-    } : { auth_type: 'api_key' }
-
     return {
       id: `key-${providerId}-${i + 1}`,
       provider_id: providerId,
       api_formats: i === 0 ? formats : formats.slice(0, 1),
       api_key_masked: `sk-***...${Math.random().toString(36).substring(2, 6)}`,
       name: i === 0 ? 'Primary Key' : `Backup Key ${i}`,
-      ...oauthFields,
+      auth_type: 'api_key',
       rate_multiplier: 1.0,
       internal_priority: i + 1,
       health_score: 0.90 + Math.random() * 0.10,
@@ -2611,8 +2346,6 @@ function generateMockModelsForProvider(providerId: string) {
 // ========== 注册动态路由 ==========
 
 const WRITE_ONLY_SYSTEM_CONFIG_KEYS = new Set([
-  'module.server_chan_push.send_key',
-  'module.bark_push.device_key',
   'backup_s3_secret_access_key',
 ])
 
@@ -2784,64 +2517,11 @@ registerDynamicRoute('PUT', '/api/admin/modules/status/:moduleName/enabled', asy
 registerDynamicRoute('GET', '/api/admin/providers/:providerId/summary', async (_config, params) => {
   await delay()
   requireAdmin()
-  if (params.providerId === MOCK_CODEX_POOL_PROVIDER_ID) {
-    return createMockResponse(MOCK_CODEX_POOL_PROVIDER)
-  }
   const provider = MOCK_PROVIDERS.find(p => p.id === params.providerId)
   if (!provider) {
     throw { response: createMockResponse({ detail: '提供商不存在' }, 404) }
   }
   return createMockResponse(provider)
-})
-
-registerDynamicRoute('GET', '/api/admin/pool/:providerId/keys', async (config, params) => {
-  await delay()
-  requireAdmin()
-  if (params.providerId !== MOCK_CODEX_POOL_PROVIDER_ID) {
-    return createMockResponse({ total: 0, page: 1, page_size: 50, keys: [] })
-  }
-
-  const query = (config.params || {}) as Record<string, unknown>
-  const search = String(query.search || '').trim().toLowerCase()
-  const status = String(query.status || 'all').trim().toLowerCase()
-  const sortBy = String(query.sort_by || 'imported_at').trim()
-  const sortOrder = String(query.sort_order || 'desc').trim().toLowerCase()
-  let keys = createMockCodexPoolKeys()
-
-  if (search) {
-    keys = keys.filter(key => [
-      key.key_name,
-      key.oauth_plan_type,
-      key.oauth_account_id,
-      key.account_quota,
-    ].some(value => String(value || '').toLowerCase().includes(search)))
-  }
-  if (status === 'enabled') {
-    keys = keys.filter(key => key.is_active)
-  } else if (status === 'disabled') {
-    keys = keys.filter(key => !key.is_active)
-  } else if (status !== 'all') {
-    keys = keys.filter(key => key.scheduling_status === status || key.scheduling_reason === status)
-  }
-
-  keys.sort((left, right) => {
-    const leftValue = String((left as Record<string, unknown>)[sortBy] ?? left.imported_at ?? '')
-    const rightValue = String((right as Record<string, unknown>)[sortBy] ?? right.imported_at ?? '')
-    const comparison = leftValue.localeCompare(rightValue)
-    return sortOrder === 'asc' ? comparison : -comparison
-  })
-
-  const rawPage = Number(query.page)
-  const rawPageSize = Number(query.page_size)
-  const page = Number.isFinite(rawPage) && rawPage >= 1 ? Math.floor(rawPage) : 1
-  const pageSize = Number.isFinite(rawPageSize) && rawPageSize >= 1 ? Math.floor(rawPageSize) : 50
-  const start = (page - 1) * pageSize
-  return createMockResponse({
-    total: keys.length,
-    page,
-    page_size: pageSize,
-    keys: keys.slice(start, start + pageSize),
-  })
 })
 
 // Provider 模型映射预览
@@ -3019,205 +2699,6 @@ registerDynamicRoute('POST', '/api/admin/endpoints/providers/:providerId/keys', 
   return createMockResponse(newKey)
 })
 
-registerDynamicRoute('POST', '/api/admin/endpoints/providers/:providerId/refresh-quota', async (config, params) => {
-  await delay()
-  requireAdmin()
-  if (params.providerId === MOCK_CODEX_POOL_PROVIDER_ID) {
-    const body = JSON.parse(config.data || '{}')
-    const requestedKeyIds = Array.isArray(body.key_ids)
-      ? body.key_ids.map((id: unknown) => String(id).trim()).filter(Boolean)
-      : createMockCodexPoolKeys().map(key => key.key_id)
-    const keyNames = new Map(createMockCodexPoolKeys().map(key => [key.key_id, key.key_name]))
-    const results = requestedKeyIds.map((keyId: string) => ({
-      key_id: keyId,
-      key_name: keyNames.get(keyId) || keyId,
-      status: 'success',
-      metadata: { updated_at: new Date().toISOString() },
-    }))
-    return createMockResponse({
-      success: results.length,
-      failed: 0,
-      total: results.length,
-      results,
-    })
-  }
-  if (!PROVIDER_KEYS_CACHE[params.providerId]) {
-    PROVIDER_KEYS_CACHE[params.providerId] = generateMockKeysForProvider(params.providerId, 2)
-  }
-  const body = JSON.parse(config.data || '{}')
-  const requestedKeyIds = Array.isArray(body.key_ids)
-    ? new Set(body.key_ids.map((id: unknown) => String(id).trim()).filter(Boolean))
-    : null
-  const keys = (PROVIDER_KEYS_CACHE[params.providerId] || [])
-    .filter(key => !requestedKeyIds || requestedKeyIds.has(key.id))
-  const results = keys.map(key => ({
-    key_id: key.id,
-    key_name: key.name || key.id.slice(0, 8),
-    status: 'success',
-    metadata: { updated_at: new Date().toISOString() }
-  }))
-  return createMockResponse({
-    success: results.length,
-    failed: 0,
-    total: results.length,
-    results
-  })
-})
-
-registerDynamicRoute('POST', '/api/admin/provider-oauth/keys/:keyId/refresh', async (_config, params) => {
-  await delay()
-  requireAdmin()
-  return createMockResponse({
-    provider_type: 'codex',
-    expires_at: Math.floor(Date.now() / 1000) + 6 * 3600,
-    has_refresh_token: true,
-    email: 'oauth-demo@aether.dev',
-    key_id: params.keyId
-  })
-})
-
-registerDynamicRoute('POST', '/api/admin/provider-oauth/providers/:providerId/start', async (_config, params) => {
-  await delay()
-  requireAdmin()
-  return createMockResponse({
-    authorization_url: `https://example.com/oauth/authorize?provider=${params.providerId}`,
-    redirect_uri: 'https://aether.local/oauth/callback',
-    provider_type: 'codex',
-    instructions: 'Open the authorization URL and paste the callback URL here.'
-  })
-})
-
-registerDynamicRoute('POST', '/api/admin/provider-oauth/providers/:providerId/complete', async (config, _params) => {
-  await delay()
-  requireAdmin()
-  const body = JSON.parse(config.data || '{}')
-  return createMockResponse({
-    key_id: `key-oauth-${Date.now()}`,
-    provider_type: 'codex',
-    expires_at: Math.floor(Date.now() / 1000) + 24 * 3600,
-    has_refresh_token: true,
-    email: body.name ? `${body.name}@demo.dev` : 'oauth-demo@aether.dev'
-  })
-})
-
-const mockClaudeCookieAuthorizeTasks = new Map<string, Record<string, unknown>>()
-let mockClaudeCookieAuthorizeTaskSequence = 0
-
-registerDynamicRoute('POST', '/api/admin/provider-oauth/providers/:providerId/cookie-authorize/tasks', async (config, params) => {
-  await delay()
-  requireAdmin()
-  const body = JSON.parse(config.data || '{}')
-  const cookies = Array.isArray(body.cookies)
-    ? body.cookies.filter((cookie: unknown): cookie is string => typeof cookie === 'string' && cookie.trim().length > 0)
-    : []
-  const errorSamples = cookies.flatMap((cookie: string, index: number) => (
-    cookie.includes('mock-fail')
-      ? [{ index, status: 'error', error: '演示模式：Cookie 授权失败', replaced: false }]
-      : []
-  ))
-  const failed = errorSamples.length
-  const success = cookies.length - failed
-  const now = Math.floor(Date.now() / 1000)
-  const taskId = `claude-cookie-${Date.now()}-${++mockClaudeCookieAuthorizeTaskSequence}`
-  mockClaudeCookieAuthorizeTasks.set(taskId, {
-    task_id: taskId,
-    provider_id: params.providerId,
-    provider_type: 'claude_code',
-    import_kind: 'cookie_authorize',
-    status: 'completed',
-    total: cookies.length,
-    processed: cookies.length,
-    success,
-    failed,
-    created_count: success,
-    replaced_count: 0,
-    progress_percent: 100,
-    message: null,
-    error: null,
-    error_samples: errorSamples,
-    created_at: now,
-    started_at: now,
-    finished_at: now,
-    updated_at: now,
-  })
-
-  return createMockResponse({
-    task_id: taskId,
-    import_kind: 'cookie_authorize',
-    status: 'submitted',
-    total: cookies.length,
-    processed: 0,
-    success: 0,
-    failed: 0,
-    created_count: 0,
-    replaced_count: 0,
-    progress_percent: 0,
-    message: '任务已提交',
-  })
-})
-
-registerDynamicRoute('GET', '/api/admin/provider-oauth/providers/:providerId/cookie-authorize/tasks/:taskId', async (_config, params) => {
-  await delay()
-  requireAdmin()
-  const task = mockClaudeCookieAuthorizeTasks.get(params.taskId)
-  if (!task || task.provider_id !== params.providerId) {
-    throw { response: createMockResponse({ detail: 'Cookie 授权任务不存在' }, 404) }
-  }
-  return createMockResponse(task)
-})
-
-registerDynamicRoute('POST', '/api/admin/provider-oauth/providers/:providerId/cookie-authorize', async (config, _params) => {
-  await delay()
-  requireAdmin()
-  const body = JSON.parse(config.data || '{}')
-  return createMockResponse({
-    key_id: `key-claude-cookie-${Date.now()}`,
-    provider_type: 'claude_code',
-    expires_at: Math.floor(Date.now() / 1000) + 24 * 3600,
-    has_refresh_token: true,
-    email: body.name ? `${body.name}@demo.dev` : 'claude-oauth-demo@aether.dev'
-  })
-})
-
-registerDynamicRoute('POST', '/api/admin/provider-oauth/providers/:providerId/import-refresh-token', async (config, _params) => {
-  await delay()
-  requireAdmin()
-  const body = JSON.parse(config.data || '{}')
-  return createMockResponse({
-    key_id: `key-oauth-${Date.now()}`,
-    provider_type: 'codex',
-    expires_at: Math.floor(Date.now() / 1000) + 24 * 3600,
-    has_refresh_token: true,
-    email: body.name ? `${body.name}@demo.dev` : 'oauth-demo@aether.dev'
-  })
-})
-
-registerDynamicRoute('POST', '/api/admin/provider-oauth/providers/:providerId/batch-import', async (config, _params) => {
-  await delay()
-  requireAdmin()
-  const body = JSON.parse(config.data || '{}')
-  const raw = typeof body.credentials === 'string' ? body.credentials.trim() : ''
-  const lines = raw ? raw.split('\n').filter(line => line.trim() && !line.trim().startsWith('#')) : []
-  const total = Math.max(Math.min(lines.length, 5), 2)
-  const results = []
-  for (let index = 0; index < total; index++) {
-    results.push({
-      index,
-      status: 'success',
-      key_id: `key-oauth-${Date.now()}-${index}`,
-      key_name: `Imported OAuth ${index + 1}`,
-      auth_method: 'oauth'
-    })
-  }
-  return createMockResponse({
-    total,
-    success: results.length,
-    failed: 0,
-    results
-  })
-})
-
-
 // Key 更新
 registerDynamicRoute('PUT', '/api/admin/endpoints/keys/:keyId', async (config, params) => {
   await delay()
@@ -3239,40 +2720,6 @@ registerDynamicRoute('GET', '/api/admin/endpoints/keys/:keyId/reveal', async (_c
   requireAdmin()
   return createMockResponse({ api_key: 'sk-demo-reveal' })
 })
-
-registerDynamicRoute('GET', '/api/admin/endpoints/keys/:keyId/export', async (_config, params) => {
-  await delay()
-  requireAdmin()
-  return createMockResponse({
-    key_id: params.keyId,
-    provider_type: 'codex',
-    auth_method: 'oauth',
-    refresh_token: 'rt-demo',
-    email: 'oauth-demo@aether.dev',
-    exported_at: new Date().toISOString()
-  })
-})
-
-registerDynamicRoute('POST', '/api/admin/endpoints/keys/:keyId/clear-oauth-invalid', async (_config, params) => {
-  await delay()
-  requireAdmin()
-  return createMockResponse({ message: 'OAuth invalid cleared (demo)', key_id: params.keyId })
-})
-
-registerDynamicRoute('POST', '/api/admin/endpoints/keys/:keyId/reset-cycle-stats', async (_config, params) => {
-  await delay()
-  requireAdmin()
-  const key = createMockCodexPoolKeys().find(item => item.key_id === params.keyId)
-  const windows = key?.status_snapshot.quota.windows.filter(window => (
-    window.window_minutes > 0 && !window.code.startsWith('spark_')
-  )).length ?? 0
-  return createMockResponse({
-    message: '已重置周期统计（演示模式）',
-    reset_at: Math.floor(Date.now() / 1000),
-    windows,
-  })
-})
-
 
 // Keys grouped by format
 mockHandlers['GET /api/admin/endpoints/keys/grouped-by-format'] = async () => {
@@ -3584,7 +3031,6 @@ registerDynamicRoute('POST', '/api/admin/routing/groups/:groupId/dry-run', async
         selected_order: 0,
       },
     ],
-    pool_expansion: [],
     runtime_facts: {
       scheduler_mode: 'cache_affinity',
       priority_mode: 'provider',
@@ -4253,15 +3699,13 @@ registerDynamicRoute('GET', '/api/admin/monitoring/trace/:requestId', async (_co
           mode: record.cache_read_input_tokens > 0 ? 'CacheAffinity' : 'FixedOrder',
           priority_mode: 'Provider',
           index: i,
-          priority_slot: i + 1,
-          demoted_by: i > 0 ? 'cross_format' : undefined
+          priority_slot: i + 1
         },
         extra_data: {
           ranking_mode: record.cache_read_input_tokens > 0 ? 'CacheAffinity' : 'FixedOrder',
           priority_mode: 'Provider',
           ranking_index: i,
-          priority_slot: i + 1,
-          demoted_by: i > 0 ? 'cross_format' : undefined
+          priority_slot: i + 1
         },
         latency_ms: 10 + Math.floor(Math.random() * 20),
         created_at: skipStarted.toISOString(),
@@ -4810,25 +4254,6 @@ mockHandlers['GET /api/admin/stats/cost/savings'] = async () => {
   })
 }
 
-mockHandlers['GET /api/admin/stats/providers/quota-usage'] = async () => {
-  await delay()
-  requireAdmin()
-  return createMockResponse({
-    providers: [
-      {
-        id: 'prov-1',
-        name: 'Provider A',
-        quota_usd: 500,
-        used_usd: 320,
-        remaining_usd: 180,
-        usage_percent: 64,
-        quota_expires_at: null,
-        estimated_exhaust_at: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()
-      }
-    ]
-  })
-}
-
 mockHandlers['GET /api/admin/stats/performance/percentiles'] = async () => {
   await delay()
   requireAdmin()
@@ -4983,11 +4408,6 @@ mockHandlers['GET /api/admin/monitoring/system-status'] = async () => {
       requests: 12483,
       tokens: 48751234,
       cost_usd: '$182.4631'
-    },
-    tunnel: {
-      proxy_connections: 28,
-      nodes: 6,
-      active_streams: 164
     },
     internal_gateway: {
       status: 'rust_native_control_plane',
@@ -5151,181 +4571,9 @@ mockHandlers['GET /api/admin/monitoring/cache/redis-keys'] = async () => {
         { key: 'concurrency_lock', name: '并发锁', pattern: 'concurrency:*', description: '请求并发控制锁', count: 186 },
         { key: 'apikey', name: 'API Key', pattern: 'apikey:*', description: 'API Key 认证缓存', count: 263 },
         { key: 'health', name: '健康检查', pattern: 'health:*', description: '端点健康状态缓存', count: 154 },
-        { key: 'models_list', name: '模型列表', pattern: 'models:list:*', description: '/v1/models 端点模型列表缓存', count: 38 },
-        { key: 'provider_balance', name: 'Provider 余额', pattern: 'provider_ops:balance:*', description: 'Provider 余额查询缓存', count: 24 }
+        { key: 'models_list', name: '模型列表', pattern: 'models:list:*', description: '/v1/models 端点模型列表缓存', count: 38 }
       ],
-      total_keys: 2093
-    }
-  })
-}
-
-mockHandlers['GET /api/admin/proxy-nodes'] = async () => {
-  await delay()
-  requireAdmin()
-  const now = new Date().toISOString()
-  return createMockResponse({
-    items: [
-      {
-        id: 'proxy-node-1',
-        name: 'edge-shanghai-1',
-        ip: '10.8.0.12',
-        port: 8443,
-        region: 'cn-east',
-        status: 'online',
-        is_manual: false,
-        tunnel_mode: true,
-        tunnel_connected: true,
-        tunnel_connected_at: now,
-        hardware_info: {
-          cpu_cores: 8,
-          total_memory_mb: 16384,
-          os_info: 'linux'
-        },
-        estimated_max_concurrency: 620,
-        remote_config: null,
-        config_version: 12,
-        registered_by: 'agent',
-        last_heartbeat_at: now,
-        heartbeat_interval: 15,
-        active_connections: 82,
-        total_requests: 43820,
-        avg_latency_ms: 42,
-        failed_requests: 34,
-        dns_failures: 2,
-        stream_errors: 7,
-        proxy_metadata: {
-          resource_usage: {
-            system_cpu_usage_percent: 41.8,
-            process_cpu_usage_percent: 18.4,
-            memory_total_bytes: 17179869184,
-            memory_used_bytes: 9878424780,
-            memory_used_percent: 57.5,
-            process_memory_bytes: 438304768,
-            process_memory_percent: 2.6,
-            process_uptime_secs: 86400
-          }
-        },
-        created_at: now,
-        updated_at: now
-      },
-      {
-        id: 'proxy-node-2',
-        name: 'edge-us-west-1',
-        ip: '10.8.1.18',
-        port: 8443,
-        region: 'us-west',
-        status: 'online',
-        is_manual: false,
-        tunnel_mode: true,
-        tunnel_connected: true,
-        tunnel_connected_at: now,
-        hardware_info: {
-          cpu_cores: 16,
-          total_memory_mb: 32768,
-          os_info: 'linux'
-        },
-        estimated_max_concurrency: 980,
-        remote_config: null,
-        config_version: 9,
-        registered_by: 'agent',
-        last_heartbeat_at: now,
-        heartbeat_interval: 15,
-        active_connections: 94,
-        total_requests: 58340,
-        avg_latency_ms: 58,
-        failed_requests: 52,
-        dns_failures: 1,
-        stream_errors: 9,
-        proxy_metadata: {
-          resource_usage: {
-            system_cpu_usage_percent: 55.2,
-            process_cpu_usage_percent: 22.6,
-            memory_total_bytes: 34359738368,
-            memory_used_bytes: 22333829939,
-            memory_used_percent: 65.0,
-            process_memory_bytes: 612368384,
-            process_memory_percent: 1.8,
-            process_uptime_secs: 172800
-          }
-        },
-        created_at: now,
-        updated_at: now
-      }
-    ],
-    total: 2,
-    skip: 0,
-    limit: 200,
-    rollout: null
-  })
-}
-
-mockHandlers['GET /api/admin/proxy-nodes/metrics/fleet'] = async () => {
-  await delay()
-  requireAdmin()
-  const now = Math.floor(Date.now() / 1000)
-  return createMockResponse({
-    step: '1m',
-    from: now - 3600,
-    to: now,
-    items: [
-      {
-        bucket_start_unix_secs: now - 120,
-        bucket_start: new Date((now - 120) * 1000).toISOString(),
-        samples: 2,
-        uptime_samples: 2,
-        uptime_ratio: 1,
-        active_connections_sum: 168,
-        active_connections_max: 92,
-        active_connections_avg: 84,
-        heartbeat_rtt_ms_sum: 86,
-        heartbeat_rtt_ms_max: 52,
-        heartbeat_rtt_ms_avg: 43,
-        connect_errors_delta: 0,
-        disconnects_delta: 0,
-        error_events_delta: 1,
-        ws_in_bytes_delta: 4849664,
-        ws_out_bytes_delta: 12812288,
-        ws_in_frames_delta: 18320,
-        ws_out_frames_delta: 42110
-      },
-      {
-        bucket_start_unix_secs: now - 60,
-        bucket_start: new Date((now - 60) * 1000).toISOString(),
-        samples: 2,
-        uptime_samples: 2,
-        uptime_ratio: 1,
-        active_connections_sum: 176,
-        active_connections_max: 94,
-        active_connections_avg: 88,
-        heartbeat_rtt_ms_sum: 82,
-        heartbeat_rtt_ms_max: 48,
-        heartbeat_rtt_ms_avg: 41,
-        connect_errors_delta: 0,
-        disconnects_delta: 0,
-        error_events_delta: 0,
-        ws_in_bytes_delta: 5154816,
-        ws_out_bytes_delta: 13996032,
-        ws_in_frames_delta: 19120,
-        ws_out_frames_delta: 44710
-      }
-    ],
-    summary: {
-      samples: 4,
-      uptime_samples: 4,
-      uptime_ratio: 1,
-      active_connections_sum: 344,
-      active_connections_max: 94,
-      active_connections_avg: 86,
-      heartbeat_rtt_ms_sum: 168,
-      heartbeat_rtt_ms_max: 52,
-      heartbeat_rtt_ms_avg: 42,
-      connect_errors_delta: 0,
-      disconnects_delta: 0,
-      error_events_delta: 1,
-      ws_in_bytes_delta: 10004480,
-      ws_out_bytes_delta: 26808320,
-      ws_in_frames_delta: 37440,
-      ws_out_frames_delta: 86820
+      total_keys: 2069
     }
   })
 }
@@ -5360,62 +4608,14 @@ aether_gateway_concurrency_high_watermark{gate="gateway_requests_distributed"} 1
 # HELP aether_gateway_concurrency_rejected_total Number of operations rejected by the concurrency gate.
 # TYPE aether_gateway_concurrency_rejected_total counter
 aether_gateway_concurrency_rejected_total{gate="gateway_requests_distributed"} 11
-# HELP aether_gateway_tunnel_proxy_connections Current number of connected proxy sockets.
-# TYPE aether_gateway_tunnel_proxy_connections gauge
-aether_gateway_tunnel_proxy_connections 28
-# HELP aether_gateway_tunnel_nodes Current number of connected logical nodes.
-# TYPE aether_gateway_tunnel_nodes gauge
-aether_gateway_tunnel_nodes 6
-# HELP aether_gateway_tunnel_active_streams Current number of active local relay streams.
-# TYPE aether_gateway_tunnel_active_streams gauge
-aether_gateway_tunnel_active_streams 164
-# HELP aether_gateway_tunnel_proxy_connections_available Current number of available proxy sockets.
-# TYPE aether_gateway_tunnel_proxy_connections_available gauge
-aether_gateway_tunnel_proxy_connections_available 24
-# HELP aether_gateway_tunnel_proxy_connections_closing Current number of closing proxy sockets.
-# TYPE aether_gateway_tunnel_proxy_connections_closing gauge
-aether_gateway_tunnel_proxy_connections_closing 1
-# HELP aether_gateway_tunnel_proxy_connections_draining Current number of draining proxy sockets.
-# TYPE aether_gateway_tunnel_proxy_connections_draining gauge
-aether_gateway_tunnel_proxy_connections_draining 2
-# HELP aether_gateway_tunnel_proxy_connections_soft_avoid Current number of soft-avoid proxy sockets.
-# TYPE aether_gateway_tunnel_proxy_connections_soft_avoid gauge
-aether_gateway_tunnel_proxy_connections_soft_avoid 3
-# HELP aether_gateway_tunnel_proxy_outbound_queue_depth_total Current outbound queue depth total.
-# TYPE aether_gateway_tunnel_proxy_outbound_queue_depth_total gauge
-aether_gateway_tunnel_proxy_outbound_queue_depth_total 312
-# HELP aether_gateway_tunnel_proxy_outbound_queue_depth_max Current outbound queue max depth.
-# TYPE aether_gateway_tunnel_proxy_outbound_queue_depth_max gauge
-aether_gateway_tunnel_proxy_outbound_queue_depth_max 38
-# HELP aether_gateway_tunnel_proxy_outbound_queue_capacity_total Current outbound queue capacity total.
-# TYPE aether_gateway_tunnel_proxy_outbound_queue_capacity_total gauge
-aether_gateway_tunnel_proxy_outbound_queue_capacity_total 2048
-# HELP aether_gateway_tunnel_proxy_outbound_queue_rejected_full_total Outbound queue full rejections.
-# TYPE aether_gateway_tunnel_proxy_outbound_queue_rejected_full_total counter
-aether_gateway_tunnel_proxy_outbound_queue_rejected_full_total 7
-# HELP aether_gateway_tunnel_proxy_outbound_queue_rejected_closed_total Outbound queue closed rejections.
-# TYPE aether_gateway_tunnel_proxy_outbound_queue_rejected_closed_total counter
-aether_gateway_tunnel_proxy_outbound_queue_rejected_closed_total 2
-# HELP aether_gateway_tunnel_proxy_connection_congested_total Congested proxy selections.
-# TYPE aether_gateway_tunnel_proxy_connection_congested_total counter
-aether_gateway_tunnel_proxy_connection_congested_total 21
-# HELP aether_gateway_tunnel_proxy_soft_avoid_selection_total Soft-avoid proxy selections.
-# TYPE aether_gateway_tunnel_proxy_soft_avoid_selection_total counter
-aether_gateway_tunnel_proxy_soft_avoid_selection_total 18
-# HELP aether_gateway_tunnel_proxy_selection_retry_total Proxy selection retries.
-# TYPE aether_gateway_tunnel_proxy_selection_retry_total counter
-aether_gateway_tunnel_proxy_selection_retry_total 11
-# HELP aether_gateway_tunnel_proxy_selection_unavailable_total Proxy selection unavailable events.
-# TYPE aether_gateway_tunnel_proxy_selection_unavailable_total counter
-aether_gateway_tunnel_proxy_selection_unavailable_total 4
-# HELP aether_gateway_decision_remote_total Number of requests that fell back to Python decision endpoints.
+# HELP aether_gateway_decision_remote_total Number of requests that used remote decision fallback.
 # TYPE aether_gateway_decision_remote_total counter
 aether_gateway_decision_remote_total{route_kind="chat",reason="local_decision_miss"} 4
 aether_gateway_decision_remote_total{route_kind="responses",reason="remote_decision_miss"} 2
-# HELP aether_gateway_plan_fallback_total Number of requests that fell back to Python plan endpoints.
+# HELP aether_gateway_plan_fallback_total Number of requests that used fallback execution plans.
 # TYPE aether_gateway_plan_fallback_total counter
 aether_gateway_plan_fallback_total{route_kind="chat",reason="scheduler_decision_unsupported"} 3
-# HELP aether_gateway_control_execute_fallback_total Number of requests that fell back to Python control execution.
+# HELP aether_gateway_control_execute_fallback_total Number of requests that used control execution fallback.
 # TYPE aether_gateway_control_execute_fallback_total counter
 aether_gateway_control_execute_fallback_total{route_kind="chat",reason="control_execute_emergency"} 1
 # HELP aether_gateway_remote_execute_emergency_total Number of requests that used remote emergency execution fallback.

@@ -111,7 +111,6 @@
                 </Badge>
               </div>
               <div class="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
-                <span class="shrink-0 rounded bg-muted px-1.5 py-px font-mono text-[10px]">{{ provider.provider_type || 'custom' }}</span>
                 <span
                   v-if="provider.description"
                   class="truncate"
@@ -260,7 +259,6 @@ const filteredProviders = computed(() => {
   return props.providers.filter((provider) => {
     return [
       provider.name,
-      provider.provider_type,
       provider.description,
       provider.website,
     ].some(value => String(value || '').toLowerCase().includes(keyword))

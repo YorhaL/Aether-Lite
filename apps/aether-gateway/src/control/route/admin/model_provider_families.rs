@@ -22,24 +22,6 @@ pub(super) fn classify_admin_model_provider_family_route(
             "admin:models",
             false,
         ))
-    } else if method == http::Method::GET && normalized_path == "/api/admin/models/external/config"
-    {
-        Some(classified(
-            "admin_proxy",
-            "model_external_manage",
-            "external_config_get",
-            "admin:models",
-            false,
-        ))
-    } else if method == http::Method::PUT && normalized_path == "/api/admin/models/external/config"
-    {
-        Some(classified(
-            "admin_proxy",
-            "model_external_manage",
-            "external_config_set",
-            "admin:models",
-            false,
-        ))
     } else if method == http::Method::DELETE
         && normalized_path == "/api/admin/models/external/cache"
     {
@@ -137,39 +119,10 @@ pub(super) fn classify_admin_model_provider_family_route(
             "admin:providers",
             false,
         ))
-    } else if method == http::Method::GET
-        && normalized_path.starts_with("/api/admin/providers/")
-        && normalized_path.ends_with("/pool-status")
+    } else if normalized_path.starts_with("/api/admin/providers/")
+        && (normalized_path.ends_with("/pool-status") || normalized_path.contains("/pool/"))
     {
-        Some(classified(
-            "admin_proxy",
-            "providers_manage",
-            "pool_status",
-            "admin:providers",
-            false,
-        ))
-    } else if method == http::Method::POST
-        && normalized_path.starts_with("/api/admin/providers/")
-        && normalized_path.contains("/pool/clear-cooldown/")
-    {
-        Some(classified(
-            "admin_proxy",
-            "providers_manage",
-            "clear_pool_cooldown",
-            "admin:providers",
-            false,
-        ))
-    } else if method == http::Method::POST
-        && normalized_path.starts_with("/api/admin/providers/")
-        && normalized_path.contains("/pool/reset-cost/")
-    {
-        Some(classified(
-            "admin_proxy",
-            "providers_manage",
-            "reset_pool_cost",
-            "admin:providers",
-            false,
-        ))
+        None
     } else if method == http::Method::GET
         && normalized_path.starts_with("/api/admin/providers/")
         && normalized_path.ends_with("/models")

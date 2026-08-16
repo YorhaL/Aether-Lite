@@ -11,22 +11,17 @@ mod resolution;
 mod runtime;
 mod selection;
 
-#[cfg(test)]
-mod tests;
-
 use aether_data_contracts::repository::candidate_selection::{
     StoredMinimalCandidateSelectionRow, StoredProviderModelMapping,
 };
 use aether_data_contracts::repository::provider_catalog::{
     StoredProviderCatalogKey, StoredProviderCatalogProvider,
 };
-use aether_data_contracts::repository::quota::StoredProviderQuotaSnapshot;
 use aether_scheduler_core::{
     candidate_model_names, candidate_supports_required_capability, matches_model_mapping,
     normalize_api_format, resolve_provider_model_name, select_provider_model_name,
     ClientSessionAffinity, SchedulerMinimalCandidateSelectionCandidate,
 };
-use aether_wallet::{ProviderBillingType, ProviderQuotaSnapshot};
 use regex::Regex;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;

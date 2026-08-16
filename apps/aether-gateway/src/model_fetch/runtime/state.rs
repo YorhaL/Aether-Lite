@@ -1,17 +1,16 @@
-use aether_contracts::{ExecutionPlan, ExecutionResult, ProxySnapshot};
+use aether_contracts::{ExecutionPlan, ExecutionResult};
 use aether_data_contracts::repository::global_models::{
     AdminGlobalModelListQuery, AdminProviderModelListQuery, StoredAdminGlobalModelPage,
     StoredAdminProviderModel, UpsertAdminProviderModelRecord,
 };
 use aether_data_contracts::repository::provider_catalog::{
-    ProviderCatalogUpstreamMetadataNamespaceUpdate, StoredProviderCatalogEndpoint,
-    StoredProviderCatalogKey, StoredProviderCatalogProvider,
+    StoredProviderCatalogEndpoint, StoredProviderCatalogKey, StoredProviderCatalogProvider,
 };
 use aether_model_fetch::{ModelFetchAssociationStore, ModelFetchTransportRuntime};
 use async_trait::async_trait;
 use serde_json::Value;
 
-use crate::provider_transport::{GatewayProviderTransportSnapshot, LocalResolvedOAuthRequestAuth};
+use crate::provider_transport::GatewayProviderTransportSnapshot;
 use crate::{AppState, GatewayError};
 
 #[async_trait]
@@ -49,15 +48,6 @@ pub(crate) trait ModelFetchRuntimeState:
         allowed_models: Option<&Value>,
         last_models_fetch_at_unix_secs: Option<u64>,
         last_models_fetch_error: Option<&str>,
-        updated_at_unix_secs: Option<u64>,
-    ) -> Result<(), GatewayError>;
-
-    async fn update_provider_catalog_key_model_fetch_success(
-        &self,
-        key_id: &str,
-        allowed_models: Option<&Value>,
-        last_models_fetch_at_unix_secs: u64,
-        upstream_metadata_updates: &[ProviderCatalogUpstreamMetadataNamespaceUpdate],
         updated_at_unix_secs: Option<u64>,
     ) -> Result<(), GatewayError>;
 

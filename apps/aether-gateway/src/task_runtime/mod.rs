@@ -17,43 +17,25 @@ use uuid::Uuid;
 use crate::{AppState, GatewayError};
 
 pub(crate) const TASK_KEY_PROVIDER_DELETE: &str = "admin.provider.delete";
-pub(crate) const TASK_KEY_PROVIDER_OAUTH_BATCH_IMPORT: &str = "admin.provider.oauth.batch_import";
 pub(crate) const TASK_KEY_SYSTEM_S3_BACKUP: &str = "system.s3.backup";
 pub(crate) const TASK_KEY_SYSTEM_S3_BACKUP_WORKER: &str = "system.s3.backup.worker";
 pub(crate) const TASK_KEY_USAGE_QUEUE_WORKER: &str = "usage.queue.worker";
 pub(crate) const TASK_KEY_USAGE_COUNTER_FLUSH: &str = "usage.counter.flush.worker";
 pub(crate) const TASK_KEY_VIDEO_TASK_POLLER: &str = "video.task.poller";
 pub(crate) const TASK_KEY_MODEL_FETCH_WORKER: &str = "model.fetch.worker";
-pub(crate) const TASK_KEY_PROVIDER_QUOTA_RESET: &str = "provider.quota.reset.worker";
-pub(crate) const TASK_KEY_ACCOUNT_SELF_CHECK: &str = "account.self_check.worker";
-pub(crate) const TASK_KEY_POOL_SCORE_REBUILD: &str = "pool.score.rebuild.worker";
-pub(crate) const TASK_KEY_POOL_QUOTA_PROBE: &str = "pool.quota.probe.worker";
 pub(crate) const TASK_KEY_POOL_MONITOR: &str = "pool.monitor.worker";
 pub(crate) const TASK_KEY_AUDIT_CLEANUP: &str = "maintenance.audit.cleanup";
 pub(crate) const TASK_KEY_DB_MAINTENANCE: &str = "maintenance.database";
 pub(crate) const TASK_KEY_PENDING_CLEANUP: &str = "maintenance.pending.cleanup";
 pub(crate) const TASK_KEY_REQUEST_CANDIDATE_CLEANUP: &str = "maintenance.request.candidate.cleanup";
 pub(crate) const TASK_KEY_GEMINI_FILES_CLEANUP: &str = "maintenance.gemini.files.cleanup";
-pub(crate) const TASK_KEY_FIXED_PROVIDER_RECONCILIATION: &str =
-    "maintenance.provider.fixed_template.reconcile";
-pub(crate) const TASK_KEY_OAUTH_TOKEN_REFRESH: &str = "maintenance.oauth.token.refresh";
-pub(crate) const TASK_KEY_PROXY_NODE_STALE_CLEANUP: &str = "maintenance.proxy.node.stale.cleanup";
-pub(crate) const TASK_KEY_PROXY_NODE_METRICS_CLEANUP: &str =
-    "maintenance.proxy.node.metrics.cleanup";
-pub(crate) const TASK_KEY_PROXY_UPGRADE_ROLLOUT: &str = "maintenance.proxy.upgrade.rollout";
-pub(crate) const TASK_KEY_PROVIDER_CHECKIN: &str = "maintenance.provider.checkin";
-pub(crate) const TASK_KEY_PROVIDER_QUOTA_ALERT: &str = "maintenance.provider.quota_alert";
 pub(crate) const TASK_KEY_USAGE_CLEANUP: &str = "maintenance.usage.cleanup";
-pub(crate) const TASK_KEY_WALLET_DAILY_USAGE_AGG: &str = "maintenance.wallet.daily.usage.agg";
 pub(crate) const TASK_KEY_STATS_DAILY_AGG: &str = "maintenance.stats.daily.agg";
 pub(crate) const TASK_KEY_STATS_HOURLY_AGG: &str = "maintenance.stats.hourly.agg";
 pub(crate) const TASK_KEY_USAGE_SYNC_REPORT: &str = "usage.sync.report";
-pub(crate) const TASK_KEY_PROVIDER_OAUTH_ACCOUNT_REFRESH: &str = "provider.oauth.account.refresh";
-pub(crate) const TASK_KEY_PROVIDER_BALANCE_REFRESH: &str = "provider.ops.balance.refresh";
 const PROVIDER_DELETE_LOCK_TTL_SECS: u64 = 60 * 60 * 6;
 
 const RETRY_ONCE: RetryPolicy = RetryPolicy { max_attempts: 1 };
-const RETRY_THREE: RetryPolicy = RetryPolicy { max_attempts: 3 };
 const BACKGROUND_TASK_RUN_ID_MAX_BYTES: usize = 64;
 const WORKER_BOOT_RUN_ID_HASH_HEX_BYTES: usize = 20;
 
@@ -131,7 +113,7 @@ where
 {
     let runtime_state = app.runtime_state.clone();
     let metrics = app.task_supervisor_metrics.clone();
-    let owner = app.tunnel.local_instance_id().to_string();
+    let owner = app.gateway_instance_id().to_string();
     aether_gateway_workers::spawn_singleton_worker_with_context(
         runtime_state,
         metrics,
@@ -145,14 +127,6 @@ where
 const TASK_DEFINITIONS: &[TaskDefinition] = &[
     TaskDefinition::new(
         TASK_KEY_PROVIDER_DELETE,
-        TaskKind::OnDemand,
-        "manual",
-        false,
-        true,
-        RETRY_ONCE,
-    ),
-    TaskDefinition::new(
-        TASK_KEY_PROVIDER_OAUTH_BATCH_IMPORT,
         TaskKind::OnDemand,
         "manual",
         false,
@@ -208,38 +182,6 @@ const TASK_DEFINITIONS: &[TaskDefinition] = &[
         RETRY_ONCE,
     ),
     TaskDefinition::new(
-        TASK_KEY_PROVIDER_QUOTA_RESET,
-        TaskKind::Scheduled,
-        "daily",
-        true,
-        true,
-        RETRY_ONCE,
-    ),
-    TaskDefinition::new(
-        TASK_KEY_ACCOUNT_SELF_CHECK,
-        TaskKind::Scheduled,
-        "interval",
-        true,
-        true,
-        RETRY_ONCE,
-    ),
-    TaskDefinition::new(
-        TASK_KEY_POOL_SCORE_REBUILD,
-        TaskKind::Scheduled,
-        "interval",
-        true,
-        true,
-        RETRY_ONCE,
-    ),
-    TaskDefinition::new(
-        TASK_KEY_POOL_QUOTA_PROBE,
-        TaskKind::Scheduled,
-        "interval",
-        true,
-        true,
-        RETRY_ONCE,
-    ),
-    TaskDefinition::new(
         TASK_KEY_POOL_MONITOR,
         TaskKind::Scheduled,
         "interval",
@@ -288,71 +230,7 @@ const TASK_DEFINITIONS: &[TaskDefinition] = &[
         RETRY_ONCE,
     ),
     TaskDefinition::new(
-        TASK_KEY_FIXED_PROVIDER_RECONCILIATION,
-        TaskKind::FireAndForget,
-        "startup",
-        true,
-        false,
-        RETRY_THREE,
-    ),
-    TaskDefinition::new(
-        TASK_KEY_OAUTH_TOKEN_REFRESH,
-        TaskKind::Scheduled,
-        "interval",
-        true,
-        true,
-        RETRY_ONCE,
-    ),
-    TaskDefinition::new(
-        TASK_KEY_PROXY_NODE_STALE_CLEANUP,
-        TaskKind::Scheduled,
-        "interval",
-        true,
-        true,
-        RETRY_ONCE,
-    ),
-    TaskDefinition::new(
-        TASK_KEY_PROXY_NODE_METRICS_CLEANUP,
-        TaskKind::Scheduled,
-        "interval",
-        true,
-        true,
-        RETRY_ONCE,
-    ),
-    TaskDefinition::new(
-        TASK_KEY_PROXY_UPGRADE_ROLLOUT,
-        TaskKind::Scheduled,
-        "interval",
-        true,
-        true,
-        RETRY_ONCE,
-    ),
-    TaskDefinition::new(
-        TASK_KEY_PROVIDER_CHECKIN,
-        TaskKind::Scheduled,
-        "interval",
-        true,
-        true,
-        RETRY_ONCE,
-    ),
-    TaskDefinition::new(
-        TASK_KEY_PROVIDER_QUOTA_ALERT,
-        TaskKind::Scheduled,
-        "interval",
-        true,
-        true,
-        RETRY_ONCE,
-    ),
-    TaskDefinition::new(
         TASK_KEY_USAGE_CLEANUP,
-        TaskKind::Scheduled,
-        "interval",
-        true,
-        true,
-        RETRY_ONCE,
-    ),
-    TaskDefinition::new(
-        TASK_KEY_WALLET_DAILY_USAGE_AGG,
         TaskKind::Scheduled,
         "interval",
         true,
@@ -377,22 +255,6 @@ const TASK_DEFINITIONS: &[TaskDefinition] = &[
     ),
     TaskDefinition::new(
         TASK_KEY_USAGE_SYNC_REPORT,
-        TaskKind::FireAndForget,
-        "internal",
-        false,
-        false,
-        RETRY_ONCE,
-    ),
-    TaskDefinition::new(
-        TASK_KEY_PROVIDER_OAUTH_ACCOUNT_REFRESH,
-        TaskKind::FireAndForget,
-        "internal",
-        false,
-        false,
-        RETRY_ONCE,
-    ),
-    TaskDefinition::new(
-        TASK_KEY_PROVIDER_BALANCE_REFRESH,
         TaskKind::FireAndForget,
         "internal",
         false,
@@ -545,7 +407,7 @@ pub(crate) fn spawn_record_worker_boot(
 ) -> JoinHandle<()> {
     spawn_named("task-runtime-record-worker-boot", async move {
         let now = now_unix_secs();
-        let gateway_instance_id = app.tunnel.local_instance_id().to_string();
+        let gateway_instance_id = app.gateway_instance_id().to_string();
         let run = build_worker_boot_run(task_key, kind, trigger, now);
         let run_id = run.id.clone();
         if upsert_run_with_logging(&app, run).await.is_none() {
@@ -627,7 +489,7 @@ pub(crate) async fn submit_provider_delete_task(
             status: BackgroundTaskStatus::Queued,
             attempt: 1,
             max_attempts,
-            owner_instance: Some(app.tunnel.local_instance_id().to_string()),
+            owner_instance: Some(app.gateway_instance_id().to_string()),
             progress_percent: 0,
             progress_message: Some("delete task queued".to_string()),
             payload_json: Some(serde_json::json!({ "provider_id": provider_id.clone() })),
@@ -656,7 +518,7 @@ pub(crate) async fn submit_provider_delete_task(
         let lock_ttl = std::time::Duration::from_secs(PROVIDER_DELETE_LOCK_TTL_SECS);
         let lock = app
             .runtime_state
-            .lock_try_acquire(&lock_key, app.tunnel.local_instance_id(), lock_ttl)
+            .lock_try_acquire(&lock_key, app.gateway_instance_id(), lock_ttl)
             .await
             .ok()
             .flatten();
@@ -901,7 +763,7 @@ mod worker_boot_run_id_tests {
                     GatewayDataState::disabled()
                         .with_background_task_repository_for_tests(repository.clone()),
                 )
-                .with_tunnel_identity_for_tests(gateway_instance_id, None)
+                .with_gateway_instance_id(gateway_instance_id)
         };
 
         spawn_record_worker_boot(

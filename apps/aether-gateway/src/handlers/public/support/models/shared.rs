@@ -30,42 +30,6 @@ pub(crate) fn models_api_format(request_context: &GatewayPublicRequestContext) -
     }
 }
 
-const MODELS_CROSS_FORMAT_QUERY_API_FORMATS: &[&str] = &[
-    "openai:chat",
-    "openai:responses",
-    "openai:responses:compact",
-    "openai:image",
-    "claude:messages",
-    "gemini:generate_content",
-];
-
-const MODELS_EMBEDDING_QUERY_API_FORMATS: &[&str] = &[
-    "openai:embedding",
-    "jina:embedding",
-    "gemini:embedding",
-    "doubao:embedding",
-    "aliyun:multimodal_embedding",
-];
-const MODELS_RERANK_QUERY_API_FORMATS: &[&str] = &["openai:rerank", "jina:rerank"];
-
-pub(super) fn models_query_api_formats(api_format: &str) -> &'static [&'static str] {
-    match crate::ai_serving::normalize_api_format_alias(api_format).as_str() {
-        "openai:chat"
-        | "openai:responses"
-        | "openai:responses:compact"
-        | "claude:messages"
-        | "gemini:generate_content" => MODELS_CROSS_FORMAT_QUERY_API_FORMATS,
-        "openai:image" => &["openai:image"],
-        "openai:embedding"
-        | "jina:embedding"
-        | "gemini:embedding"
-        | "doubao:embedding"
-        | "aliyun:multimodal_embedding" => MODELS_EMBEDDING_QUERY_API_FORMATS,
-        "openai:rerank" | "jina:rerank" => MODELS_RERANK_QUERY_API_FORMATS,
-        _ => &[],
-    }
-}
-
 pub(super) fn models_detail_id(request_path: &str) -> Option<String> {
     let raw = if let Some(value) = request_path.strip_prefix("/v1/models/") {
         value
@@ -86,7 +50,6 @@ fn auth_snapshot_allows_provider_for_models(
     auth_snapshot: Option<&crate::data::auth::GatewayAuthApiKeySnapshot>,
     provider_id: &str,
     provider_name: &str,
-    provider_type: &str,
 ) -> bool {
     let Some(allowed) = auth_snapshot
         .and_then(crate::data::auth::GatewayAuthApiKeySnapshot::effective_allowed_providers)
@@ -95,12 +58,7 @@ fn auth_snapshot_allows_provider_for_models(
     };
 
     allowed.iter().any(|value| {
-        aether_scheduler_core::provider_matches_allowed_value(
-            value,
-            provider_id,
-            provider_name,
-            provider_type,
-        )
+        aether_scheduler_core::provider_matches_allowed_value(value, provider_id, provider_name)
     })
 }
 
@@ -205,7 +163,6 @@ pub(super) fn filter_eligible_model_rows(
                 auth_snapshot,
                 &row.provider_id,
                 &row.provider_name,
-                &row.provider_type,
             )
         })
         .filter(|row| auth_snapshot_allows_model_for_models(auth_snapshot, &row.global_model_name))

@@ -5,22 +5,19 @@ use aether_ai_formats::api::{
     EXECUTION_RUNTIME_SYNC_DECISION_ACTION,
 };
 use aether_contracts::{
-    ExecutionTimeouts, ProxySnapshot, ResolvedTransportProfile, TRANSPORT_BACKEND_HYPER_RUSTLS,
-    TRANSPORT_BACKEND_REQWEST_RUSTLS, TRANSPORT_HTTP_MODE_HTTP1_ONLY,
+    ExecutionTimeouts, ResolvedTransportProfile, TRANSPORT_BACKEND_REQWEST_RUSTLS,
+    TRANSPORT_HTTP_MODE_HTTP1_ONLY,
 };
 use serde_json::{json, Map, Value};
 
-use crate::{AiExecutionDecision, AiRequestGzipPolicy, ConversionMode, ExecutionStrategy};
+use crate::{AiExecutionDecision, AiRequestGzipPolicy};
 
 pub struct AiExecutionDecisionResponseParts {
     pub decision_is_stream: bool,
     pub decision_kind: String,
-    pub execution_strategy: ExecutionStrategy,
-    pub conversion_mode: ConversionMode,
     pub request_id: String,
     pub candidate_id: String,
     pub provider_name: String,
-    pub provider_type: String,
     pub provider_id: String,
     pub endpoint_id: String,
     pub key_id: String,
@@ -40,7 +37,6 @@ pub struct AiExecutionDecisionResponseParts {
     pub content_type: Option<String>,
     pub content_encoding: Option<String>,
     pub request_gzip: Option<AiRequestGzipPolicy>,
-    pub proxy: Option<ProxySnapshot>,
     pub transport_profile: Option<ResolvedTransportProfile>,
     pub timeouts: Option<ExecutionTimeouts>,
     pub upstream_is_stream: bool,
@@ -52,21 +48,15 @@ pub struct AiExecutionDecisionResponseParts {
 pub fn build_ai_execution_decision_response(
     mut parts: AiExecutionDecisionResponseParts,
 ) -> AiExecutionDecision {
-    parts.report_context = attach_outgoing_tls_fingerprint(
-        parts.report_context,
-        parts.transport_profile.as_ref(),
-        parts.proxy.as_ref(),
-    );
+    parts.report_context =
+        attach_outgoing_tls_fingerprint(parts.report_context, parts.transport_profile.as_ref());
 
     AiExecutionDecision {
         action: ai_execution_decision_action(parts.decision_is_stream).to_string(),
         decision_kind: Some(parts.decision_kind),
-        execution_strategy: Some(parts.execution_strategy.as_str().to_string()),
-        conversion_mode: Some(parts.conversion_mode.as_str().to_string()),
         request_id: Some(parts.request_id),
         candidate_id: Some(parts.candidate_id),
         provider_name: Some(parts.provider_name),
-        provider_type: Some(parts.provider_type),
         provider_id: Some(parts.provider_id),
         endpoint_id: Some(parts.endpoint_id),
         key_id: Some(parts.key_id),
@@ -77,8 +67,6 @@ pub fn build_ai_execution_decision_response(
         auth_value: parts.auth_value,
         provider_api_format: Some(parts.provider_api_format.clone()),
         client_api_format: Some(parts.client_api_format.clone()),
-        provider_contract: Some(parts.provider_api_format),
-        client_contract: Some(parts.client_api_format),
         model_name: Some(parts.model_name),
         mapped_model: Some(parts.mapped_model),
         prompt_cache_key: parts.prompt_cache_key,
@@ -89,7 +77,6 @@ pub fn build_ai_execution_decision_response(
         content_type: parts.content_type,
         content_encoding: parts.content_encoding,
         request_gzip: parts.request_gzip,
-        proxy: parts.proxy,
         transport_profile: parts.transport_profile,
         timeouts: parts.timeouts,
         upstream_is_stream: parts.upstream_is_stream,
@@ -110,7 +97,6 @@ pub const fn ai_execution_decision_action(decision_is_stream: bool) -> &'static 
 fn attach_outgoing_tls_fingerprint(
     report_context: Option<Value>,
     transport_profile: Option<&ResolvedTransportProfile>,
-    proxy: Option<&ProxySnapshot>,
 ) -> Option<Value> {
     let mut report_context = match report_context {
         Some(Value::Object(object)) => object,
@@ -122,28 +108,17 @@ fn attach_outgoing_tls_fingerprint(
     if let Value::Object(object) = tls_fingerprint {
         object.insert(
             "outgoing".to_string(),
-            outgoing_tls_fingerprint_value(transport_profile, proxy),
+            outgoing_tls_fingerprint_value(transport_profile),
         );
     }
     Some(Value::Object(report_context))
 }
 
-fn outgoing_tls_fingerprint_value(
-    transport_profile: Option<&ResolvedTransportProfile>,
-    proxy: Option<&ProxySnapshot>,
-) -> Value {
-    let via_local_proxy = proxy
-        .and_then(|value| value.node_id.as_deref())
-        .map(str::trim)
-        .is_some_and(|value| !value.is_empty());
+fn outgoing_tls_fingerprint_value(transport_profile: Option<&ResolvedTransportProfile>) -> Value {
     let backend = transport_profile
         .map(|profile| profile.backend.trim())
         .filter(|value| !value.is_empty())
-        .unwrap_or(if via_local_proxy {
-            TRANSPORT_BACKEND_HYPER_RUSTLS
-        } else {
-            TRANSPORT_BACKEND_REQWEST_RUSTLS
-        });
+        .unwrap_or(TRANSPORT_BACKEND_REQWEST_RUSTLS);
     let http_mode = transport_profile
         .map(|profile| profile.http_mode.trim())
         .filter(|value| !value.is_empty())
@@ -153,14 +128,6 @@ fn outgoing_tls_fingerprint_value(
     } else {
         json!(["h2", "http/1.1"])
     };
-    let transport_path = if via_local_proxy {
-        "aether_proxy_tunnel"
-    } else if proxy.is_some() {
-        "direct_with_proxy"
-    } else {
-        "direct"
-    };
-
     let mut object = Map::new();
     object.insert(
         "source".to_string(),
@@ -169,7 +136,7 @@ fn outgoing_tls_fingerprint_value(
     object.insert("observed".to_string(), Value::Bool(false));
     object.insert(
         "transport_path".to_string(),
-        Value::String(transport_path.to_string()),
+        Value::String("direct".to_string()),
     );
     object.insert("backend".to_string(), Value::String(backend.to_string()));
     object.insert(
@@ -206,12 +173,9 @@ mod tests {
         AiExecutionDecisionResponseParts {
             decision_is_stream: false,
             decision_kind: "local_sync".to_string(),
-            execution_strategy: ExecutionStrategy::LocalSameFormat,
-            conversion_mode: ConversionMode::None,
             request_id: "trace-1".to_string(),
             candidate_id: "candidate-1".to_string(),
             provider_name: "OpenAI".to_string(),
-            provider_type: "openai".to_string(),
             provider_id: "provider-1".to_string(),
             endpoint_id: "endpoint-1".to_string(),
             key_id: "key-1".to_string(),
@@ -231,7 +195,6 @@ mod tests {
             content_type: Some("application/json".to_string()),
             content_encoding: None,
             request_gzip: None,
-            proxy: None,
             transport_profile: None,
             timeouts: None,
             upstream_is_stream: false,
@@ -285,20 +248,5 @@ mod tests {
             tls_fingerprint["outgoing"]["alpn_offered"],
             json!(["h2", "http/1.1"])
         );
-    }
-
-    #[test]
-    fn decision_response_defaults_outgoing_tls_to_proxy_hyper_backend_for_node_proxy() {
-        let mut parts = sample_parts();
-        parts.proxy = Some(ProxySnapshot {
-            node_id: Some("proxy-node-1".to_string()),
-            ..ProxySnapshot::default()
-        });
-
-        let decision = build_ai_execution_decision_response(parts);
-        let outgoing = &decision.report_context.unwrap()["tls_fingerprint"]["outgoing"];
-
-        assert_eq!(outgoing["transport_path"], "aether_proxy_tunnel");
-        assert_eq!(outgoing["backend"], TRANSPORT_BACKEND_HYPER_RUSTLS);
     }
 }

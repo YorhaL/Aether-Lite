@@ -58,7 +58,6 @@ describe('useSystemConfig', () => {
 
     resolveConfigs?.([
       { key: 'request_record_level', value: 'basic' },
-      { key: 'proxy_node_metrics_cleanup_batch_size', value: 5000 },
       { key: 'enable_standard_text_sync_heartbeat', value: false },
     ])
     await loadPromise

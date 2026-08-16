@@ -28,14 +28,14 @@ import ArchitectureDiagram from './components/ArchitectureDiagram.vue'
         class="p-6 mt-6"
       >
         <div class="space-y-5">
-          <!-- 1. 多格式兼容接入 -->
+          <!-- 1. 同格式接入 -->
           <div class="space-y-1.5">
             <div class="flex items-center gap-2.5">
               <span class="text-xs font-medium font-mono text-[#cc785c]">1.</span>
-              <span class="text-sm font-medium text-[#262624] dark:text-[#f1ead8]">多格式兼容接入</span>
+              <span class="text-sm font-medium text-[#262624] dark:text-[#f1ead8]">同格式接入</span>
             </div>
             <p class="text-sm text-[#666663] dark:text-[#a3a094] leading-relaxed pl-[22px]">
-              支持多种 API 格式、端点配置及认证方式，不同客户端均可平滑接入。
+              每个请求只会路由到 API 格式相同的端点，并以原始格式透传。
             </p>
           </div>
 
@@ -50,22 +50,22 @@ import ArchitectureDiagram from './components/ArchitectureDiagram.vue'
             </p>
           </div>
 
-          <!-- 3. 跨平台格式转换 -->
+          <!-- 3. 同格式原生透传 -->
           <div class="space-y-2">
             <div class="flex items-center gap-2.5">
               <span class="text-xs font-medium font-mono text-[#cc785c]">3.</span>
-              <span class="text-sm font-medium text-[#262624] dark:text-[#f1ead8]">跨平台格式转换</span>
+              <span class="text-sm font-medium text-[#262624] dark:text-[#f1ead8]">同格式原生透传</span>
             </div>
             <div class="flex flex-col md:flex-row items-stretch md:items-center gap-2 bg-[#f5f5f0]/50 dark:bg-[rgba(227,224,211,0.05)] p-3 rounded-xl border border-[#e5e4df] dark:border-[rgba(227,224,211,0.06)]">
               <div class="flex-1 bg-white dark:bg-[#191714] border border-[#e5e4df] dark:border-white/10 rounded-lg py-2 px-3 text-center text-xs font-medium text-[#262624] dark:text-white/80">
-                兼容格式入口
+                原生 API 入口
               </div>
               <ArrowRight class="hidden md:block w-4 h-4 text-[#cc785c]/40 dark:text-[#cc785c]/30 shrink-0" />
               <div class="md:hidden flex justify-center">
                 <ArrowRight class="w-4 h-4 text-[#cc785c]/40 dark:text-[#cc785c]/30 rotate-90" />
               </div>
               <div class="flex-1 bg-[#cc785c]/5 dark:bg-[#cc785c]/10 border border-[#cc785c]/15 dark:border-[#cc785c]/20 rounded-lg py-2 px-3 text-center text-xs font-medium text-[#cc785c] dark:text-[#d4a27f]">
-                格式转换
+                同格式请求
               </div>
               <ArrowRight class="hidden md:block w-4 h-4 text-[#cc785c]/40 dark:text-[#cc785c]/30 shrink-0" />
               <div class="md:hidden flex justify-center">
@@ -79,14 +79,14 @@ import ArchitectureDiagram from './components/ArchitectureDiagram.vue'
                 <ArrowRight class="w-4 h-4 text-[#cc785c]/40 dark:text-[#cc785c]/30 rotate-90" />
               </div>
               <div class="flex-1 bg-[#cc785c]/5 dark:bg-[#cc785c]/10 border border-[#cc785c]/15 dark:border-[#cc785c]/20 rounded-lg py-2 px-3 text-center text-xs font-medium text-[#cc785c] dark:text-[#d4a27f]">
-                格式转换
+                同格式响应
               </div>
               <ArrowRight class="hidden md:block w-4 h-4 text-[#cc785c]/40 dark:text-[#cc785c]/30 shrink-0" />
               <div class="md:hidden flex justify-center">
                 <ArrowRight class="w-4 h-4 text-[#cc785c]/40 dark:text-[#cc785c]/30 rotate-90" />
               </div>
               <div class="flex-1 bg-white dark:bg-[#191714] border border-[#e5e4df] dark:border-white/10 rounded-lg py-2 px-3 text-center text-xs font-medium text-[#262624] dark:text-white/80">
-                兼容格式响应
+                原生 API 响应
               </div>
             </div>
           </div>

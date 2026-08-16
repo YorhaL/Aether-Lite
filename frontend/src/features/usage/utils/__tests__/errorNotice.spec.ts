@@ -53,7 +53,7 @@ describe('request failure notice', () => {
         reason_label: '所有候选均被跳过',
         title: '本地调度失败：所有候选均被跳过',
         message: '没有可用提供商支持模型 gpt-5 的流式请求',
-        reason_summary: 'pool_account_exhausted 2 次',
+        reason_summary: 'provider_key_unavailable 2 次',
         status_code: 503,
         no_upstream_attempt: true,
       },
@@ -64,7 +64,7 @@ describe('request failure notice', () => {
       message: '没有可用提供商支持模型 gpt-5 的流式请求',
       isSchedulingFailure: true,
       meta: [
-        'pool_account_exhausted 2 次',
+        'provider_key_unavailable 2 次',
         '所有候选均被跳过',
         'all_candidates_skipped',
         'HTTP 503',

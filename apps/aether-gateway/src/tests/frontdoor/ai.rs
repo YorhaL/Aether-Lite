@@ -14,7 +14,6 @@ use aether_data::repository::global_models::InMemoryGlobalModelReadRepository;
 use aether_data::DataLayerError;
 use aether_data_contracts::repository::candidate_selection::{
     MinimalCandidateSelectionReadRepository, StoredMinimalCandidateSelectionRow,
-    StoredPoolKeyCandidateRowsByKeyIdsQuery, StoredPoolKeyCandidateRowsQuery,
     StoredRequestedModelCandidateRowsQuery,
 };
 use aether_data_contracts::repository::global_models::{
@@ -65,8 +64,6 @@ fn sample_codex_models_candidate_row(
         global_model_name,
         10,
     );
-    row.provider_type = "codex".to_string();
-    row.key_auth_type = "oauth".to_string();
     row.model_provider_model_name = source_model_name.to_string();
     row.model_provider_model_mappings = Some(vec![
         aether_data_contracts::repository::candidate_selection::StoredProviderModelMapping {
@@ -152,7 +149,6 @@ fn sample_gemini_video_task(
         key_id: Some("key-gemini-video-local-1".to_string()),
         client_api_format: Some("gemini:video".to_string()),
         provider_api_format: Some("gemini:video".to_string()),
-        format_converted: false,
         model: Some("veo-3".to_string()),
         prompt: Some("gemini video prompt".to_string()),
         original_request_body: Some(json!({"prompt": "gemini video prompt"})),
@@ -197,7 +193,6 @@ fn sample_gemini_video_task(
                         "original_request_body": {
                             "prompt": "gemini video prompt"
                         },
-                        "format_converted": false
                     },
                     "transport": {
                         "upstream_base_url": "https://generativelanguage.googleapis.com",
@@ -263,19 +258,6 @@ impl MinimalCandidateSelectionReadRepository for PendingMinimalCandidateSelectio
         self.pending_rows().await
     }
 
-    async fn list_pool_key_rows_for_group(
-        &self,
-        _query: &StoredPoolKeyCandidateRowsQuery,
-    ) -> Result<Vec<StoredMinimalCandidateSelectionRow>, DataLayerError> {
-        self.pending_rows().await
-    }
-
-    async fn list_pool_key_rows_for_group_key_ids(
-        &self,
-        _query: &StoredPoolKeyCandidateRowsByKeyIdsQuery,
-    ) -> Result<Vec<StoredMinimalCandidateSelectionRow>, DataLayerError> {
-        self.pending_rows().await
-    }
 }
 
 struct CachedToggleMinimalCandidateSelectionReadRepository {
@@ -377,19 +359,6 @@ impl MinimalCandidateSelectionReadRepository
             .collect())
     }
 
-    async fn list_pool_key_rows_for_group(
-        &self,
-        _query: &StoredPoolKeyCandidateRowsQuery,
-    ) -> Result<Vec<StoredMinimalCandidateSelectionRow>, DataLayerError> {
-        Ok(Vec::new())
-    }
-
-    async fn list_pool_key_rows_for_group_key_ids(
-        &self,
-        _query: &StoredPoolKeyCandidateRowsByKeyIdsQuery,
-    ) -> Result<Vec<StoredMinimalCandidateSelectionRow>, DataLayerError> {
-        Ok(Vec::new())
-    }
 }
 
 #[tokio::test]
@@ -991,241 +960,6 @@ async fn gateway_handles_public_gemini_models_without_hitting_fallback_probe() {
 }
 
 #[tokio::test]
-async fn gateway_handles_antigravity_v1internal_control_plane_without_proxying() {
-    let fallback_probe_hits = Arc::new(Mutex::new(0usize));
-    let fallback_probe_hits_clone = Arc::clone(&fallback_probe_hits);
-    let fallback_probe = Router::new().route(
-        "/{*path}",
-        any(move |_request: Request| {
-            let fallback_probe_hits_inner = Arc::clone(&fallback_probe_hits_clone);
-            async move {
-                *fallback_probe_hits_inner.lock().expect("mutex should lock") += 1;
-                (StatusCode::OK, Json(json!({"proxied": true}))).into_response()
-            }
-        }),
-    );
-
-    let (_unused_fallback_probe_url, fallback_probe_handle) = start_server(fallback_probe).await;
-    let gateway = build_router_with_state(AppState::new().expect("gateway should build"));
-    let (gateway_url, gateway_handle) = start_server(gateway).await;
-    let client = reqwest::Client::new();
-
-    let user_settings = json!({
-        "preferredModelId": "gemini-3.1-flash-lite",
-        "theme": "dark"
-    });
-    let requests = vec![
-        (
-            "/v1internal:loadCodeAssist",
-            json!({"metadata": {"ideType": "ANTIGRAVITY_CLI"}}),
-        ),
-        (
-            "/v1internal:fetchAvailableModels",
-            json!({"project": "aether-antigravity-local"}),
-        ),
-        (
-            "/v1internal:retrieveUserQuotaSummary",
-            json!({"project": "aether-antigravity-local"}),
-        ),
-        (
-            "/v1internal:fetchUserInfo",
-            json!({"project": "aether-antigravity-local"}),
-        ),
-        (
-            "/v1internal:fetchAdminControls",
-            json!({"project": "aether-antigravity-local"}),
-        ),
-        ("/v1internal:listExperiments", json!({})),
-        (
-            "/v1internal:recordCodeAssistMetrics",
-            json!({
-                "project": "aether-antigravity-local",
-                "requestId": "opaque-request-id",
-                "metrics": []
-            }),
-        ),
-        (
-            "/v1internal:writeTrajectoryAcls",
-            json!({"trajectoryId": "trajectory-ant-123"}),
-        ),
-        (
-            "/v1internal:setUserSettings",
-            json!({"userSettings": user_settings.clone()}),
-        ),
-    ];
-
-    for (path, request_body) in requests {
-        let response = client
-            .post(format!("{gateway_url}{path}"))
-            .header("authorization", "Bearer ant-access-token")
-            .header("user-agent", "antigravity/cli/1.0.2 linux/arm64")
-            .json(&request_body)
-            .send()
-            .await
-            .expect("request should succeed");
-
-        assert_eq!(response.status(), StatusCode::OK, "path {path}");
-        assert_eq!(
-            response
-                .headers()
-                .get(EXECUTION_PATH_HEADER)
-                .and_then(|value| value.to_str().ok()),
-            Some(EXECUTION_PATH_LOCAL_AI_PUBLIC),
-            "path {path}"
-        );
-        let payload: serde_json::Value = response.json().await.expect("json body should parse");
-
-        match path {
-            "/v1internal:loadCodeAssist" => {
-                assert_eq!(
-                    payload["cloudaicompanionProject"],
-                    "aether-antigravity-local"
-                );
-                assert_eq!(payload["currentTier"]["id"], "free-tier");
-                assert_eq!(payload["currentTier"]["name"], "Antigravity");
-                assert_eq!(payload["paidTier"]["id"], "g1-pro-tier");
-                assert_eq!(payload["gcpManaged"], false);
-                assert_eq!(payload["allowedTiers"][0]["id"], "free-tier");
-                assert_eq!(payload["allowedTiers"][0]["isDefault"], true);
-                assert_eq!(payload["allowedTiers"][1]["id"], "standard-tier");
-                assert_eq!(
-                    payload["upgradeSubscriptionUri"],
-                    "https://codeassist.google.com/upgrade"
-                );
-            }
-            "/v1internal:fetchAvailableModels" => {
-                assert_eq!(payload["defaultAgentModelId"], "gemini-3.5-flash-low");
-                assert_eq!(
-                    payload["tieredModelIds"]["flash"],
-                    json!(["gemini-3-flash-agent"])
-                );
-                assert_eq!(
-                    payload["tieredModelIds"]["pro"],
-                    json!(["gemini-3.1-pro-low"])
-                );
-                assert_eq!(
-                    payload["models"]["gemini-3-flash-agent"]["displayName"],
-                    "Gemini 3.5 Flash (High)"
-                );
-                assert_eq!(
-                    payload["models"]["gemini-3.5-flash-low"]["displayName"],
-                    "Gemini 3.5 Flash (Medium)"
-                );
-                assert_eq!(
-                    payload["models"]["gemini-3.5-flash-extra-low"]["displayName"],
-                    "Gemini 3.5 Flash (Low)"
-                );
-                assert_eq!(
-                    payload["models"]["gemini-pro-agent"]["displayName"],
-                    "Gemini 3.1 Pro (High)"
-                );
-                assert_eq!(
-                    payload["models"]["claude-opus-4-6-thinking"]["displayName"],
-                    "Claude Opus 4.6 (Thinking)"
-                );
-                assert_eq!(
-                    payload["models"]["gpt-oss-120b-medium"]["displayName"],
-                    "GPT-OSS 120B (Medium)"
-                );
-                assert_eq!(
-                    payload["models"]["gemini-pro-agent"]["model"],
-                    "MODEL_PLACEHOLDER_M16"
-                );
-                assert_eq!(
-                    payload["models"]["gemini-3.1-pro-high"]["model"],
-                    "MODEL_PLACEHOLDER_M37"
-                );
-                assert_eq!(
-                    payload["models"]["gemini-3.5-flash-extra-low"]["model"],
-                    "MODEL_PLACEHOLDER_M187"
-                );
-                assert_eq!(
-                    payload["models"]["claude-sonnet-4-6"]["apiProvider"],
-                    "API_PROVIDER_ANTHROPIC_VERTEX"
-                );
-                assert_eq!(
-                    payload["models"]["gpt-oss-120b-medium"]["apiProvider"],
-                    "API_PROVIDER_OPENAI_VERTEX"
-                );
-                assert_eq!(
-                    payload["models"]["gemini-3.5-flash-low"]["apiProvider"],
-                    "API_PROVIDER_GOOGLE_GEMINI"
-                );
-                assert_eq!(
-                    payload["models"]["gemini-2.5-flash-lite"]["model"],
-                    "MODEL_GOOGLE_GEMINI_2_5_FLASH_LITE"
-                );
-                assert_eq!(
-                    payload["agentModelSorts"][0]["groups"][0]["modelIds"],
-                    json!([
-                        "gemini-3.5-flash-low",
-                        "gemini-3-flash-agent",
-                        "gemini-3.5-flash-extra-low",
-                        "gemini-3.1-pro-low",
-                        "gemini-pro-agent",
-                        "claude-sonnet-4-6",
-                        "claude-opus-4-6-thinking",
-                        "gpt-oss-120b-medium"
-                    ])
-                );
-                assert_eq!(
-                    payload["deprecatedModelIds"]["gemini-3.1-pro-high"]["newModelId"],
-                    "gemini-pro-agent"
-                );
-                assert_eq!(payload["commandModelIds"], json!(["gemini-3-flash"]));
-                assert_eq!(
-                    payload["imageGenerationModelIds"],
-                    json!(["gemini-3.1-flash-image"])
-                );
-                assert_eq!(payload["tabModelIds"], json!(["chat_20706", "chat_23310"]));
-                assert_eq!(payload["mqueryModelIds"], json!(["gemini-3.1-flash-lite"]));
-                assert_eq!(
-                    payload["webSearchModelIds"],
-                    json!(["gemini-3.1-flash-lite"])
-                );
-                assert_eq!(
-                    payload["commitMessageModelIds"],
-                    json!(["gemini-3.1-flash-lite"])
-                );
-            }
-            "/v1internal:fetchUserInfo" => {
-                assert_eq!(payload["regionCode"], "US");
-                assert_eq!(
-                    payload["userSettings"]["preferredModelId"],
-                    "gemini-3.5-flash-low"
-                );
-            }
-            "/v1internal:retrieveUserQuotaSummary" => {
-                assert_eq!(payload["description"], "");
-                assert_eq!(payload["groups"], json!([]));
-            }
-            "/v1internal:fetchAdminControls" => {
-                assert_eq!(payload, json!({}));
-            }
-            "/v1internal:listExperiments" => {
-                assert_eq!(payload["experimentIds"], json!([]));
-                assert_eq!(payload["flags"], json!([]));
-            }
-            "/v1internal:recordCodeAssistMetrics" => {
-                assert_eq!(payload, json!({}));
-            }
-            "/v1internal:writeTrajectoryAcls" => {
-                assert_eq!(payload, json!({}));
-            }
-            "/v1internal:setUserSettings" => {
-                assert_eq!(payload["userSettings"], user_settings);
-            }
-            other => panic!("unexpected path {other}"),
-        }
-    }
-
-    assert_eq!(*fallback_probe_hits.lock().expect("mutex should lock"), 0);
-
-    gateway_handle.abort();
-    fallback_probe_handle.abort();
-}
-
-#[tokio::test]
 async fn gateway_does_not_locally_reject_image_model_name_on_chat_completions() {
     let fallback_probe_hits = Arc::new(Mutex::new(0usize));
     let fallback_probe_hits_clone = Arc::clone(&fallback_probe_hits);
@@ -1319,7 +1053,7 @@ async fn gateway_rejects_image_request_above_gateway_limit_without_hitting_fallb
         .header(http::header::CONTENT_TYPE, "application/json")
         .body(
             serde_json::to_vec(&json!({
-                "model": "grok-imagine-image-lite",
+                "model": "image-generation-model",
                 "prompt": "draw",
                 "n": openai_image_gateway_max_generation_count() + 1,
                 "response_format": "b64_json"

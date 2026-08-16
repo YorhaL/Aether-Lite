@@ -52,7 +52,7 @@ fn git_describe_version() -> Option<String> {
 
 fn normalize_gateway_version_source(value: &str) -> Option<String> {
     let trimmed = value.trim();
-    if trimmed.is_empty() || trimmed.starts_with("tunnel-v") {
+    if trimmed.is_empty() {
         return None;
     }
     Some(trimmed.strip_prefix('v').unwrap_or(trimmed).to_string())

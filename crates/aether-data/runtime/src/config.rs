@@ -1,6 +1,6 @@
-use crate::database::PostgresPoolConfig;
-use crate::database::SqlDatabaseConfig;
 use crate::DataLayerError;
+use crate::PostgresPoolConfig;
+use crate::SqlDatabaseConfig;
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct DataLayerConfig {
@@ -49,8 +49,8 @@ impl DataLayerConfig {
 #[cfg(test)]
 mod tests {
     use super::DataLayerConfig;
-    use crate::database::PostgresPoolConfig;
-    use crate::database::{DatabaseDriver, SqlDatabaseConfig, SqlPoolConfig};
+    use crate::PostgresPoolConfig;
+    use crate::{DatabaseDriver, SqlDatabaseConfig, SqlPoolConfig};
 
     #[test]
     fn validates_nested_backend_configs() {

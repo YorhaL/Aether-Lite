@@ -6,7 +6,6 @@ export interface CandidateRankingMetadata {
   index?: number
   priority_slot?: number
   promoted_by?: string
-  demoted_by?: string
 }
 
 export interface ImageProgress {
@@ -40,22 +39,18 @@ export interface CandidateRecord {
   provider_name?: string
   provider_website?: string  // Provider 官网
   provider_priority?: number
-  provider_keep_priority_on_conversion?: boolean
-  provider_enable_format_conversion?: boolean
   endpoint_id?: string
   endpoint_name?: string  // 端点显示名称（api_format）
   endpoint_api_family?: string
   endpoint_kind?: string
-  endpoint_format_acceptance_config?: Record<string, unknown> | null
   key_id?: string
   key_name?: string  // 密钥名称
-  key_account_label?: string  // 更适合展示的测试账号标签（优先 OAuth 邮箱）
-  key_preview?: string  // 密钥脱敏预览（如 sk-***abc），OAuth 类型不返回
-  key_auth_type?: string  // 密钥认证类型（api_key, service_account, oauth 等）
+  key_account_label?: string
+  key_preview?: string  // 密钥脱敏预览（如 sk-***abc）
+  key_auth_type?: string  // 密钥认证类型（api_key, service_account, bearer）
   key_api_formats?: unknown
   key_internal_priority?: number
   key_global_priority_by_format?: Record<string, number> | null
-  key_oauth_plan_type?: string  // OAuth 账号套餐类型（free/plus/team/enterprise）
   key_capabilities?: Record<string, boolean> | null  // Key 支持的能力
   required_capabilities?: Record<string, boolean> | null  // 请求实际需要的能力标签
   status: 'pending' | 'streaming' | 'success' | 'failed' | 'skipped' | 'cancelled' | 'available' | 'unused' | 'stream_interrupted'

@@ -135,7 +135,6 @@ pub fn build_ai_execution_plan_from_decision(
         client_api_format: parts.core.client_api_format,
         provider_api_format: parts.core.provider_api_format,
         model_name: payload.model_name.take(),
-        proxy: payload.proxy.take(),
         transport_profile: payload.transport_profile.take(),
         timeouts: payload.timeouts.take(),
     }
@@ -207,7 +206,6 @@ pub fn build_ai_execution_decision_from_plan(
         client_api_format,
         provider_api_format,
         model_name,
-        proxy,
         transport_profile,
         timeouts,
     } = parts.plan;
@@ -215,8 +213,6 @@ pub fn build_ai_execution_decision_from_plan(
         .include_auth_pair
         .then(|| extract_ai_auth_header_pair(&headers))
         .flatten();
-    let provider_contract = provider_api_format.clone();
-    let client_contract = client_api_format.clone();
     let request_id = parts.request_id.unwrap_or(request_id);
     let auth_header = auth_pair.map(|(name, _)| name.to_string());
     let auth_value = auth_pair.map(|(_, value)| value.to_string());
@@ -229,18 +225,9 @@ pub fn build_ai_execution_decision_from_plan(
     AiExecutionDecision {
         action: parts.action,
         decision_kind: parts.decision_kind,
-        execution_strategy: Some(ai_execution_strategy_for_formats(
-            provider_api_format.as_str(),
-            client_api_format.as_str(),
-        )),
-        conversion_mode: Some(ai_conversion_mode_for_formats(
-            provider_api_format.as_str(),
-            client_api_format.as_str(),
-        )),
         request_id: Some(request_id),
         candidate_id,
         provider_name,
-        provider_type: None,
         provider_id: Some(provider_id),
         endpoint_id: Some(endpoint_id),
         key_id: Some(key_id),
@@ -251,8 +238,6 @@ pub fn build_ai_execution_decision_from_plan(
         auth_value,
         provider_api_format: Some(provider_api_format),
         client_api_format: Some(client_api_format),
-        provider_contract: Some(provider_contract),
-        client_contract: Some(client_contract),
         model_name,
         mapped_model: None,
         prompt_cache_key: None,
@@ -263,7 +248,6 @@ pub fn build_ai_execution_decision_from_plan(
         content_type,
         content_encoding,
         request_gzip: None,
-        proxy,
         transport_profile,
         timeouts,
         upstream_is_stream: stream,
@@ -338,24 +322,6 @@ fn normalize_inferred_ai_base_path(path: &str) -> &str {
     } else {
         trimmed
     }
-}
-
-fn ai_execution_strategy_for_formats(provider_api_format: &str, client_api_format: &str) -> String {
-    if provider_api_format == client_api_format {
-        "local_same_format"
-    } else {
-        "local_cross_format"
-    }
-    .to_string()
-}
-
-fn ai_conversion_mode_for_formats(provider_api_format: &str, client_api_format: &str) -> String {
-    if provider_api_format == client_api_format {
-        "none"
-    } else {
-        "bidirectional"
-    }
-    .to_string()
 }
 
 #[cfg(test)]
@@ -670,7 +636,6 @@ mod tests {
             client_api_format: "openai:chat".to_string(),
             provider_api_format: "claude:messages".to_string(),
             model_name: Some("mapped".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -688,11 +653,6 @@ mod tests {
         });
 
         assert_eq!(decision.request_id.as_deref(), Some("trace-1"));
-        assert_eq!(
-            decision.execution_strategy.as_deref(),
-            Some("local_cross_format")
-        );
-        assert_eq!(decision.conversion_mode.as_deref(), Some("bidirectional"));
         assert_eq!(decision.auth_header.as_deref(), Some("Authorization"));
         assert_eq!(decision.auth_value.as_deref(), Some("Bearer secret"));
         assert_eq!(
@@ -728,7 +688,6 @@ mod tests {
             client_api_format: "openai:chat".to_string(),
             provider_api_format: "openai:chat".to_string(),
             model_name: Some("gpt-test".to_string()),
-            proxy: None,
             transport_profile: None,
             timeouts: None,
         };
@@ -788,12 +747,9 @@ mod tests {
         AiExecutionDecision {
             action: "sync".to_string(),
             decision_kind: Some("test".to_string()),
-            execution_strategy: None,
-            conversion_mode: None,
             request_id: Some("req_1".to_string()),
             candidate_id: Some("candidate_1".to_string()),
             provider_name: Some("provider".to_string()),
-            provider_type: None,
             provider_id: Some("provider_1".to_string()),
             endpoint_id: Some("endpoint_1".to_string()),
             key_id: Some("key_1".to_string()),
@@ -804,8 +760,6 @@ mod tests {
             auth_value: Some("Bearer token".to_string()),
             provider_api_format: Some("openai:chat".to_string()),
             client_api_format: Some("openai:chat".to_string()),
-            provider_contract: Some("openai:chat".to_string()),
-            client_contract: Some("openai:chat".to_string()),
             model_name: Some("gpt-test".to_string()),
             mapped_model: Some("gpt-test".to_string()),
             prompt_cache_key: None,
@@ -816,7 +770,6 @@ mod tests {
             content_type: None,
             content_encoding: None,
             request_gzip: None,
-            proxy: None,
             transport_profile: None,
             timeouts: None,
             upstream_is_stream: false,

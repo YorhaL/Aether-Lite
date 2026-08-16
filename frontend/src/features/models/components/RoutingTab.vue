@@ -351,13 +351,6 @@
 
                               <!-- 第四列：操作区域 -->
                               <div class="flex items-center gap-1 shrink-0">
-                                <!-- 计费标签 -->
-                                <span
-                                  v-if="providerEntry.provider.billing_type"
-                                  class="text-[10px] text-muted-foreground mr-1"
-                                >
-                                  {{ getBillingLabel(providerEntry.provider) }}
-                                </span>
                                 <!-- Keys 统计 -->
                                 <span class="text-[10px] text-muted-foreground">
                                   {{ providerEntry.active_keys }}/{{ providerEntry.keys.length }} Keys
@@ -653,7 +646,6 @@ interface FormatProviderEntry {
   endpoint: RoutingEndpointInfo | null
   keys: RoutingKeyInfo[]
   active_keys: number
-  is_cross_format: boolean
   priority_api_format: string
 }
 
@@ -662,14 +654,12 @@ interface GlobalKeyEntry {
   key: RoutingKeyInfo
   provider: RoutingProviderInfo
   endpoint: RoutingEndpointInfo | null
-  is_cross_format: boolean
   priority_api_format: string
 }
 
 // 全局 Key 模式下的优先级分组
 interface GlobalKeyGroup {
   priority: number | null
-  demote_cross_format: boolean
   keys: GlobalKeyEntry[]
 }
 
@@ -685,13 +675,6 @@ interface ApiFormatGroup {
   active_keys: number
 }
 
-const STANDARD_ROUTING_API_FORMATS = [
-  'openai:chat',
-  'openai:responses',
-  'claude:messages',
-  'gemini:generate_content'
-]
-
 function normalizeLegacyOpenAIFormatAlias(apiFormat: string): string {
   switch (apiFormat.trim().toLowerCase()) {
     default:
@@ -699,108 +682,8 @@ function normalizeLegacyOpenAIFormatAlias(apiFormat: string): string {
   }
 }
 
-function apiDataFormatId(apiFormat: string): string | null {
-  switch (normalizeLegacyOpenAIFormatAlias(apiFormat)) {
-    case 'claude:messages':
-      return 'claude'
-    case 'gemini:generate_content':
-      return 'gemini'
-    case 'openai:chat':
-      return 'openai_chat'
-    case 'openai:responses':
-    case 'openai:responses:compact':
-      return 'openai_responses'
-    default:
-      return null
-  }
-}
-
-function requestConversionKind(clientApiFormat: string, providerApiFormat: string): string | null {
-  const client = normalizeLegacyOpenAIFormatAlias(clientApiFormat)
-  const provider = normalizeLegacyOpenAIFormatAlias(providerApiFormat)
-  if (client === provider) return null
-  if (!STANDARD_ROUTING_API_FORMATS.includes(client) || !STANDARD_ROUTING_API_FORMATS.includes(provider)) {
-    return null
-  }
-
-  switch (provider) {
-    case 'openai:chat':
-      return 'to_openai_chat'
-    case 'openai:responses':
-      return 'to_openai_responses'
-    case 'claude:messages':
-      return 'to_claude'
-    case 'gemini:generate_content':
-      return 'to_gemini'
-    default:
-      return null
-  }
-}
-
-function requestConversionRequiresEnableFlag(clientApiFormat: string, providerApiFormat: string): boolean {
-  const clientDataFormat = apiDataFormatId(clientApiFormat)
-  const providerDataFormat = apiDataFormatId(providerApiFormat)
-  if (!clientDataFormat || !providerDataFormat) return true
-  return clientDataFormat !== providerDataFormat
-}
-
-function endpointFormatAcceptanceEnabled(endpoint: RoutingEndpointInfo): boolean {
-  return endpoint.format_acceptance_config?.enabled === true
-}
-
-function endpointFormatListContains(formats: string[] | null | undefined, apiFormat: string): boolean {
-  if (!Array.isArray(formats)) return false
-  return formats.some(value => value.trim().toLowerCase() === apiFormat.trim().toLowerCase())
-}
-
-function endpointAcceptsClientFormat(endpoint: RoutingEndpointInfo, clientApiFormat: string): boolean {
-  if (!endpointFormatAcceptanceEnabled(endpoint)) return false
-
-  const config = endpoint.format_acceptance_config
-  if (endpointFormatListContains(config?.reject_formats, clientApiFormat)) {
-    return false
-  }
-  if (config?.accept_formats) {
-    return endpointFormatListContains(config.accept_formats, clientApiFormat)
-  }
-  return true
-}
-
-function endpointSupportsClientFormat(
-  provider: RoutingProviderInfo,
-  endpoint: RoutingEndpointInfo,
-  clientApiFormat: string,
-  providerApiFormat: string
-): boolean {
-  const clientFormat = clientApiFormat.trim().toLowerCase()
-  const providerFormat = providerApiFormat.trim().toLowerCase()
-  if (clientFormat === providerFormat) return true
-  if (!requestConversionKind(clientFormat, providerFormat)) return false
-  if (!requestConversionRequiresEnableFlag(clientFormat, providerFormat)) return true
-  return !!provider.enable_format_conversion || endpointAcceptsClientFormat(endpoint, clientFormat)
-}
-
-function targetFormatsForEndpoint(
-  provider: RoutingProviderInfo,
-  endpoint: RoutingEndpointInfo
-): string[] {
-  const endpointFormat = normalizeLegacyOpenAIFormatAlias(endpoint.api_format)
-  const candidateFormats = Array.from(new Set([...STANDARD_ROUTING_API_FORMATS, endpointFormat]))
-  return candidateFormats.filter(format =>
-    endpointSupportsClientFormat(provider, endpoint, format, endpoint.api_format)
-  )
-}
-
-function keepPriorityOnConversion(provider: RoutingProviderInfo): boolean {
-  return !!(routingData.value?.keep_priority_on_conversion || provider.keep_priority_on_conversion)
-}
-
-function shouldDemoteCrossFormat(
-  targetApiFormat: string,
-  entryApiFormat: string,
-  provider: RoutingProviderInfo
-): boolean {
-  return targetApiFormat !== entryApiFormat && !keepPriorityOnConversion(provider)
+function targetFormatsForEndpoint(endpoint: RoutingEndpointInfo): string[] {
+  return [normalizeLegacyOpenAIFormatAlias(endpoint.api_format)]
 }
 
 function resolvedGlobalKeyPriority(keyEntry: GlobalKeyEntry): number {
@@ -822,7 +705,7 @@ const apiFormatGroups = computed<ApiFormatGroup[]>(() => {
   // 遍历所有提供商和它们的 endpoints
   for (const provider of routingData.value.providers) {
     for (const endpoint of provider.endpoints || []) {
-      for (const format of targetFormatsForEndpoint(provider, endpoint)) {
+      for (const format of targetFormatsForEndpoint(endpoint)) {
         if (!formatMap.has(format)) {
           formatMap.set(format, { providers: [], allKeys: [] })
         }
@@ -835,7 +718,6 @@ const apiFormatGroups = computed<ApiFormatGroup[]>(() => {
           endpoint,
           keys: endpoint.keys || [],
           active_keys: endpoint.active_keys || 0,
-          is_cross_format: endpoint.api_format !== format,
           priority_api_format: endpoint.api_format
         })
 
@@ -844,7 +726,6 @@ const apiFormatGroups = computed<ApiFormatGroup[]>(() => {
             key,
             provider,
             endpoint,
-            is_cross_format: endpoint.api_format !== format,
             priority_api_format: endpoint.api_format
           })
         }
@@ -860,9 +741,6 @@ const apiFormatGroups = computed<ApiFormatGroup[]>(() => {
       const aActive = a.provider.is_active && a.provider.model_is_active
       const bActive = b.provider.is_active && b.provider.model_is_active
       if (aActive !== bActive) return bActive ? 1 : -1
-      const aDemoted = shouldDemoteCrossFormat(format, a.priority_api_format, a.provider)
-      const bDemoted = shouldDemoteCrossFormat(format, b.priority_api_format, b.provider)
-      if (aDemoted !== bDemoted) return aDemoted ? 1 : -1
       return a.provider.provider_priority - b.provider.provider_priority
     })
 
@@ -870,12 +748,10 @@ const apiFormatGroups = computed<ApiFormatGroup[]>(() => {
     const keyGroupMap = new Map<string, GlobalKeyGroup>()
     for (const keyEntry of data.allKeys) {
       const priority = resolvedGlobalKeyPriority(keyEntry)
-      const demoteCrossFormat = shouldDemoteCrossFormat(format, keyEntry.priority_api_format, keyEntry.provider)
-      const groupKey = `${demoteCrossFormat ? 1 : 0}:${priority}`
+      const groupKey = String(priority)
       if (!keyGroupMap.has(groupKey)) {
         keyGroupMap.set(groupKey, {
           priority: priority === 999 ? null : priority,
-          demote_cross_format: demoteCrossFormat,
           keys: []
         })
       }
@@ -884,12 +760,7 @@ const apiFormatGroups = computed<ApiFormatGroup[]>(() => {
 
     // 转换为分组数组并排序
     const keyGroups: GlobalKeyGroup[] = Array.from(keyGroupMap.values())
-      .sort((a, b) => {
-        if (a.demote_cross_format !== b.demote_cross_format) {
-          return a.demote_cross_format ? 1 : -1
-        }
-        return (a.priority ?? 999) - (b.priority ?? 999)
-      })
+      .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
       .map(group => ({
         ...group,
         keys: group.keys.sort((a, b) => {
@@ -1206,19 +1077,6 @@ function getHealthScoreTextColor(score: number): string {
   if (score >= 0.8) return 'text-green-600 dark:text-green-400'
   if (score >= 0.5) return 'text-yellow-600 dark:text-yellow-400'
   return 'text-red-600 dark:text-red-400'
-}
-
-// 获取计费标签
-function getBillingLabel(provider: RoutingProviderInfo): string {
-  if (provider.billing_type === 'monthly_quota') {
-    const used = provider.monthly_used_usd || 0
-    const quota = provider.monthly_quota_usd
-    return quota ? `$${used.toFixed(0)}/$${quota.toFixed(0)}` : '月卡'
-  }
-  if (provider.billing_type === 'pay_as_you_go') {
-    return '按量'
-  }
-  return '免费'
 }
 
 // 获取 Key 状态样式（score 为 0-1 小数格式）

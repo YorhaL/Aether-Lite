@@ -8,14 +8,14 @@ use axum::{
 };
 use serde_json::json;
 
-pub(crate) fn build_unhandled_admin_proxy_response(
+pub(crate) fn build_admin_route_not_found_response(
     request_context: &GatewayPublicRequestContext,
 ) -> Response<Body> {
     let decision = request_context.control_decision.as_ref();
     (
-        http::StatusCode::NOT_IMPLEMENTED,
+        http::StatusCode::NOT_FOUND,
         Json(json!({
-            "detail": "admin proxy route not implemented in rust frontdoor",
+            "detail": "Route not found",
             "route_family": decision.and_then(|value| value.route_family.as_deref()),
             "route_kind": decision.and_then(|value| value.route_kind.as_deref()),
             "request_path": request_context.request_path,

@@ -4,7 +4,6 @@ use aether_contracts::ExecutionResult;
 use aether_data_contracts::repository::video_tasks::{
     StoredVideoTask, VideoTaskQueryFilter, VideoTaskStatus,
 };
-use axum::body::Body;
 use axum::extract::{Path, Query, State};
 use axum::response::IntoResponse;
 use axum::response::Redirect;
@@ -140,24 +139,16 @@ pub(crate) async fn get_video_task_video(
             .into_response());
     };
 
-    build_video_task_video_response(&state, &task_id, source)
+    build_video_task_video_response(source)
         .await
         .map_err(IntoResponse::into_response)
 }
 
 pub(crate) async fn build_video_task_video_response(
-    state: &AppState,
-    task_id: &str,
     source: VideoTaskVideoSource,
 ) -> Result<axum::response::Response, GatewayError> {
     match source {
         VideoTaskVideoSource::Redirect { url } => Ok(Redirect::temporary(&url).into_response()),
-        VideoTaskVideoSource::Proxy {
-            url,
-            header_name,
-            header_value,
-            filename,
-        } => proxy_video_stream(state, task_id, &url, &header_name, &header_value, &filename).await,
     }
 }
 
@@ -206,76 +197,4 @@ fn video_task_status_name(status: VideoTaskStatus) -> &'static str {
         VideoTaskStatus::Expired => "expired",
         VideoTaskStatus::Deleted => "deleted",
     }
-}
-
-async fn proxy_video_stream(
-    state: &AppState,
-    task_id: &str,
-    url: &str,
-    header_name: &str,
-    header_value: &str,
-    filename: &str,
-) -> Result<axum::response::Response, GatewayError> {
-    let response = state
-        .client
-        .get(url)
-        .header(header_name, header_value)
-        .send()
-        .await
-        .map_err(|err| GatewayError::UpstreamUnavailable {
-            trace_id: task_id.to_string(),
-            message: err.to_string(),
-        })?;
-
-    if response.status().is_client_error() || response.status().is_server_error() {
-        return Err(GatewayError::UpstreamUnavailable {
-            trace_id: task_id.to_string(),
-            message: format!("video upstream returned HTTP {}", response.status()),
-        });
-    }
-
-    let status = response.status();
-    let content_type = response
-        .headers()
-        .get(axum::http::header::CONTENT_TYPE)
-        .cloned()
-        .unwrap_or_else(|| axum::http::HeaderValue::from_static("video/mp4"));
-    let content_length = response
-        .headers()
-        .get(axum::http::header::CONTENT_LENGTH)
-        .cloned();
-    let cache_control = response
-        .headers()
-        .get(axum::http::header::CACHE_CONTROL)
-        .cloned();
-    let body = Body::from_stream(response.bytes_stream());
-
-    let mut outbound = axum::http::Response::builder()
-        .status(status)
-        .body(body)
-        .map_err(|err| GatewayError::Internal(err.to_string()))?;
-    outbound
-        .headers_mut()
-        .insert(axum::http::header::CONTENT_TYPE, content_type);
-    outbound.headers_mut().insert(
-        axum::http::header::CONTENT_DISPOSITION,
-        axum::http::HeaderValue::from_str(&format!("inline; filename=\"{filename}\""))
-            .map_err(|err| GatewayError::Internal(err.to_string()))?,
-    );
-    if let Some(content_length) = content_length {
-        outbound
-            .headers_mut()
-            .insert(axum::http::header::CONTENT_LENGTH, content_length);
-    }
-    if let Some(cache_control) = cache_control {
-        outbound
-            .headers_mut()
-            .insert(axum::http::header::CACHE_CONTROL, cache_control);
-    } else {
-        outbound.headers_mut().insert(
-            axum::http::header::CACHE_CONTROL,
-            axum::http::HeaderValue::from_static("private, max-age=3600"),
-        );
-    }
-    Ok(outbound)
 }

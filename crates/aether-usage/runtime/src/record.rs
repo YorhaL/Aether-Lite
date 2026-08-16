@@ -98,7 +98,6 @@ pub fn build_upsert_usage_record_from_event(
         endpoint_api_format: data.endpoint_api_format,
         provider_api_family: data.provider_api_family,
         provider_endpoint_kind: data.provider_endpoint_kind,
-        has_format_conversion: data.has_format_conversion,
         is_stream: data.is_stream,
         input_tokens: data.input_tokens,
         output_tokens: data.output_tokens,

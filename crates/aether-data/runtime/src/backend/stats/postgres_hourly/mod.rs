@@ -32,7 +32,7 @@ impl PostgresBackend {
 }
 
 async fn next_stats_hourly_bucket(
-    pool: &crate::driver::postgres::PostgresPool,
+    pool: &aether_data_postgres::PostgresPool,
     target_hour_utc: DateTime<Utc>,
 ) -> Result<Option<DateTime<Utc>>, sqlx::Error> {
     let latest_row = sqlx::query(SELECT_LATEST_STATS_HOURLY_HOUR_SQL)
@@ -59,7 +59,7 @@ async fn next_stats_hourly_bucket(
 }
 
 async fn perform_stats_hourly_aggregation_for_hour(
-    pool: &crate::driver::postgres::PostgresPool,
+    pool: &aether_data_postgres::PostgresPool,
     hour_utc: DateTime<Utc>,
     aggregated_at: DateTime<Utc>,
 ) -> Result<StatsHourlyAggregationSummary, sqlx::Error> {

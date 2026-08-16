@@ -126,13 +126,7 @@ pub(super) async fn maybe_build_local_test_connection_route_response(
     }
     let Some(key) = active_keys
         .iter()
-        .find(|key| {
-            provider_catalog_key_supports_format(
-                key,
-                provider.provider_type.as_str(),
-                &format_value,
-            )
-        })
+        .find(|key| provider_catalog_key_supports_format(key, &format_value))
         .cloned()
         .or_else(|| active_keys.into_iter().next())
     else {
@@ -162,11 +156,7 @@ pub(super) async fn maybe_build_local_test_connection_route_response(
         }
     };
 
-    if transport.provider.proxy.is_some()
-        || transport.endpoint.proxy.is_some()
-        || transport.key.proxy.is_some()
-        || crate::provider_transport::resolve_transport_profile(&transport).is_some()
-    {
+    if crate::provider_transport::resolve_transport_profile(&transport).is_some() {
         return None;
     }
 
@@ -200,48 +190,20 @@ pub(super) async fn maybe_build_local_test_connection_route_response(
         return None;
     }
 
-    let oauth_auth = match format_value.as_str() {
-        "openai:chat" | "claude:messages" | "gemini:generate_content" | "gemini:interactions" => {
-            match state.resolve_local_oauth_request_auth(&transport).await {
-                Ok(Some(crate::provider_transport::LocalResolvedOAuthRequestAuth::Header {
-                    name,
-                    value,
-                })) => Some((name, value)),
-                _ => None,
-            }
-        }
-        _ => None,
-    };
-
     let auth = match format_value.as_str() {
         "openai:chat" => {
             crate::provider_transport::auth::resolve_local_openai_bearer_auth(&transport)
-                .or(oauth_auth.clone())
         }
         "claude:messages" => {
             crate::provider_transport::auth::resolve_local_standard_auth(&transport)
-                .or(oauth_auth.clone())
         }
         "gemini:generate_content" | "gemini:interactions" => {
             crate::provider_transport::auth::resolve_local_gemini_auth(&transport)
-                .or(oauth_auth.clone())
         }
         _ => None,
     };
-    let uses_vertex_query_auth = crate::provider_transport::uses_vertex_api_key_query_auth(
-        &transport,
-        format_value.as_str(),
-    );
-    let vertex_query_auth = if uses_vertex_query_auth {
-        crate::provider_transport::vertex::resolve_local_vertex_api_key_query_auth(&transport)
-    } else {
-        None
-    };
     let (auth_header, auth_value) = match auth {
         Some((auth_header, auth_value)) => (auth_header, auth_value),
-        None if uses_vertex_query_auth && vertex_query_auth.is_some() => {
-            (String::new(), String::new())
-        }
         None => return None,
     };
 
@@ -252,7 +214,6 @@ pub(super) async fn maybe_build_local_test_connection_route_response(
             mapped_model: Some(model.as_str()),
             upstream_is_stream: false,
             request_query: None,
-            kiro_api_region: None,
             api_operation: None,
         },
     );
@@ -265,10 +226,7 @@ pub(super) async fn maybe_build_local_test_connection_route_response(
     if !auth_header.trim().is_empty() && !auth_value.trim().is_empty() {
         provider_request_headers.insert(auth_header.clone(), auth_value.clone());
     }
-    if uses_vertex_query_auth {
-        provider_request_headers.remove("x-goog-api-key");
-    }
-    let protected_headers = if uses_vertex_query_auth || auth_value.trim().is_empty() {
+    let protected_headers = if auth_value.trim().is_empty() {
         vec!["content-type"]
     } else {
         vec![auth_header.as_str(), "content-type"]
@@ -282,13 +240,11 @@ pub(super) async fn maybe_build_local_test_connection_route_response(
     ) {
         return None;
     }
-    if !uses_vertex_query_auth {
-        crate::provider_transport::ensure_upstream_auth_header(
-            &mut provider_request_headers,
-            &auth_header,
-            &auth_value,
-        );
-    }
+    crate::provider_transport::ensure_upstream_auth_header(
+        &mut provider_request_headers,
+        &auth_header,
+        &auth_value,
+    );
 
     let mut upstream_request = state.client.post(&upstream_url);
     for (name, value) in &provider_request_headers {

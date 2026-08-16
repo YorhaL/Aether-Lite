@@ -44,14 +44,6 @@ use aether_data::repository::oauth_providers::{
     OAuthProviderReadRepository, OAuthProviderWriteRepository, StoredOAuthProviderConfig,
     UpsertOAuthProviderConfigRecord,
 };
-use aether_data::repository::proxy_nodes::{
-    ProxyNodeEventQuery, ProxyNodeHeartbeatMutation, ProxyNodeManualCreateMutation,
-    ProxyNodeManualUpdateMutation, ProxyNodeMetricsCleanupSummary, ProxyNodeMetricsStep,
-    ProxyNodeReadRepository, ProxyNodeRegistrationMutation, ProxyNodeRemoteConfigMutation,
-    ProxyNodeTrafficMutation, ProxyNodeTunnelStatusMutation, ProxyNodeWriteRepository,
-    StoredProxyFleetMetricsBucket, StoredProxyNode, StoredProxyNodeEvent,
-    StoredProxyNodeMetricsBucket,
-};
 pub(crate) use aether_data::repository::system::{AdminSystemStats, StoredSystemConfigEntry};
 use aether_data::repository::users::{
     StoredUserAuthRecord, StoredUserExportRow, StoredUserOAuthLinkSummary, StoredUserSummary,
@@ -61,45 +53,21 @@ pub(crate) use aether_data::repository::users::{
     StoredUserPreferenceRecord, StoredUserSessionRecord,
 };
 use aether_data::repository::wallet::{
-    AdjustWalletBalanceInput, AdminPaymentOrderListQuery, AdminRedeemCodeBatchListQuery,
-    AdminRedeemCodeListQuery, AdminWalletLedgerQuery, AdminWalletListQuery,
-    AdminWalletRefundRequestListQuery, CompleteAdminWalletRefundInput,
-    CreateAdminRedeemCodeBatchInput, CreateAdminRedeemCodeBatchResult,
-    CreateManualWalletRechargeInput, CreatePlanPurchaseOrderInput, CreatePlanPurchaseOrderOutcome,
-    CreateWalletRechargeOrderInput, CreateWalletRechargeOrderOutcome,
-    CreateWalletRefundRequestInput, CreateWalletRefundRequestOutcome, CreditAdminPaymentOrderInput,
-    DeleteAdminRedeemCodeBatchInput, DisableAdminRedeemCodeBatchInput, DisableAdminRedeemCodeInput,
-    FailAdminWalletRefundInput, ProcessAdminWalletRefundInput, ProcessPaymentCallbackInput,
-    ProcessPaymentCallbackOutcome, RedeemWalletCodeInput, RedeemWalletCodeOutcome,
-    StoredAdminPaymentCallback, StoredAdminPaymentCallbackPage, StoredAdminPaymentOrder,
-    StoredAdminPaymentOrderPage, StoredAdminRedeemCode, StoredAdminRedeemCodeBatch,
-    StoredAdminRedeemCodeBatchPage, StoredAdminRedeemCodePage, StoredAdminWalletLedgerPage,
-    StoredAdminWalletListPage, StoredAdminWalletRefund, StoredAdminWalletRefundPage,
-    StoredAdminWalletRefundRequestPage, StoredAdminWalletTransaction,
-    StoredAdminWalletTransactionPage, StoredWalletDailyUsageLedger,
-    StoredWalletDailyUsageLedgerPage, StoredWalletSnapshot, WalletLookupKey, WalletMutationOutcome,
-    WalletReadRepository, WalletWriteRepository,
+    AdjustWalletBalanceInput, AdminWalletListQuery, StoredAdminWalletListPage,
+    StoredWalletSnapshot, WalletLookupKey, WalletReadRepository, WalletWriteRepository,
 };
-use aether_data::{
-    DataBackends, DataLayerError, DatabaseMaintenanceSummary, WalletDailyUsageAggregationInput,
-    WalletDailyUsageAggregationResult,
-};
+use aether_data::{DataBackends, DataLayerError, DatabaseMaintenanceSummary};
 use aether_data_contracts::repository::background_tasks::{
     BackgroundTaskListQuery, BackgroundTaskReadRepository, BackgroundTaskSummary,
     BackgroundTaskWriteRepository, StoredBackgroundTaskEvent, StoredBackgroundTaskRun,
     StoredBackgroundTaskRunPage, UpsertBackgroundTaskEvent, UpsertBackgroundTaskRun,
 };
 use aether_data_contracts::repository::billing::{
-    AdminBillingCollectorRecord, AdminBillingCollectorWriteInput, AdminBillingMutationOutcome,
-    AdminBillingPresetApplyResult, AdminBillingRuleRecord, AdminBillingRuleWriteInput,
-    BillingPlanRecord, BillingPlanWriteInput, BillingReadRepository, PaymentGatewayConfigRecord,
-    PaymentGatewayConfigWriteInput, StoredBillingModelContext, UserDailyQuotaAvailabilityRecord,
-    UserPlanEntitlementRecord,
+    BillingReadRepository, StoredBillingModelContext,
 };
 use aether_data_contracts::repository::candidate_selection::{
     MinimalCandidateSelectionReadRepository, StoredApiFormatCandidateRowsQuery,
-    StoredMinimalCandidateSelectionRow, StoredPoolKeyCandidateRowsByKeyIdsQuery,
-    StoredPoolKeyCandidateRowsQuery, StoredRequestedModelCandidateRowsQuery,
+    StoredMinimalCandidateSelectionRow, StoredRequestedModelCandidateRowsQuery,
 };
 use aether_data_contracts::repository::candidates::{
     PublicHealthStatusCount, PublicHealthTimelineBucket, RequestCandidateReadRepository,
@@ -113,24 +81,13 @@ use aether_data_contracts::repository::global_models::{
     StoredProviderModelStats, StoredPublicCatalogModel, StoredPublicGlobalModel,
     StoredPublicGlobalModelPage, UpdateAdminGlobalModelRecord, UpsertAdminProviderModelRecord,
 };
-use aether_data_contracts::repository::pool_scores::{
-    GetPoolMemberScoresByIdsQuery, ListPoolMemberProbeCandidatesQuery, ListPoolMemberScoresQuery,
-    ListRankedPoolMembersQuery, PoolMemberHardState, PoolMemberIdentity, PoolMemberProbeAttempt,
-    PoolMemberProbeResult, PoolMemberProbeStatus, PoolMemberScheduleFeedback,
-    PoolMemberScoreWriteRepository, PoolScoreReadRepository, PoolScoreScope, StoredPoolMemberScore,
-    UpsertPoolMemberScore,
-};
 use aether_data_contracts::repository::provider_catalog::{
-    ProviderCatalogKeyAdaptiveStateUpdate, ProviderCatalogKeyAdminCasUpdate,
-    ProviderCatalogKeyHealthStateUpdate, ProviderCatalogKeyListQuery,
-    ProviderCatalogKeyOAuthCredentialCasDelete, ProviderCatalogKeyOAuthRuntimeStateCasUpdate,
-    ProviderCatalogKeyRuntimeMetadataUpdate, ProviderCatalogKeyStatusSnapshotUpdate,
-    ProviderCatalogReadRepository, ProviderCatalogWriteRepository, StoredProviderCatalogEndpoint,
-    StoredProviderCatalogKey, StoredProviderCatalogKeyMaintenanceSummary,
-    StoredProviderCatalogKeyPage, StoredProviderCatalogKeyStats, StoredProviderCatalogProvider,
-};
-use aether_data_contracts::repository::quota::{
-    ProviderQuotaReadRepository, ProviderQuotaWriteRepository, StoredProviderQuotaSnapshot,
+    ProviderCatalogKeyAdaptiveStateUpdate, ProviderCatalogKeyHealthStateUpdate,
+    ProviderCatalogKeyListQuery, ProviderCatalogKeyRuntimeMetadataUpdate,
+    ProviderCatalogKeyStatusSnapshotUpdate, ProviderCatalogReadRepository,
+    ProviderCatalogWriteRepository, StoredProviderCatalogEndpoint, StoredProviderCatalogKey,
+    StoredProviderCatalogKeyMaintenanceSummary, StoredProviderCatalogKeyPage,
+    StoredProviderCatalogKeyStats, StoredProviderCatalogProvider,
 };
 use aether_data_contracts::repository::routing_profiles::{
     RoutingGroupReadRepository, RoutingGroupWriteRepository,
@@ -140,21 +97,14 @@ use aether_data_contracts::repository::settlement::{
 };
 use aether_data_contracts::repository::usage::{
     ApiKeyLastUsedDelta, ManagementTokenCounterDelta, PendingUsageCleanupSummary,
-    ProxyNodeCounterDelta, StoredProviderUsageSummary, StoredRequestUsageAudit,
-    StoredUsageDailyActualCostRollup, UpsertUsageRecord, UsageDailyActualCostRollupQuery,
-    UsageReadRepository, UsageWriteRepository,
+    StoredProviderUsageSummary, StoredRequestUsageAudit, StoredUsageDailyActualCostRollup,
+    UpsertUsageRecord, UsageDailyActualCostRollupQuery, UsageReadRepository, UsageWriteRepository,
 };
 use aether_data_contracts::repository::video_tasks::{
     StoredVideoTask, UpsertVideoTask, VideoTaskLookupKey, VideoTaskModelCount,
     VideoTaskQueryFilter, VideoTaskReadRepository, VideoTaskStatusCount, VideoTaskWriteRepository,
 };
 use aether_runtime_state::{RuntimeQueueStore, RuntimeState};
-
-pub(crate) use self::referrals::{
-    ReferralAdminStats, ReferralMutationStatus, ReferralRelationshipListQuery,
-    ReferralRelationshipRecord, ReferralRewardConfig, ReferralRewardListQuery,
-    ReferralRewardRecord, ReferralUserDashboard,
-};
 
 #[derive(Clone, Default)]
 pub(crate) struct GatewayDataState {
@@ -170,8 +120,6 @@ pub(crate) struct GatewayDataState {
     management_token_writer: Option<Arc<dyn ManagementTokenWriteRepository>>,
     oauth_provider_reader: Option<Arc<dyn OAuthProviderReadRepository>>,
     oauth_provider_writer: Option<Arc<dyn OAuthProviderWriteRepository>>,
-    proxy_node_reader: Option<Arc<dyn ProxyNodeReadRepository>>,
-    proxy_node_writer: Option<Arc<dyn ProxyNodeWriteRepository>>,
     billing_reader: Option<Arc<dyn BillingReadRepository>>,
     background_task_reader: Option<Arc<dyn BackgroundTaskReadRepository>>,
     background_task_writer: Option<Arc<dyn BackgroundTaskWriteRepository>>,
@@ -184,10 +132,6 @@ pub(crate) struct GatewayDataState {
     request_candidate_writer: Option<Arc<dyn RequestCandidateWriteRepository>>,
     provider_catalog_reader: Option<Arc<dyn ProviderCatalogReadRepository>>,
     provider_catalog_writer: Option<Arc<dyn ProviderCatalogWriteRepository>>,
-    pool_score_reader: Option<Arc<dyn PoolScoreReadRepository>>,
-    pool_score_writer: Option<Arc<dyn PoolMemberScoreWriteRepository>>,
-    provider_quota_reader: Option<Arc<dyn ProviderQuotaReadRepository>>,
-    provider_quota_writer: Option<Arc<dyn ProviderQuotaWriteRepository>>,
     routing_group_reader: Option<Arc<dyn RoutingGroupReadRepository>>,
     routing_group_writer: Option<Arc<dyn RoutingGroupWriteRepository>>,
     usage_reader: Option<Arc<dyn UsageReadRepository>>,
@@ -295,8 +239,6 @@ impl fmt::Debug for GatewayDataState {
                 "has_oauth_provider_writer",
                 &self.oauth_provider_writer.is_some(),
             )
-            .field("has_proxy_node_reader", &self.proxy_node_reader.is_some())
-            .field("has_proxy_node_writer", &self.proxy_node_writer.is_some())
             .field("has_billing_reader", &self.billing_reader.is_some())
             .field(
                 "has_background_task_reader",
@@ -342,16 +284,6 @@ impl fmt::Debug for GatewayDataState {
                 "has_provider_catalog_writer",
                 &self.provider_catalog_writer.is_some(),
             )
-            .field("has_pool_score_reader", &self.pool_score_reader.is_some())
-            .field("has_pool_score_writer", &self.pool_score_writer.is_some())
-            .field(
-                "has_provider_quota_reader",
-                &self.provider_quota_reader.is_some(),
-            )
-            .field(
-                "has_provider_quota_writer",
-                &self.provider_quota_writer.is_some(),
-            )
             .field(
                 "has_routing_group_reader",
                 &self.routing_group_reader.is_some(),
@@ -388,9 +320,7 @@ mod catalog;
 mod core;
 mod integrations;
 mod models;
-mod pool_scores;
 mod provider_catalog_cache;
-mod referrals;
 mod request_candidate_cache;
 mod routing_group_cache;
 mod routing_profiles;

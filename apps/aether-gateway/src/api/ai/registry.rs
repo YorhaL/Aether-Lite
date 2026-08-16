@@ -10,8 +10,6 @@ use crate::headers::extract_or_generate_trace_id;
 use crate::{handlers::proxy::proxy_request, state::AppState, GatewayError};
 
 // Router registration patterns live here so AI public ingress has a single mount registry.
-// They intentionally stay separate from manifest-facing route inventories in constants.rs,
-// which describe operational compatibility surfaces rather than the concrete axum mount list.
 const AI_POST_ROUTE_PATTERNS: &[&str] = &[
     "/v1/chat/completions",
     "/v1/embeddings",
@@ -111,10 +109,8 @@ pub(crate) fn admin_endpoint_signature_parts(
 
 pub(crate) fn admin_default_body_rules_for_signature(
     api_format: &str,
-    provider_type: Option<&str>,
 ) -> Option<(String, Vec<serde_json::Value>)> {
     let normalized_api_format = normalize_admin_endpoint_signature(api_format)?.to_string();
-    let _ = provider_type;
     Some((normalized_api_format, Vec::new()))
 }
 

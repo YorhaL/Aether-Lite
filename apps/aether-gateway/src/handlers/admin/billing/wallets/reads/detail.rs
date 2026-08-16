@@ -1,6 +1,6 @@
 use super::super::shared::{
     admin_wallet_id_from_detail_path, build_admin_wallet_not_found_response,
-    build_admin_wallet_summary_payload_with_package, build_admin_wallets_bad_request_response,
+    build_admin_wallet_summary_payload, build_admin_wallets_bad_request_response,
     resolve_admin_wallet_owner_summary,
 };
 use crate::handlers::admin::request::{AdminAppState, AdminRequestContext};
@@ -29,10 +29,5 @@ pub(in super::super) async fn build_admin_wallet_detail_response(
     };
 
     let owner = resolve_admin_wallet_owner_summary(state, &wallet).await?;
-    let mut payload =
-        build_admin_wallet_summary_payload_with_package(state, &wallet, &owner).await?;
-    if let Some(object) = payload.as_object_mut() {
-        object.insert("pending_refund_count".to_string(), serde_json::Value::Null);
-    }
-    Ok(Json(payload).into_response())
+    Ok(Json(build_admin_wallet_summary_payload(&wallet, &owner)).into_response())
 }

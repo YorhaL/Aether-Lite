@@ -1,5 +1,3 @@
-pub mod common;
-pub mod format_matrix;
+mod observer;
 
-pub use common::{CanonicalStreamEvent, CanonicalStreamFrame};
-pub use format_matrix::{StreamingStandardFormatMatrix, StreamingStandardTerminalObserver};
+pub use observer::StreamingStandardTerminalObserver;

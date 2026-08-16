@@ -1,7 +1,5 @@
 use std::collections::BTreeMap;
 
-#[cfg(feature = "mysql")]
-use super::MysqlBackend;
 #[cfg(feature = "postgres")]
 use super::PostgresBackend;
 #[cfg(feature = "sqlite")]
@@ -13,8 +11,6 @@ use crate::repository::system::{
 };
 use crate::DataLayerError;
 
-#[cfg(feature = "mysql")]
-mod mysql;
 #[cfg(feature = "postgres")]
 mod postgres;
 #[cfg(feature = "sqlite")]
@@ -31,8 +27,6 @@ const ADMIN_CONFIG_PURGE_TABLES: &[&str] = &[
     "provider_api_keys",
     "providers",
     "global_models",
-    "proxy_node_events",
-    "proxy_nodes",
     "user_oauth_links",
     "ldap_configs",
     "oauth_providers",
@@ -124,7 +118,7 @@ fn checked_sql_identifier(value: &str) -> Result<&str, DataLayerError> {
     }
 }
 
-#[cfg(any(feature = "mysql", feature = "sqlite"))]
+#[cfg(feature = "sqlite")]
 fn current_unix_secs() -> u64 {
     chrono::Utc::now().timestamp().max(0) as u64
 }
@@ -176,14 +170,14 @@ fn should_skip_imported_aggregate(
     }
 }
 
-#[cfg(any(feature = "mysql", feature = "sqlite"))]
+#[cfg(feature = "sqlite")]
 fn serialize_json_value(value: &serde_json::Value) -> Result<String, DataLayerError> {
     serde_json::to_string(value).map_err(|err| {
         DataLayerError::UnexpectedValue(format!("invalid system config JSON value: {err}"))
     })
 }
 
-#[cfg(any(feature = "mysql", feature = "sqlite"))]
+#[cfg(feature = "sqlite")]
 fn parse_json_value(value: String) -> Result<serde_json::Value, DataLayerError> {
     serde_json::from_str(&value).map_err(|err| {
         DataLayerError::UnexpectedValue(format!("invalid system config JSON value: {err}"))

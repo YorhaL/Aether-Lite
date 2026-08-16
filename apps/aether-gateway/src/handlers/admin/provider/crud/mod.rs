@@ -1,5 +1,4 @@
 pub(crate) mod delete_task;
-pub(crate) mod pool;
 pub(crate) mod reads;
 mod responses;
 mod routes;

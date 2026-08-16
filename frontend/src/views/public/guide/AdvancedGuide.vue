@@ -18,28 +18,12 @@ import { Settings } from 'lucide-vue-next'
       </p>
     </div>
 
-    <!-- 1. 格式转换 -->
-    <section
-      id="format-conversion"
-      class="scroll-mt-24 lg:scroll-mt-20"
-    >
-      <h2>1. 格式转换</h2>
-      <p class="text-sm text-[#666663] dark:text-[#a3a094] mb-4">
-        格式转换机制允许非原生接口的请求通过 Gateway 转为下游需要的格式，这一转换发生在多个层级：
-      </p>
-      <ul class="list-decimal pl-5 space-y-2 mt-2 text-[#666663] dark:text-[#a3a094] text-sm">
-        <li><strong class="text-[#262624] dark:text-[#f1ead8] font-medium">全局格式转换：</strong> 在系统层面全局开启或关闭的默认转换规则。</li>
-        <li><strong class="text-[#262624] dark:text-[#f1ead8] font-medium">提供商级转换：</strong> 针对某个特定提供商的所有请求进行特定的格式转换配置。</li>
-        <li><strong class="text-[#262624] dark:text-[#f1ead8] font-medium">端点级转换：</strong> 针对某个具体端点的细粒度转换支持。</li>
-      </ul>
-    </section>
-
-    <!-- 2. 请求上游固定非流/流式 -->
+    <!-- 1. 请求上游固定非流/流式 -->
     <section
       id="stream-policy"
       class="scroll-mt-24 lg:scroll-mt-20"
     >
-      <h2>2. 请求上游固定非流/流式</h2>
+      <h2>1. 请求上游固定非流/流式</h2>
       <p class="text-sm text-[#666663] dark:text-[#a3a094] mb-4">
         部分提供商在流式或非流式表现上可能存在差异，此功能可强制在请求上游时使用指定的流式/非流式格式（并在前端按用户请求还原）。
       </p>
@@ -50,7 +34,7 @@ import { Settings } from 'lucide-vue-next'
       id="header-body-edit"
       class="scroll-mt-24 lg:scroll-mt-20"
     >
-      <h2>3. 请求头/体编辑</h2>
+      <h2>2. 请求头/体编辑</h2>
       <p class="text-sm text-[#666663] dark:text-[#a3a094] mb-4">
         可在端点设置中添加规则（Rules），使用条件匹配与动作（如 Delete, Set, Insert）来动态修改发往上游的 Headers 或 JSON Payload。
       </p>
@@ -61,7 +45,7 @@ import { Settings } from 'lucide-vue-next'
       id="model-mapping"
       class="scroll-mt-24 lg:scroll-mt-20"
     >
-      <h2>4. 模型映射</h2>
+      <h2>3. 模型映射</h2>
       <p class="text-sm text-[#666663] dark:text-[#a3a094] mb-4">
         解决提供商特定模型名称与平台标准名称不一致的问题。将请求中的统一模型名动态转换为上游真实需要的模型名。
       </p>
@@ -72,7 +56,7 @@ import { Settings } from 'lucide-vue-next'
       id="regex-mapping"
       class="scroll-mt-24 lg:scroll-mt-20"
     >
-      <h2>5. 正则映射</h2>
+      <h2>4. 正则映射</h2>
       <ul class="list-decimal pl-5 space-y-2 mt-4 text-[#666663] dark:text-[#a3a094] text-sm">
         <li><strong class="text-[#262624] dark:text-[#f1ead8] font-medium">模型权限：</strong> 使用正则表达式来匹配一类模型，给予批量授权。</li>
         <li><strong class="text-[#262624] dark:text-[#f1ead8] font-medium">自动获取上游模型：</strong> 在自动获取的模型列表中，应用正则过滤与清洗，从而快速导入符合规则的标准模型列表。</li>

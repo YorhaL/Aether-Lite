@@ -8,9 +8,7 @@ use aether_cache::ExpiringMap;
 use aether_data::DataLayerError;
 use aether_data_contracts::repository::candidate_selection::{
     MinimalCandidateSelectionReadRepository, StoredApiFormatCandidateRowsQuery,
-    StoredMinimalCandidateSelectionRow, StoredPoolKeyCandidateOrder,
-    StoredPoolKeyCandidateRowsByKeyIdsQuery, StoredPoolKeyCandidateRowsQuery,
-    StoredRequestedModelCandidateRowsQuery,
+    StoredMinimalCandidateSelectionRow, StoredRequestedModelCandidateRowsQuery,
 };
 use async_trait::async_trait;
 use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore};
@@ -451,42 +449,6 @@ impl MinimalCandidateSelectionReadRepository for CachedMinimalCandidateSelection
         })
         .await
     }
-
-    async fn list_pool_key_rows_for_group(
-        &self,
-        query: &StoredPoolKeyCandidateRowsQuery,
-    ) -> Result<Vec<StoredMinimalCandidateSelectionRow>, DataLayerError> {
-        let key = CandidateSelectionCacheKey::PoolKeyRowsForGroup {
-            api_format: normalize_api_format_key(&query.api_format),
-            provider_id: query.provider_id.clone(),
-            endpoint_id: query.endpoint_id.clone(),
-            model_id: query.model_id.clone(),
-            selected_provider_model_name: query.selected_provider_model_name.clone(),
-            order: CandidateSelectionPoolOrderKey::from(&query.order),
-            offset: query.offset,
-            limit: query.limit,
-        };
-        self.get_or_load(key, || self.inner.list_pool_key_rows_for_group(query))
-            .await
-    }
-
-    async fn list_pool_key_rows_for_group_key_ids(
-        &self,
-        query: &StoredPoolKeyCandidateRowsByKeyIdsQuery,
-    ) -> Result<Vec<StoredMinimalCandidateSelectionRow>, DataLayerError> {
-        let key = CandidateSelectionCacheKey::PoolKeyRowsForGroupKeyIds {
-            api_format: normalize_api_format_key(&query.api_format),
-            provider_id: query.provider_id.clone(),
-            endpoint_id: query.endpoint_id.clone(),
-            model_id: query.model_id.clone(),
-            selected_provider_model_name: query.selected_provider_model_name.clone(),
-            key_ids: query.key_ids.clone(),
-        };
-        self.get_or_load(key, || {
-            self.inner.list_pool_key_rows_for_group_key_ids(query)
-        })
-        .await
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -513,47 +475,6 @@ enum CandidateSelectionCacheKey {
         offset: u32,
         limit: u32,
     },
-    PoolKeyRowsForGroup {
-        api_format: String,
-        provider_id: String,
-        endpoint_id: String,
-        model_id: String,
-        selected_provider_model_name: String,
-        order: CandidateSelectionPoolOrderKey,
-        offset: u32,
-        limit: u32,
-    },
-    PoolKeyRowsForGroupKeyIds {
-        api_format: String,
-        provider_id: String,
-        endpoint_id: String,
-        model_id: String,
-        selected_provider_model_name: String,
-        key_ids: Vec<String>,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum CandidateSelectionPoolOrderKey {
-    InternalPriority,
-    Lru,
-    CacheAffinity,
-    SingleAccount,
-    LoadBalance { seed: String },
-}
-
-impl From<&StoredPoolKeyCandidateOrder> for CandidateSelectionPoolOrderKey {
-    fn from(order: &StoredPoolKeyCandidateOrder) -> Self {
-        match order {
-            StoredPoolKeyCandidateOrder::InternalPriority => Self::InternalPriority,
-            StoredPoolKeyCandidateOrder::Lru => Self::Lru,
-            StoredPoolKeyCandidateOrder::CacheAffinity => Self::CacheAffinity,
-            StoredPoolKeyCandidateOrder::SingleAccount => Self::SingleAccount,
-            StoredPoolKeyCandidateOrder::LoadBalance { seed } => {
-                Self::LoadBalance { seed: seed.clone() }
-            }
-        }
-    }
 }
 
 fn normalize_api_format_key(api_format: &str) -> String {
@@ -625,20 +546,6 @@ mod tests {
         ) -> Result<Vec<StoredMinimalCandidateSelectionRow>, DataLayerError> {
             self.load().await
         }
-
-        async fn list_pool_key_rows_for_group(
-            &self,
-            _query: &StoredPoolKeyCandidateRowsQuery,
-        ) -> Result<Vec<StoredMinimalCandidateSelectionRow>, DataLayerError> {
-            self.load().await
-        }
-
-        async fn list_pool_key_rows_for_group_key_ids(
-            &self,
-            _query: &StoredPoolKeyCandidateRowsByKeyIdsQuery,
-        ) -> Result<Vec<StoredMinimalCandidateSelectionRow>, DataLayerError> {
-            self.load().await
-        }
     }
 
     struct FirstLoadPendingThenFastRepository {
@@ -693,20 +600,6 @@ mod tests {
         async fn list_for_exact_api_format_and_requested_model_page(
             &self,
             _query: &StoredRequestedModelCandidateRowsQuery,
-        ) -> Result<Vec<StoredMinimalCandidateSelectionRow>, DataLayerError> {
-            self.load().await
-        }
-
-        async fn list_pool_key_rows_for_group(
-            &self,
-            _query: &StoredPoolKeyCandidateRowsQuery,
-        ) -> Result<Vec<StoredMinimalCandidateSelectionRow>, DataLayerError> {
-            self.load().await
-        }
-
-        async fn list_pool_key_rows_for_group_key_ids(
-            &self,
-            _query: &StoredPoolKeyCandidateRowsByKeyIdsQuery,
         ) -> Result<Vec<StoredMinimalCandidateSelectionRow>, DataLayerError> {
             self.load().await
         }
@@ -1206,57 +1099,10 @@ mod tests {
         let _ = leader.await;
     }
 
-    #[tokio::test]
-    async fn candidate_selection_load_balance_cache_keeps_seed_specific_entries() {
-        let inner = Arc::new(StubCandidateSelectionRepository {
-            calls: AtomicUsize::new(0),
-            delay: Duration::ZERO,
-            rows: vec![
-                sample_row("key-a", 1),
-                sample_row("key-b", 2),
-                sample_row("key-c", 3),
-            ],
-        });
-        let cache = CachedMinimalCandidateSelectionReadRepository::new(inner.clone());
-        let query = |seed: &str| StoredPoolKeyCandidateRowsQuery {
-            api_format: "openai:chat".to_string(),
-            provider_id: "provider-1".to_string(),
-            endpoint_id: "endpoint-1".to_string(),
-            model_id: "model-1".to_string(),
-            selected_provider_model_name: "mock-model".to_string(),
-            order: StoredPoolKeyCandidateOrder::LoadBalance {
-                seed: seed.to_string(),
-            },
-            offset: 0,
-            limit: 2,
-        };
-
-        let first = cache
-            .list_pool_key_rows_for_group(&query("seed-a"))
-            .await
-            .unwrap();
-        let second = cache
-            .list_pool_key_rows_for_group(&query("seed-b"))
-            .await
-            .unwrap();
-
-        assert_eq!(inner.calls(), 2);
-        assert_eq!(first.len(), 3);
-        assert_eq!(second.len(), 3);
-
-        let third = cache
-            .list_pool_key_rows_for_group(&query("seed-a"))
-            .await
-            .unwrap();
-        assert_eq!(inner.calls(), 2);
-        assert_eq!(third.len(), 3);
-    }
-
     fn sample_row(key_id: &str, key_internal_priority: i32) -> StoredMinimalCandidateSelectionRow {
         StoredMinimalCandidateSelectionRow {
             provider_id: "provider-1".to_string(),
             provider_name: "provider".to_string(),
-            provider_type: "custom".to_string(),
             provider_priority: 1,
             provider_is_active: true,
             endpoint_id: "endpoint-1".to_string(),

@@ -1,70 +1,8 @@
 use std::collections::BTreeMap;
 
 use aether_ai_formats::api::ExecutionRuntimeAuthContext;
-use aether_contracts::{ExecutionPlan, ExecutionTimeouts, ProxySnapshot, ResolvedTransportProfile};
+use aether_contracts::{ExecutionPlan, ExecutionTimeouts, ResolvedTransportProfile};
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ExecutionStrategy {
-    GatewayAffinityForward,
-    RawPublicProxy,
-    LocalSameFormat,
-    LocalCrossFormat,
-}
-
-impl ExecutionStrategy {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::GatewayAffinityForward => "gateway_affinity_forward",
-            Self::RawPublicProxy => "raw_public_proxy",
-            Self::LocalSameFormat => "local_same_format",
-            Self::LocalCrossFormat => "local_cross_format",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ConversionMode {
-    None,
-    RequestOnly,
-    ResponseOnly,
-    Bidirectional,
-}
-
-impl ConversionMode {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::None => "none",
-            Self::RequestOnly => "request_only",
-            Self::ResponseOnly => "response_only",
-            Self::Bidirectional => "bidirectional",
-        }
-    }
-}
-
-/// Request/response adaptation applied after candidate selection.
-///
-/// This is independent from format conversion: a same-format request may be
-/// byte-transparent or may intentionally apply provider compatibility edits.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AdaptationMode {
-    NativeTransparent,
-    SameFormatCompat,
-    CrossFormat,
-}
-
-impl AdaptationMode {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::NativeTransparent => "native_transparent",
-            Self::SameFormatCompat => "same_format_compat",
-            Self::CrossFormat => "cross_format",
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct AiRequestGzipPolicy {
@@ -95,17 +33,11 @@ pub struct AiExecutionDecision {
     #[serde(default)]
     pub decision_kind: Option<String>,
     #[serde(default)]
-    pub execution_strategy: Option<String>,
-    #[serde(default)]
-    pub conversion_mode: Option<String>,
-    #[serde(default)]
     pub request_id: Option<String>,
     #[serde(default)]
     pub candidate_id: Option<String>,
     #[serde(default)]
     pub provider_name: Option<String>,
-    #[serde(default)]
-    pub provider_type: Option<String>,
     #[serde(default)]
     pub provider_id: Option<String>,
     #[serde(default)]
@@ -127,10 +59,6 @@ pub struct AiExecutionDecision {
     #[serde(default)]
     pub client_api_format: Option<String>,
     #[serde(default)]
-    pub provider_contract: Option<String>,
-    #[serde(default)]
-    pub client_contract: Option<String>,
-    #[serde(default)]
     pub model_name: Option<String>,
     #[serde(default)]
     pub mapped_model: Option<String>,
@@ -150,8 +78,6 @@ pub struct AiExecutionDecision {
     pub content_encoding: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_gzip: Option<AiRequestGzipPolicy>,
-    #[serde(default)]
-    pub proxy: Option<ProxySnapshot>,
     #[serde(default)]
     pub transport_profile: Option<ResolvedTransportProfile>,
     #[serde(default)]
@@ -227,12 +153,9 @@ mod tests {
         let payload = AiExecutionDecision {
             action: "local".to_string(),
             decision_kind: Some("sync".to_string()),
-            execution_strategy: None,
-            conversion_mode: None,
             request_id: None,
             candidate_id: None,
             provider_name: None,
-            provider_type: None,
             provider_id: None,
             endpoint_id: None,
             key_id: None,
@@ -243,8 +166,6 @@ mod tests {
             auth_value: None,
             provider_api_format: None,
             client_api_format: None,
-            provider_contract: None,
-            client_contract: None,
             model_name: None,
             mapped_model: None,
             prompt_cache_key: None,
@@ -255,7 +176,6 @@ mod tests {
             content_type: None,
             content_encoding: None,
             request_gzip: None,
-            proxy: None,
             transport_profile: None,
             timeouts: None,
             upstream_is_stream: false,
