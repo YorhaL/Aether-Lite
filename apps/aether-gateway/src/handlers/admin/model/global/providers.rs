@@ -8,13 +8,7 @@ use aether_data_contracts::repository::global_models::AdminGlobalModelListQuery;
 use serde_json::json;
 use std::collections::BTreeMap;
 
-const EMBEDDING_API_FORMATS: &[&str] = &[
-    "openai:embedding",
-    "jina:embedding",
-    "gemini:embedding",
-    "doubao:embedding",
-    "aliyun:multimodal_embedding",
-];
+const EMBEDDING_API_FORMATS: &[&str] = &["openai:embedding", "gemini:embedding"];
 
 fn json_value_contains_string(value: &serde_json::Value, expected: &str) -> bool {
     match value {

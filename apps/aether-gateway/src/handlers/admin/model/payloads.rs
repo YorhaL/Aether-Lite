@@ -1,13 +1,7 @@
 use crate::handlers::admin::shared::unix_secs_to_rfc3339;
 use aether_data_contracts::repository::global_models::StoredAdminProviderModel;
 
-const EMBEDDING_API_FORMATS: &[&str] = &[
-    "openai:embedding",
-    "jina:embedding",
-    "gemini:embedding",
-    "doubao:embedding",
-    "aliyun:multimodal_embedding",
-];
+const EMBEDDING_API_FORMATS: &[&str] = &["openai:embedding", "gemini:embedding"];
 
 pub(crate) fn model_tiered_pricing_first_tier_value(
     tiered_pricing: Option<&serde_json::Value>,

@@ -3,13 +3,7 @@ use chrono::{SecondsFormat, Utc};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 
-const EMBEDDING_API_FORMATS: &[&str] = &[
-    "openai:embedding",
-    "jina:embedding",
-    "gemini:embedding",
-    "doubao:embedding",
-    "aliyun:multimodal_embedding",
-];
+const EMBEDDING_API_FORMATS: &[&str] = &["openai:embedding", "gemini:embedding"];
 
 fn unix_secs_to_rfc3339(unix_secs: u64) -> Option<String> {
     let timestamp = i64::try_from(unix_secs).ok()?;

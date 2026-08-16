@@ -1391,9 +1391,7 @@ INSERT INTO provider_endpoints (id, provider_id, api_format, base_url, custom_pa
   ('openai-v4-old-default-path', 'provider-custom', 'openai:chat', 'https://open.bigmodel.cn/api/coding/paas/v4', '/v1/chat/completions'),
   ('embedding-root', 'provider-custom', 'openai:embedding', 'https://embedding.example.com', NULL),
   ('embedding-v4-old-default-path', 'provider-custom', 'openai:embedding', 'https://embedding.example.com/api/v4', '/v1/embeddings'),
-  ('jina-embedding-root', 'provider-custom', 'jina:embedding', 'https://api.jina.example', NULL),
   ('rerank-old-default-path', 'provider-custom', 'openai:rerank', 'https://rerank.example.com/api', '/v1/rerank'),
-  ('jina-rerank-old-default-path', 'provider-custom', 'jina:rerank', 'https://api.jina.example?tenant=demo', '/v1/rerank'),
   ('image-root', 'provider-custom', 'openai:image', 'https://image.example.com', NULL),
   ('image-edit-custom-path', 'provider-custom', 'openai:image', 'https://image.example.com/api', '/v1/images/edits'),
   ('image-v4-edit-custom-path', 'provider-custom', 'openai:image', 'https://image.example.com/api/v4', '/v1/images/edits'),
@@ -1484,16 +1482,8 @@ INSERT INTO provider_endpoints (id, provider_id, api_format, base_url, custom_pa
         Some(&("https://embedding.example.com/api/v4".to_string(), None))
     );
     assert_eq!(
-        rows.get("jina-embedding-root"),
-        Some(&("https://api.jina.example/v1".to_string(), None))
-    );
-    assert_eq!(
         rows.get("rerank-old-default-path"),
         Some(&("https://rerank.example.com/api/v1".to_string(), None))
-    );
-    assert_eq!(
-        rows.get("jina-rerank-old-default-path"),
-        Some(&("https://api.jina.example/v1?tenant=demo".to_string(), None))
     );
     assert_eq!(
         rows.get("image-root"),

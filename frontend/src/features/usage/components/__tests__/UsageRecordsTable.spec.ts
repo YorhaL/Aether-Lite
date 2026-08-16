@@ -538,8 +538,6 @@ describe('UsageRecordsTable', () => {
 
     expect(root.textContent).toContain('OpenAI Embedding')
     expect(root.textContent).toContain('Gemini Embedding')
-    expect(root.textContent).toContain('Jina Embedding')
-    expect(root.textContent).toContain('Doubao Embedding')
   })
 
   it('emits hide unknown toggle changes', () => {

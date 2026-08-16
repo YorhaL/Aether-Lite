@@ -14,10 +14,6 @@ export const API_FORMATS = {
   GEMINI_GENERATE_CONTENT: 'gemini:generate_content',
   GEMINI_INTERACTIONS: 'gemini:interactions',
   GEMINI_EMBEDDING: 'gemini:embedding',
-  JINA_EMBEDDING: 'jina:embedding',
-  JINA_RERANK: 'jina:rerank',
-  DOUBAO_EMBEDDING: 'doubao:embedding',
-  ALIYUN_MULTIMODAL_EMBEDDING: 'aliyun:multimodal_embedding',
 } as const
 
 export type APIFormat = typeof API_FORMATS[keyof typeof API_FORMATS]
@@ -35,10 +31,6 @@ export const API_FORMAT_LABELS: Record<string, string> = {
   [API_FORMATS.GEMINI_GENERATE_CONTENT]: 'Gemini Generate Content',
   [API_FORMATS.GEMINI_INTERACTIONS]: 'Gemini Interactions',
   [API_FORMATS.GEMINI_EMBEDDING]: 'Gemini Embedding',
-  [API_FORMATS.JINA_EMBEDDING]: 'Jina Embedding',
-  [API_FORMATS.JINA_RERANK]: 'Jina Rerank',
-  [API_FORMATS.DOUBAO_EMBEDDING]: 'Doubao Embedding',
-  [API_FORMATS.ALIYUN_MULTIMODAL_EMBEDDING]: 'Aliyun Multimodal Embedding',
   CLAUDE: 'Claude Messages',
   CLAUDE_MESSAGES: 'Claude Messages',
   OPENAI: 'OpenAI Chat',
@@ -52,10 +44,6 @@ export const API_FORMAT_LABELS: Record<string, string> = {
   GEMINI_GENERATE_CONTENT: 'Gemini Generate Content',
   GEMINI_INTERACTIONS: 'Gemini Interactions',
   GEMINI_EMBEDDING: 'Gemini Embedding',
-  JINA_EMBEDDING: 'Jina Embedding',
-  JINA_RERANK: 'Jina Rerank',
-  DOUBAO_EMBEDDING: 'Doubao Embedding',
-  ALIYUN_MULTIMODAL_EMBEDDING: 'Aliyun Multimodal Embedding',
 }
 
 // API 格式缩写映射（用于空间紧凑的显示场景）
@@ -71,10 +59,6 @@ export const API_FORMAT_SHORT: Record<string, string> = {
   [API_FORMATS.GEMINI_GENERATE_CONTENT]: 'G',
   [API_FORMATS.GEMINI_INTERACTIONS]: 'GI',
   [API_FORMATS.GEMINI_EMBEDDING]: 'GE',
-  [API_FORMATS.JINA_EMBEDDING]: 'JE',
-  [API_FORMATS.JINA_RERANK]: 'JR',
-  [API_FORMATS.DOUBAO_EMBEDDING]: 'DE',
-  [API_FORMATS.ALIYUN_MULTIMODAL_EMBEDDING]: 'AE',
   OPENAI: 'O',
   OPENAI_RESPONSES: 'OR',
   OPENAI_RESPONSES_COMPACT: 'ORC',
@@ -88,10 +72,6 @@ export const API_FORMAT_SHORT: Record<string, string> = {
   GEMINI_GENERATE_CONTENT: 'G',
   GEMINI_INTERACTIONS: 'GI',
   GEMINI_EMBEDDING: 'GE',
-  JINA_EMBEDDING: 'JE',
-  JINA_RERANK: 'JR',
-  DOUBAO_EMBEDDING: 'DE',
-  ALIYUN_MULTIMODAL_EMBEDDING: 'AE',
 }
 
 // API 格式排序顺序（统一的显示顺序）
@@ -107,10 +87,6 @@ export const API_FORMAT_ORDER: string[] = [
   API_FORMATS.GEMINI_GENERATE_CONTENT,
   API_FORMATS.GEMINI_INTERACTIONS,
   API_FORMATS.GEMINI_EMBEDDING,
-  API_FORMATS.JINA_EMBEDDING,
-  API_FORMATS.JINA_RERANK,
-  API_FORMATS.DOUBAO_EMBEDDING,
-  API_FORMATS.ALIYUN_MULTIMODAL_EMBEDDING,
 ]
 
 // Family 显示名称映射
@@ -118,9 +94,6 @@ export const API_FORMAT_FAMILY_LABELS: Record<string, string> = {
   openai: 'OpenAI',
   claude: 'Claude',
   gemini: 'Gemini',
-  jina: 'Jina',
-  doubao: 'Doubao',
-  aliyun: 'Aliyun',
 }
 
 // Kind 显示名称映射
@@ -138,7 +111,7 @@ export const API_FORMAT_KIND_LABELS: Record<string, string> = {
 }
 
 // Family 排序顺序
-const FAMILY_ORDER = ['openai', 'claude', 'gemini', 'jina', 'doubao', 'aliyun']
+const FAMILY_ORDER = ['openai', 'claude', 'gemini']
 
 // 工具函数：从 API 格式中提取 family 和 kind
 export function parseApiFormat(format: string): { family: string; kind: string } {
@@ -177,26 +150,8 @@ export function normalizeApiFormatAlias(format: string | null | undefined): stri
       return API_FORMATS.GEMINI_INTERACTIONS
     case 'GEMINI_EMBEDDING':
       return API_FORMATS.GEMINI_EMBEDDING
-    case 'JINA_EMBEDDING':
-      return API_FORMATS.JINA_EMBEDDING
-    case 'JINA_RERANK':
-      return API_FORMATS.JINA_RERANK
-    case 'DOUBAO_EMBEDDING':
-      return API_FORMATS.DOUBAO_EMBEDDING
-    case 'ALIYUN_MULTIMODAL_EMBEDDING':
-    case 'ALIYUN_EMBEDDING':
-    case 'DASHSCOPE_MULTIMODAL_EMBEDDING':
-    case 'DASHSCOPE_EMBEDDING':
-      return API_FORMATS.ALIYUN_MULTIMODAL_EMBEDDING
     default:
-      switch (raw.toLowerCase()) {
-        case 'dashscope:multimodal_embedding':
-        case 'aliyun_multimodal_embedding':
-        case 'dashscope_multimodal_embedding':
-          return API_FORMATS.ALIYUN_MULTIMODAL_EMBEDDING
-        default:
-          return raw.toLowerCase()
-      }
+      return raw.toLowerCase()
   }
 }
 

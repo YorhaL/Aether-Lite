@@ -7,9 +7,6 @@ pub enum FormatFamily {
     OpenAi,
     Claude,
     Gemini,
-    Jina,
-    Doubao,
-    Aliyun,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -30,10 +27,6 @@ pub enum FormatId {
     GeminiGenerateContent,
     GeminiInteractions,
     GeminiEmbedding,
-    JinaEmbedding,
-    JinaRerank,
-    DoubaoEmbedding,
-    AliyunMultimodalEmbedding,
 }
 
 impl FormatId {
@@ -57,9 +50,6 @@ impl FormatId {
             Self::GeminiGenerateContent | Self::GeminiInteractions | Self::GeminiEmbedding => {
                 FormatFamily::Gemini
             }
-            Self::JinaEmbedding | Self::JinaRerank => FormatFamily::Jina,
-            Self::DoubaoEmbedding => FormatFamily::Doubao,
-            Self::AliyunMultimodalEmbedding => FormatFamily::Aliyun,
         }
     }
 
@@ -82,10 +72,6 @@ impl FormatId {
             Self::GeminiGenerateContent => "gemini:generate_content",
             Self::GeminiInteractions => "gemini:interactions",
             Self::GeminiEmbedding => "gemini:embedding",
-            Self::JinaEmbedding => "jina:embedding",
-            Self::JinaRerank => "jina:rerank",
-            Self::DoubaoEmbedding => "doubao:embedding",
-            Self::AliyunMultimodalEmbedding => "aliyun:multimodal_embedding",
         }
     }
 }
@@ -120,15 +106,6 @@ impl FromStr for FormatId {
             | "/v1/interactions"
             | "/v1beta/interactions" => Ok(Self::GeminiInteractions),
             "gemini:embedding" => Ok(Self::GeminiEmbedding),
-            "jina:embedding" | "/jina/v1/embeddings" => Ok(Self::JinaEmbedding),
-            "jina:rerank" | "/jina/v1/rerank" => Ok(Self::JinaRerank),
-            "doubao:embedding" => Ok(Self::DoubaoEmbedding),
-            "aliyun:multimodal_embedding"
-            | "aliyun_embedding"
-            | "aliyun_multimodal_embedding"
-            | "dashscope:multimodal_embedding"
-            | "dashscope_embedding"
-            | "dashscope_multimodal_embedding" => Ok(Self::AliyunMultimodalEmbedding),
             _ => Err(()),
         }
     }
@@ -200,13 +177,7 @@ pub fn intersect_api_format_allowed_lists(left: &[String], right: &[String]) -> 
 }
 
 pub fn api_format_storage_aliases(value: &str) -> Vec<String> {
-    match FormatId::parse(value).map(FormatId::canonical) {
-        Some(FormatId::AliyunMultimodalEmbedding) => vec![
-            "aliyun:multimodal_embedding".to_string(),
-            "dashscope:multimodal_embedding".to_string(),
-        ],
-        _ => vec![normalize_api_format_alias(value)],
-    }
+    vec![normalize_api_format_alias(value)]
 }
 
 pub fn api_format_permission_storage_aliases(value: &str) -> Vec<String> {
@@ -411,30 +382,6 @@ mod tests {
             FormatId::parse("gemini:embedding"),
             Some(FormatId::GeminiEmbedding)
         );
-        assert_eq!(
-            FormatId::parse("jina:embedding"),
-            Some(FormatId::JinaEmbedding)
-        );
-        assert_eq!(
-            FormatId::parse("/jina/v1/embeddings"),
-            Some(FormatId::JinaEmbedding)
-        );
-        assert_eq!(
-            FormatId::parse("doubao:embedding"),
-            Some(FormatId::DoubaoEmbedding)
-        );
-        assert_eq!(
-            FormatId::parse("aliyun:multimodal_embedding").map(|format| format.to_string()),
-            Some("aliyun:multimodal_embedding".to_string())
-        );
-        assert_eq!(
-            FormatId::parse("dashscope:multimodal_embedding").map(|format| format.to_string()),
-            Some("aliyun:multimodal_embedding".to_string())
-        );
-        assert_eq!(
-            FormatId::parse("dashscope_embedding").map(|format| format.to_string()),
-            Some("aliyun:multimodal_embedding".to_string())
-        );
         assert_eq!(FormatId::OpenAiEmbedding.to_string(), "openai:embedding");
     }
 
@@ -445,9 +392,6 @@ mod tests {
         for (format, family) in [
             (FormatId::OpenAiEmbedding, FormatFamily::OpenAi),
             (FormatId::GeminiEmbedding, FormatFamily::Gemini),
-            (FormatId::JinaEmbedding, FormatFamily::Jina),
-            (FormatId::DoubaoEmbedding, FormatFamily::Doubao),
-            (FormatId::AliyunMultimodalEmbedding, FormatFamily::Aliyun),
         ] {
             assert_eq!(format.family(), family);
             assert_eq!(format.profile(), FormatProfile::Default);
@@ -490,11 +434,6 @@ mod tests {
             Some(FormatId::OpenAiRerank)
         );
         assert_eq!(FormatId::parse("/v1/rerank"), Some(FormatId::OpenAiRerank));
-        assert_eq!(FormatId::parse("jina:rerank"), Some(FormatId::JinaRerank));
-        assert_eq!(
-            FormatId::parse("/jina/v1/rerank"),
-            Some(FormatId::JinaRerank)
-        );
         assert_eq!(FormatId::OpenAiRerank.to_string(), "openai:rerank");
     }
 
@@ -502,10 +441,7 @@ mod tests {
     fn rerank_format_ids_keep_provider_family_and_default_profile() {
         use super::{FormatFamily, FormatProfile};
 
-        for (format, family) in [
-            (FormatId::OpenAiRerank, FormatFamily::OpenAi),
-            (FormatId::JinaRerank, FormatFamily::Jina),
-        ] {
+        for (format, family) in [(FormatId::OpenAiRerank, FormatFamily::OpenAi)] {
             assert_eq!(format.family(), family);
             assert_eq!(format.profile(), FormatProfile::Default);
             assert_eq!(FormatId::parse(format.as_str()), Some(format));
@@ -589,21 +525,6 @@ mod tests {
         assert_eq!(
             api_format_storage_aliases("gemini:embedding"),
             vec!["gemini:embedding".to_string()]
-        );
-        assert_eq!(
-            api_format_storage_aliases("jina:embedding"),
-            vec!["jina:embedding".to_string()]
-        );
-        assert_eq!(
-            api_format_storage_aliases("doubao:embedding"),
-            vec!["doubao:embedding".to_string()]
-        );
-        assert_eq!(
-            api_format_storage_aliases("dashscope:multimodal_embedding"),
-            vec![
-                "aliyun:multimodal_embedding".to_string(),
-                "dashscope:multimodal_embedding".to_string(),
-            ]
         );
     }
 

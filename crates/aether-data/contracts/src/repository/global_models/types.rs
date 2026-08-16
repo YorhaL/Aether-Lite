@@ -2,15 +2,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 
 const EMBEDDING_CAPABILITY: &str = "embedding";
-const EMBEDDING_API_FORMATS: &[&str] = &[
-    "openai:embedding",
-    "gemini:embedding",
-    "jina:embedding",
-    "doubao:embedding",
-    "aliyun:multimodal_embedding",
-    "/v1/embeddings",
-    "/jina/v1/embeddings",
-];
+const EMBEDDING_API_FORMATS: &[&str] = &["openai:embedding", "gemini:embedding", "/v1/embeddings"];
 
 fn validate_optional_price(
     field_name: &str,
@@ -1323,13 +1315,13 @@ mod tests {
     fn embedding_api_format_config_requires_billing_config() {
         let err = CreateAdminGlobalModelRecord::new(
             "gm-embedding".to_string(),
-            "jina-embeddings-v3".to_string(),
-            "Jina Embeddings v3".to_string(),
+            "embedding-model".to_string(),
+            "Embedding Model".to_string(),
             true,
             None,
             Some(json!({"tiers": []})),
             None,
-            Some(json!({"api_formats": ["jina:embedding"]})),
+            Some(json!({"api_formats": ["openai:embedding"]})),
         )
         .expect_err("embedding API format without price should be rejected");
 

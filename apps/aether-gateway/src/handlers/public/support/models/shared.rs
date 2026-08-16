@@ -22,10 +22,6 @@ pub(crate) fn models_api_format(request_context: &GatewayPublicRequestContext) -
         "claude:messages" => Some("claude:messages"),
         "gemini:generate_content" => Some("gemini:generate_content"),
         "gemini:embedding" => Some("gemini:embedding"),
-        "jina:embedding" => Some("jina:embedding"),
-        "jina:rerank" => Some("jina:rerank"),
-        "doubao:embedding" => Some("doubao:embedding"),
-        "aliyun:multimodal_embedding" => Some("aliyun:multimodal_embedding"),
         _ => None,
     }
 }

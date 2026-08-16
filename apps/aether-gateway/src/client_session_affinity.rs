@@ -528,8 +528,7 @@ impl ClientSessionScopeAdapter for QwenCodeSessionScopeAdapter {
             request.headers,
             http::header::USER_AGENT.as_str(),
             "qwen-code",
-        ) || header_contains(request.headers, "x-dashscope-useragent", "qwencode")
-            || header_contains(request.headers, "x-dashscope-useragent", "qwen-code")
+        )
     }
 
     fn extract_scope(&self, request: &ClientSessionRequest<'_>) -> Option<ClientSessionScope> {

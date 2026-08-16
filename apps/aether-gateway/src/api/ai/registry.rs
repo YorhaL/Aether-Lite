@@ -4,7 +4,7 @@ use axum::http::{header, HeaderValue, Response, StatusCode};
 use axum::routing::{any, post};
 use axum::Router;
 
-use super::{aliyun, claude, doubao, gemini, jina, openai};
+use super::{claude, gemini, openai};
 use crate::api::response::build_local_http_error_response_with_request_path;
 use crate::headers::extract_or_generate_trace_id;
 use crate::{handlers::proxy::proxy_request, state::AppState, GatewayError};
@@ -74,9 +74,6 @@ pub(crate) fn public_api_format_local_path(api_format: &str) -> &'static str {
     openai::local_path(&normalized)
         .or_else(|| claude::local_path(&normalized))
         .or_else(|| gemini::local_path(&normalized))
-        .or_else(|| jina::local_path(&normalized))
-        .or_else(|| doubao::local_path(&normalized))
-        .or_else(|| aliyun::local_path(&normalized))
         .unwrap_or("/")
 }
 
@@ -85,9 +82,6 @@ pub(crate) fn normalize_admin_endpoint_signature(api_format: &str) -> Option<&'s
     openai::normalized_signature(&normalized)
         .or_else(|| claude::normalized_signature(&normalized))
         .or_else(|| gemini::normalized_signature(&normalized))
-        .or_else(|| jina::normalized_signature(&normalized))
-        .or_else(|| doubao::normalized_signature(&normalized))
-        .or_else(|| aliyun::normalized_signature(&normalized))
 }
 
 pub(crate) fn admin_endpoint_signature_parts(
@@ -125,17 +119,8 @@ mod tests {
                 "embedding",
                 "/v1beta/models/{model}:{action}",
             ),
-            ("jina:embedding", "jina", "embedding", "/v1/embeddings"),
-            ("doubao:embedding", "doubao", "embedding", "/v1/embeddings"),
-            (
-                "aliyun:multimodal_embedding",
-                "aliyun",
-                "multimodal_embedding",
-                "/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding",
-            ),
             ("openai:rerank", "openai", "rerank", "/v1/rerank"),
             ("openai:search", "openai", "search", "/v1/alpha/search"),
-            ("jina:rerank", "jina", "rerank", "/v1/rerank"),
         ] {
             assert_eq!(
                 admin_endpoint_signature_parts(api_format),

@@ -378,7 +378,7 @@ mod tests {
                 " OPENAI:RESPONSES ".to_string(),
                 "claude:messages".to_string(),
                 "gemini:generate_content".to_string(),
-                "jina:rerank".to_string(),
+                "openai:rerank".to_string(),
                 "openai:responses".to_string(),
             ]))
             .expect("formats should normalize"),
@@ -386,7 +386,7 @@ mod tests {
                 "openai:responses".to_string(),
                 "claude:messages".to_string(),
                 "gemini:generate_content".to_string(),
-                "jina:rerank".to_string(),
+                "openai:rerank".to_string(),
             ])
         );
     }

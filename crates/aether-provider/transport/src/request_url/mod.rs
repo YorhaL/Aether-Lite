@@ -107,27 +107,15 @@ fn build_transport_request_url_inner(
             &transport.endpoint.base_url,
             params.request_query,
         )),
-        "openai:embedding" | "jina:embedding" => build_provider_api_root_url(
+        "openai:embedding" => build_provider_api_root_url(
             &transport.endpoint.base_url,
             "/embeddings",
             params.request_query,
         ),
-        "openai:rerank" | "jina:rerank" => build_provider_api_root_url(
+        "openai:rerank" => build_provider_api_root_url(
             &transport.endpoint.base_url,
             "/rerank",
             params.request_query,
-        ),
-        "aliyun:multimodal_embedding" => build_passthrough_path_url(
-            &transport.endpoint.base_url,
-            "/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding",
-            params.request_query,
-            &[],
-        ),
-        "doubao:embedding" => build_passthrough_path_url(
-            &transport.endpoint.base_url,
-            "/embeddings",
-            params.request_query,
-            &[],
         ),
         "claude:messages" => Some(
             if params.api_operation == Some(ApiOperation::ClaudeCountTokens) {

@@ -12,8 +12,6 @@ const apiFormats = [
   { value: 'openai:embedding', default_path: '/v1/embeddings' },
   { value: 'openai:rerank', default_path: '/v1/rerank' },
   { value: 'openai:image', default_path: '/v1/images/generations' },
-  { value: 'jina:embedding', default_path: '/v1/embeddings' },
-  { value: 'jina:rerank', default_path: '/v1/rerank' },
   { value: 'claude:messages', default_path: '/v1/messages' },
 ]
 
@@ -75,18 +73,6 @@ describe('endpoint default paths', () => {
     })).toBe('/images/generations')
 
     expect(getDefaultEndpointPath({
-      apiFormat: 'jina:embedding',
-      baseUrl: 'https://api.jina.ai/v1',
-      apiFormats,
-    })).toBe('/embeddings')
-
-    expect(getDefaultEndpointPath({
-      apiFormat: 'jina:rerank',
-      baseUrl: 'https://api.jina.ai/v1',
-      apiFormats,
-    })).toBe('/rerank')
-
-    expect(getDefaultEndpointPath({
       apiFormat: 'openai:chat',
       baseUrl: 'https://proxy.example.com/openai',
       apiFormats,
@@ -141,8 +127,8 @@ describe('endpoint default paths', () => {
 
     expect(getDefaultEndpointBaseUrl({
       apiFormat: 'openai:responses',
-      baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode',
-    })).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1')
+      baseUrl: 'https://gateway.example.com/compatible-mode',
+    })).toBe('https://gateway.example.com/compatible-mode/v1')
 
     expect(getDefaultEndpointBaseUrl({
       apiFormat: 'claude:messages',
@@ -158,11 +144,6 @@ describe('endpoint default paths', () => {
       apiFormat: 'openai:image',
       baseUrl: 'https://api.openai.com',
     })).toBe('https://api.openai.com/v1')
-
-    expect(getDefaultEndpointBaseUrl({
-      apiFormat: 'jina:embedding',
-      baseUrl: 'https://api.jina.ai',
-    })).toBe('https://api.jina.ai/v1')
 
     expect(getDefaultEndpointBaseUrl({
       apiFormat: 'gemini:generate_content',

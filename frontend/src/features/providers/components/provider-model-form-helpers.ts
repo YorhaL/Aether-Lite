@@ -14,7 +14,7 @@ interface EmbeddingMetadataCarrier {
 
 function isEmbeddingApiFormat(format: unknown): boolean {
   const value = String(format).trim().toLowerCase()
-  return value.endsWith(':embedding') || value === 'aliyun:multimodal_embedding'
+  return value === 'openai:embedding' || value === 'gemini:embedding'
 }
 
 export interface ProviderModelCreatePayloadInput {

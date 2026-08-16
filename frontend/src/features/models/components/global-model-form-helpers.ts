@@ -5,14 +5,10 @@ import type { ModelsDevModelItem } from '@/api/models-dev'
 export const EMBEDDING_API_FORMATS = [
   'openai:embedding',
   'gemini:embedding',
-  'jina:embedding',
-  'doubao:embedding',
-  'aliyun:multimodal_embedding',
 ] as const
 
 export const RERANK_API_FORMATS = [
   'openai:rerank',
-  'jina:rerank',
 ] as const
 
 export interface GlobalModelFormPayloadState {

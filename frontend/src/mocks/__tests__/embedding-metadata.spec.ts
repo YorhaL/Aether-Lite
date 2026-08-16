@@ -26,9 +26,6 @@ describe('embedding mock metadata', () => {
     expect(embeddingFormats).toEqual([
       ['openai:embedding', 'OpenAI Embedding'],
       ['gemini:embedding', 'Gemini Embedding'],
-      ['jina:embedding', 'Jina Embedding'],
-      ['doubao:embedding', 'Doubao Embedding'],
-      ['aliyun:multimodal_embedding', 'Aliyun Multimodal Embedding'],
     ])
   })
 
@@ -39,7 +36,6 @@ describe('embedding mock metadata', () => {
 
     expect(rerankFormats).toEqual([
       ['openai:rerank', 'OpenAI Rerank'],
-      ['jina:rerank', 'Jina Rerank'],
     ])
   })
 })

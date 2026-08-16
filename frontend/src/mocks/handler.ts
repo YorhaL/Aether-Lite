@@ -1044,7 +1044,7 @@ function getMockEndpointExtras(apiFormat: string) {
     ]
   } else if (normalizedFormat === 'openai:embedding') {
     extras.config = { route_kind: 'embedding' }
-  } else if (normalizedFormat === 'openai:rerank' || normalizedFormat === 'jina:rerank') {
+  } else if (normalizedFormat === 'openai:rerank') {
     extras.config = { route_kind: 'rerank' }
   } else if (normalizedFormat === 'gemini:generate_content') {
     extras.custom_path = '/models/gemini-3-pro-preview:generateContent'
@@ -2111,8 +2111,7 @@ function generateMockEndpointsForProvider(providerId: string) {
     const healthDetail = provider.endpoint_health_details.find(h => h.api_format === format)
     const baseUrl = normalizedFormat.includes('claude') ? 'https://api.anthropic.com/v1' :
       normalizedFormat.includes('openai') ? 'https://api.openai.com/v1' :
-        normalizedFormat.includes('jina') ? 'https://api.jina.ai/v1' :
-          'https://generativelanguage.googleapis.com'
+        'https://generativelanguage.googleapis.com'
     return {
       id: `ep-${providerId}-${index + 1}`,
       provider_id: providerId,
@@ -2171,7 +2170,7 @@ function generateMockModelsForProvider(providerId: string) {
   const hasClaude = provider.api_formats.some(f => f.includes('claude'))
   const hasOpenAI = provider.api_formats.some(f => f.includes('openai'))
   const hasGemini = provider.api_formats.some(f => f.includes('gemini'))
-  const hasEmbedding = provider.api_formats.some(f => f.endsWith(':embedding') || f === 'aliyun:multimodal_embedding')
+  const hasEmbedding = provider.api_formats.some(f => f === 'openai:embedding' || f === 'gemini:embedding')
   const hasRerank = provider.api_formats.some(f => f.endsWith(':rerank'))
 
   const models: Record<string, unknown>[] = []

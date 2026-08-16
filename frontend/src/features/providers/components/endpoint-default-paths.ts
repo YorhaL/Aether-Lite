@@ -52,7 +52,7 @@ function stripVersionPrefixForApiRoot(path: string): string {
 }
 
 function isOpenAiCompatibleFormat(apiFormat: string): boolean {
-  return apiFormat.startsWith('openai:') || apiFormat.startsWith('jina:')
+  return apiFormat.startsWith('openai:')
 }
 
 function usesVersionedApiRootByDefault(apiFormat: string): boolean {
@@ -63,8 +63,6 @@ function usesVersionedApiRootByDefault(apiFormat: string): boolean {
     || apiFormat === 'openai:embedding'
     || apiFormat === 'openai:rerank'
     || apiFormat === 'openai:image'
-    || apiFormat === 'jina:embedding'
-    || apiFormat === 'jina:rerank'
     || apiFormat === 'claude:messages'
     || apiFormat === 'gemini:generate_content'
     || apiFormat === 'gemini:interactions'

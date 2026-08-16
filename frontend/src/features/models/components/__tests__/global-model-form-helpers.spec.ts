@@ -41,9 +41,6 @@ describe('global model form embedding payload helpers', () => {
         api_formats: [
           'openai:embedding',
           'gemini:embedding',
-          'jina:embedding',
-          'doubao:embedding',
-          'aliyun:multimodal_embedding',
         ],
       },
     })
@@ -52,13 +49,13 @@ describe('global model form embedding payload helpers', () => {
   it('preserves embedding metadata in update payloads', () => {
     const payload = buildGlobalModelUpdatePayload({
       name: 'unused-on-update',
-      display_name: 'Jina Embeddings v3',
+      display_name: 'Embedding Model',
       supported_capabilities: ['embedding'],
       config: {
         streaming: false,
         embedding: true,
         model_type: 'embedding',
-        api_formats: ['jina:embedding'],
+        api_formats: ['gemini:embedding'],
       },
       is_active: true,
     }, embeddingPricing)
@@ -68,7 +65,7 @@ describe('global model form embedding payload helpers', () => {
       streaming: false,
       embedding: true,
       model_type: 'embedding',
-      api_formats: ['jina:embedding'],
+      api_formats: ['gemini:embedding'],
     })
   })
 })

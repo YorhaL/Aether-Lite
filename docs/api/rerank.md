@@ -1,6 +1,6 @@
 # Rerank API
 
-Aether Lite exposes an OpenAI-compatible rerank surface at `POST /v1/rerank` and can route it to providers configured as `openai:rerank` or `jina:rerank`.
+Aether Lite exposes an OpenAI-compatible rerank surface at `POST /v1/rerank` and routes it to providers configured as `openai:rerank`.
 
 ## Request
 
@@ -35,7 +35,7 @@ Fields:
 
 ## Response
 
-Aether Lite forwards the provider JSON response. OpenAI-compatible and Jina-compatible rerank providers commonly return `results[]`:
+Aether Lite forwards the provider JSON response. OpenAI-compatible rerank providers commonly return `results[]`:
 
 ```json
 {

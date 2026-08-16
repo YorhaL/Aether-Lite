@@ -20,7 +20,7 @@
 - Anthropic Messages SDK types: https://github.com/anthropics/anthropic-sdk-typescript/blob/main/src/resources/messages/messages.ts
 - Gemini Discovery JSON: https://generativelanguage.googleapis.com/$discovery/rest?version=v1beta
 
-说明：字段表中的“必填”来自官方 schema 的 `required` 或 TypeScript `?` 标记；很多接口还会受到模型、账号权限、beta header、区域、Aether Lite provider 配置和上游版本的约束。Aether Lite 的 `/v1/rerank` 是 OpenAI/Jina compatible 兼容面，不是 OpenAI 官方 OpenAPI 中的 endpoint；它见 `docs/api/rerank.md`。
+说明：字段表中的“必填”来自官方 schema 的 `required` 或 TypeScript `?` 标记；很多接口还会受到模型、账号权限、beta header、区域、Aether Lite provider 配置和上游版本的约束。Aether Lite 的 `/v1/rerank` 是 OpenAI compatible 兼容面，不是 OpenAI 官方 OpenAPI 中的 endpoint；它见 `docs/api/rerank.md`。
 
 ## Aether Lite API Format 对应关系
 

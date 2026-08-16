@@ -400,7 +400,7 @@ function supportsEmbedding(model: PublicGlobalModel): boolean {
     || model.config?.model_type === 'embedding'
     || (Array.isArray(model.config?.api_formats) && model.config.api_formats.some((format) => {
       const value = String(format).trim().toLowerCase()
-      return value.endsWith(':embedding') || value === 'aliyun:multimodal_embedding'
+      return value === 'openai:embedding' || value === 'gemini:embedding'
     }))
 }
 

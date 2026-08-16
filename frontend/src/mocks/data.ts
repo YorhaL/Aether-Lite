@@ -1094,14 +1094,5 @@ export const MOCK_API_FORMATS = {
     { value: 'gemini:generate_content', label: 'Gemini Generate Content', default_path: '/v1beta/models/{model}:{action}', aliases: [] },
     { value: 'gemini:interactions', label: 'Gemini Interactions', default_path: '/v1/interactions', aliases: [] },
     { value: 'gemini:embedding', label: 'Gemini Embedding', default_path: '/v1beta/models/{model}:embedContent', aliases: [] },
-    { value: 'jina:embedding', label: 'Jina Embedding', default_path: '/v1/embeddings', aliases: [] },
-    { value: 'jina:rerank', label: 'Jina Rerank', default_path: '/v1/rerank', aliases: [] },
-    { value: 'doubao:embedding', label: 'Doubao Embedding', default_path: '/embeddings/multimodal', aliases: [] },
-    {
-      value: 'aliyun:multimodal_embedding',
-      label: 'Aliyun Multimodal Embedding',
-      default_path: '/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding',
-      aliases: ['dashscope:multimodal_embedding'],
-    },
   ]
 }

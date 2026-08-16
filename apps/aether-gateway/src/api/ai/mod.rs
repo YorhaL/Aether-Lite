@@ -1,8 +1,5 @@
-mod aliyun;
 mod claude;
-mod doubao;
 mod gemini;
-mod jina;
 mod openai;
 mod registry;
 

@@ -1383,21 +1383,11 @@ async fn gateway_handles_admin_system_api_formats_locally_with_trusted_admin_pri
         .iter()
         .any(|item| item["value"] == "openai:embedding"));
     assert!(formats.iter().any(|item| item["value"] == "openai:rerank"));
-    assert!(formats.iter().any(|item| item["value"] == "jina:embedding"));
-    assert!(formats.iter().any(|item| item["value"] == "jina:rerank"));
     let gemini_interactions = formats
         .iter()
         .find(|item| item["value"] == "gemini:interactions")
         .expect("gemini interactions format should exist");
     assert_eq!(gemini_interactions["default_path"], "/v1/interactions");
-    let aliyun_embedding = formats
-        .iter()
-        .find(|item| item["value"] == "aliyun:multimodal_embedding")
-        .expect("aliyun multimodal embedding format should exist");
-    assert_eq!(
-        aliyun_embedding["default_path"],
-        "/api/v1/services/embeddings/multimodal-embedding/multimodal-embedding"
-    );
     assert_eq!(*upstream_hits.lock().expect("mutex should lock"), 0);
 
     gateway_handle.abort();

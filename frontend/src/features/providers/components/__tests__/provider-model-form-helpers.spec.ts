@@ -17,8 +17,8 @@ describe('provider model form embedding helpers', () => {
     { supported_capabilities: ['embedding'], config: {} },
     { supported_capabilities: null, config: { embedding: true } },
     { supported_capabilities: null, config: { model_type: 'embedding' } },
-    { supported_capabilities: null, config: { api_formats: ['doubao:embedding'] } },
-    { supported_capabilities: null, config: { api_formats: ['aliyun:multimodal_embedding'] } },
+    { supported_capabilities: null, config: { api_formats: ['openai:embedding'] } },
+    { supported_capabilities: null, config: { api_formats: ['gemini:embedding'] } },
     { supports_embedding: true, effective_supports_embedding: null, config: {} },
     { supports_embedding: null, effective_supports_embedding: true, config: {} },
   ])('detects embedding metadata from %o', (model) => {

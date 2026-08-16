@@ -34,15 +34,15 @@ describe('model catalog embedding helpers', () => {
     expect(supportsEmbedding(model({ supports_embedding: true }))).toBe(true)
     expect(supportsEmbedding(model({ config: { embedding: true } }))).toBe(true)
     expect(supportsEmbedding(model({ config: { model_type: 'embedding' } }))).toBe(true)
-    expect(supportsEmbedding(model({ config: { api_formats: ['jina:embedding'] } }))).toBe(true)
-    expect(supportsEmbedding(model({ config: { api_formats: ['aliyun:multimodal_embedding'] } }))).toBe(true)
+    expect(supportsEmbedding(model({ config: { api_formats: ['openai:embedding'] } }))).toBe(true)
+    expect(supportsEmbedding(model({ config: { api_formats: ['gemini:embedding'] } }))).toBe(true)
     expect(supportsEmbedding(model({ config: { api_formats: ['openai:chat'] } }))).toBe(false)
   })
 
   it('labels rerank models distinctly from chat and embedding models', () => {
     const rerank = model({
       supported_capabilities: ['rerank'],
-      config: { streaming: false, api_formats: ['jina:rerank'] },
+      config: { streaming: false, api_formats: ['openai:rerank'] },
     })
 
     expect(supportsRerank(rerank)).toBe(true)
