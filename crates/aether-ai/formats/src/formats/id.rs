@@ -441,12 +441,11 @@ mod tests {
     fn rerank_format_ids_keep_provider_family_and_default_profile() {
         use super::{FormatFamily, FormatProfile};
 
-        for (format, family) in [(FormatId::OpenAiRerank, FormatFamily::OpenAi)] {
-            assert_eq!(format.family(), family);
-            assert_eq!(format.profile(), FormatProfile::Default);
-            assert_eq!(FormatId::parse(format.as_str()), Some(format));
-            assert_eq!(format.to_string(), format.as_str());
-        }
+        let format = FormatId::OpenAiRerank;
+        assert_eq!(format.family(), FormatFamily::OpenAi);
+        assert_eq!(format.profile(), FormatProfile::Default);
+        assert_eq!(FormatId::parse(format.as_str()), Some(format));
+        assert_eq!(format.to_string(), format.as_str());
     }
 
     #[test]
