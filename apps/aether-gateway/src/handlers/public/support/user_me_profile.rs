@@ -7,9 +7,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::handlers::shared::{
-    deserialize_optional_json_patch, normalize_user_self_feature_settings_update,
-};
+use crate::handlers::shared::{deserialize_optional_json_patch, normalize_feature_settings};
 
 use super::{
     auth_password_policy_level, base_url_from_request, build_auth_error_response,
@@ -92,24 +90,12 @@ pub(super) async fn handle_users_me_detail_put(
     let email = normalize_users_me_optional_non_empty_string(payload.email);
     let username = normalize_users_me_optional_non_empty_string(payload.username);
     let feature_settings = match payload.feature_settings {
-        Some(value) => {
-            let current = match state.read_user_feature_settings(&auth.user.id).await {
-                Ok(value) => value,
-                Err(err) => {
-                    return build_auth_error_response(
-                        http::StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("user feature settings lookup failed: {err:?}"),
-                        false,
-                    )
-                }
-            };
-            match normalize_user_self_feature_settings_update(value, current) {
-                Ok(value) => Some(value),
-                Err(detail) => {
-                    return build_auth_error_response(http::StatusCode::BAD_REQUEST, detail, false);
-                }
+        Some(value) => match normalize_feature_settings(value) {
+            Ok(value) => Some(value),
+            Err(detail) => {
+                return build_auth_error_response(http::StatusCode::BAD_REQUEST, detail, false);
             }
-        }
+        },
         None => None,
     };
 

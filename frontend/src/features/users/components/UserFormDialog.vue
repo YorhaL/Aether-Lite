@@ -228,15 +228,6 @@
               :disabled="!form.chat_pii_redaction_enabled"
             />
           </div>
-          <div class="mt-3 flex items-center justify-between gap-3 border-t border-border/60 pt-3">
-            <div>
-              <Label class="text-sm font-medium">{{ legacyT('通知推送服务') }}</Label>
-              <p class="mt-1 text-xs text-muted-foreground">
-                {{ legacyT('允许用户配置自己的第三方推送渠道') }}
-              </p>
-            </div>
-            <Switch v-model="form.notification_push_service_enabled" />
-          </div>
         </div>
       </div>
     </form>
@@ -284,8 +275,6 @@ import { useI18n } from '@/i18n'
 import { parseNumberInput } from '@/utils/form'
 import {
   mergeChatPiiRedactionFeatureSettings,
-  mergeNotificationPushServiceFeatureSettings,
-  readNotificationPushServiceFeatureSettings,
   readChatPiiRedactionFeatureSettings,
 } from '@/utils/featureSettings'
 import {
@@ -338,7 +327,6 @@ const form = ref({
   group_ids: [] as string[],
   chat_pii_redaction_enabled: false,
   chat_pii_redaction_placeholder_notice: true,
-  notification_push_service_enabled: false,
 })
 
 const groupOptions = computed(() => (props.groups || []).map((group) => ({
@@ -365,7 +353,6 @@ function resetForm() {
     group_ids: [],
     chat_pii_redaction_enabled: false,
     chat_pii_redaction_placeholder_notice: true,
-    notification_push_service_enabled: false,
   }
 }
 
@@ -373,7 +360,6 @@ function loadUserData() {
   if (!props.user) return
   formNonce.value = createFieldNonce()
   const redactionFeature = readChatPiiRedactionFeatureSettings(props.user.feature_settings)
-  const notificationPushFeature = readNotificationPushServiceFeatureSettings(props.user.feature_settings)
   // 创建数组副本，避免与 props 数据共享引用
   form.value = {
     username: props.user.username,
@@ -387,7 +373,6 @@ function loadUserData() {
     group_ids: props.user.group_ids ? [...props.user.group_ids] : [],
     chat_pii_redaction_enabled: redactionFeature.enabled,
     chat_pii_redaction_placeholder_notice: redactionFeature.inject_model_instruction,
-    notification_push_service_enabled: notificationPushFeature.enabled,
   }
 }
 
@@ -490,12 +475,9 @@ async function handleSubmit() {
 }
 
 function buildFeatureSettingsPayload(): Record<string, unknown> | null {
-  const withRedaction = mergeChatPiiRedactionFeatureSettings(props.user?.feature_settings, {
+  return mergeChatPiiRedactionFeatureSettings(props.user?.feature_settings, {
     enabled: form.value.chat_pii_redaction_enabled,
     inject_model_instruction: form.value.chat_pii_redaction_placeholder_notice,
-  })
-  return mergeNotificationPushServiceFeatureSettings(withRedaction, {
-    enabled: form.value.notification_push_service_enabled,
   })
 }
 

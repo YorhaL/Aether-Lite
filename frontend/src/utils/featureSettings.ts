@@ -3,19 +3,11 @@ export interface ChatPiiRedactionFeatureSettings {
   inject_model_instruction: boolean
 }
 
-export interface NotificationPushServiceFeatureSettings {
-  enabled: boolean
-}
-
 export type FeatureSettingsMap = Record<string, unknown>
 
 const DEFAULT_CHAT_PII_REDACTION_FEATURE_SETTINGS: ChatPiiRedactionFeatureSettings = {
   enabled: false,
   inject_model_instruction: true,
-}
-
-const DEFAULT_NOTIFICATION_PUSH_SERVICE_FEATURE_SETTINGS: NotificationPushServiceFeatureSettings = {
-  enabled: false,
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -64,32 +56,5 @@ export function removeChatPiiRedactionFeatureSettings(
   if (!isRecord(featureSettings)) return null
   const settings: FeatureSettingsMap = { ...featureSettings }
   delete settings.chat_pii_redaction
-  return Object.keys(settings).length > 0 ? settings : null
-}
-
-export function readNotificationPushServiceFeatureSettings(
-  featureSettings: unknown,
-): NotificationPushServiceFeatureSettings {
-  const feature = isRecord(featureSettings)
-    ? featureSettings.notification_push_service
-    : null
-  if (!isRecord(feature)) {
-    return { ...DEFAULT_NOTIFICATION_PUSH_SERVICE_FEATURE_SETTINGS }
-  }
-  return {
-    enabled: feature.enabled === true,
-  }
-}
-
-export function mergeNotificationPushServiceFeatureSettings(
-  featureSettings: unknown,
-  notificationPushService: NotificationPushServiceFeatureSettings,
-): FeatureSettingsMap | null {
-  const settings: FeatureSettingsMap = isRecord(featureSettings)
-    ? { ...featureSettings }
-    : {}
-  settings.notification_push_service = {
-    enabled: notificationPushService.enabled,
-  }
   return Object.keys(settings).length > 0 ? settings : null
 }

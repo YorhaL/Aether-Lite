@@ -56,13 +56,13 @@ describe('managed API key feature setting inheritance', () => {
       isEditing: true,
       currentFeatureSettings: {
         chat_pii_redaction: { enabled: false },
-        notification_push_service: { enabled: true },
+        unrelated_feature: { enabled: true },
       },
       mode: 'inherit',
       value: redaction,
     })).toEqual({
       feature_settings: {
-        notification_push_service: { enabled: true },
+        unrelated_feature: { enabled: true },
       },
     })
   })

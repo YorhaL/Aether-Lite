@@ -54,7 +54,6 @@ pub(crate) fn normalize_feature_settings(value: Option<Value>) -> Result<Option<
         Value::Null => Ok(None),
         Value::Object(ref mut settings) => {
             normalize_chat_pii_redaction_feature_settings(settings)?;
-            normalize_notification_push_service_feature_settings(settings)?;
             if settings.is_empty() {
                 Ok(None)
             } else {
@@ -63,41 +62,6 @@ pub(crate) fn normalize_feature_settings(value: Option<Value>) -> Result<Option<
         }
         _ => Err("feature_settings 必须是对象".to_string()),
     }
-}
-
-pub(crate) fn normalize_user_self_feature_settings_update(
-    value: Option<Value>,
-    current: Option<Value>,
-) -> Result<Option<Value>, String> {
-    let mut normalized = normalize_feature_settings(value)?;
-    let current_notification_push_service = current
-        .and_then(|value| match value {
-            Value::Object(mut settings) => settings.remove("notification_push_service"),
-            _ => None,
-        })
-        .and_then(|value| {
-            let mut wrapper = Map::new();
-            wrapper.insert("notification_push_service".to_string(), value);
-            normalize_notification_push_service_feature_settings(&mut wrapper)
-                .ok()
-                .and_then(|_| wrapper.remove("notification_push_service"))
-        });
-
-    match (&mut normalized, current_notification_push_service) {
-        (Some(Value::Object(settings)), Some(value)) => {
-            settings.insert("notification_push_service".to_string(), value);
-        }
-        (Some(Value::Object(settings)), None) => {
-            settings.remove("notification_push_service");
-        }
-        (None, Some(value)) => {
-            let mut settings = Map::new();
-            settings.insert("notification_push_service".to_string(), value);
-            normalized = Some(Value::Object(settings));
-        }
-        _ => {}
-    }
-    Ok(normalized)
 }
 
 pub(crate) fn normalize_ip_rules(
@@ -372,46 +336,11 @@ fn normalize_chat_pii_redaction_feature_object(
     Ok(())
 }
 
-fn normalize_notification_push_service_feature_settings(
-    settings: &mut Map<String, Value>,
-) -> Result<(), String> {
-    let Some(value) = settings.get_mut("notification_push_service") else {
-        return Ok(());
-    };
-    match value {
-        Value::Null => {
-            settings.remove("notification_push_service");
-            Ok(())
-        }
-        Value::Object(feature) => {
-            normalize_notification_push_service_feature_object(feature)?;
-            if feature.is_empty() {
-                settings.remove("notification_push_service");
-            }
-            Ok(())
-        }
-        _ => Err("notification_push_service 必须是对象".to_string()),
-    }
-}
-
-fn normalize_notification_push_service_feature_object(
-    feature: &mut Map<String, Value>,
-) -> Result<(), String> {
-    for key in ["enabled"] {
-        if let Some(value) = feature.get(key) {
-            if !value.is_boolean() {
-                return Err(format!("notification_push_service.{key} 必须是布尔值"));
-            }
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
         ip_rules_allow, json_ip_rules_allow, normalize_feature_settings, normalize_ip_rules,
-        normalize_user_self_feature_settings_update, parse_json_ip_rules,
+        parse_json_ip_rules,
     };
     use serde_json::json;
     use std::net::{IpAddr, Ipv4Addr};
@@ -440,41 +369,6 @@ mod tests {
                 "!10.0.0.13".to_string(),
             ]),
         );
-    }
-
-    #[test]
-    fn normalize_feature_settings_accepts_notification_push_service_permission() {
-        let normalized = normalize_feature_settings(Some(json!({
-            "notification_push_service": {"enabled": true}
-        })))
-        .expect("feature settings should normalize")
-        .expect("feature settings should remain set");
-
-        assert_eq!(
-            normalized["notification_push_service"]["enabled"],
-            json!(true)
-        );
-    }
-
-    #[test]
-    fn user_self_feature_update_preserves_notification_push_permission() {
-        let normalized = normalize_user_self_feature_settings_update(
-            Some(json!({
-                "chat_pii_redaction": {"enabled": true},
-                "notification_push_service": {"enabled": false}
-            })),
-            Some(json!({
-                "notification_push_service": {"enabled": true}
-            })),
-        )
-        .expect("feature settings should normalize")
-        .expect("feature settings should remain set");
-
-        assert_eq!(
-            normalized["notification_push_service"]["enabled"],
-            json!(true)
-        );
-        assert_eq!(normalized["chat_pii_redaction"]["enabled"], json!(true));
     }
 
     #[test]

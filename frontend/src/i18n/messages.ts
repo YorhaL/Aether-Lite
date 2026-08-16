@@ -849,8 +849,6 @@ const legacyExactEnglishMessages: Record<string, string> = {
   '无限制': 'Unlimited',
   '按钱包余额限制': 'Limited by wallet balance',
   '功能权限': 'Feature permissions',
-  '通知推送服务': 'Notification push service',
-  '允许用户配置自己的第三方推送渠道': 'Allow users to configure their own third-party push channels',
   '用户分组': 'User groups',
   '管理用户组、默认注册组、成员和组级访问控制': 'Manage user groups, the default registration group, members, and group-level access control',
   '新建分组': 'Create group',
