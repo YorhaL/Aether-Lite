@@ -50,8 +50,6 @@
           <BasicConfigSection
             id="section-basic"
             :default-user-initial-balance-usd="systemConfig.default_user_initial_balance_usd"
-            :rate-limit-per-minute="systemConfig.rate_limit_per_minute"
-            :daily-usage-limit-usd="systemConfig.daily_usage_limit_usd"
             :enable-registration="systemConfig.enable_registration"
             :password-policy-level="systemConfig.password_policy_level"
             :turnstile-enabled="systemConfig.turnstile_enabled"
@@ -71,8 +69,6 @@
             :has-changes="hasBasicConfigChanges"
             @save="saveBasicConfig"
             @update:default-user-initial-balance-usd="systemConfig.default_user_initial_balance_usd = $event"
-            @update:rate-limit-per-minute="systemConfig.rate_limit_per_minute = $event"
-            @update:daily-usage-limit-usd="systemConfig.daily_usage_limit_usd = $event"
             @update:enable-registration="systemConfig.enable_registration = $event"
             @update:password-policy-level="systemConfig.password_policy_level = $event"
             @update:turnstile-enabled="systemConfig.turnstile_enabled = $event"
@@ -88,6 +84,16 @@
             @update:enable-openai-image-sync-heartbeat="systemConfig.enable_openai_image_sync_heartbeat = $event"
             @update:enable-standard-text-sync-heartbeat="systemConfig.enable_standard_text_sync_heartbeat = $event"
             @update:cyber-continue-failover="systemConfig.cyber_continue_failover = $event"
+          />
+
+          <!-- 流控策略 -->
+          <AdmissionPolicySection
+            id="section-admission-policy"
+            :config="systemConfig"
+            :loading="systemConfigLoading || admissionPolicyLoading"
+            :has-changes="hasAdmissionPolicyChanges"
+            @save="saveAdmissionPolicy"
+            @update:config-value="updateAdmissionPolicyConfig"
           />
 
           <!-- 请求记录配置 -->
@@ -232,9 +238,11 @@ import { useConfigExportImport } from './system-settings/composables/useConfigEx
 import SiteInfoSection from './system-settings/SiteInfoSection.vue'
 import DataManagementSection from './system-settings/DataManagementSection.vue'
 import BasicConfigSection from './system-settings/BasicConfigSection.vue'
+import AdmissionPolicySection from './system-settings/AdmissionPolicySection.vue'
 import RequestLogSection from './system-settings/RequestLogSection.vue'
 import CleanupPolicySection from './system-settings/CleanupPolicySection.vue'
 import SystemInfoSection from './system-settings/SystemInfoSection.vue'
+import type { SystemAdmissionPolicyConfigKey } from './system-settings/admissionPolicyConfig'
 
 // Dialog components
 import ConfigImportDialog from './system-settings/ConfigImportDialog.vue'
@@ -246,6 +254,7 @@ const tocItems = [
   { id: 'section-site-info', label: '站点信息' },
   { id: 'section-data-mgmt', label: '数据管理' },
   { id: 'section-basic', label: '基础配置' },
+  { id: 'section-admission-policy', label: '流控策略' },
   { id: 'section-request-log', label: '请求记录' },
   { id: 'section-cleanup', label: '记录清理策略' },
   { id: 'section-sysinfo', label: '系统信息' },
@@ -305,10 +314,12 @@ const {
   systemConfigLoading,
   siteInfoLoading,
   basicConfigLoading,
+  admissionPolicyLoading,
   logConfigLoading,
   cleanupConfigLoading,
   hasSiteInfoChanges,
   hasBasicConfigChanges,
+  hasAdmissionPolicyChanges,
   hasLogConfigChanges,
   hasCleanupConfigChanges,
   sensitiveHeadersStr,
@@ -317,11 +328,16 @@ const {
   loadSystemVersion,
   saveSiteInfo,
   saveBasicConfig,
+  saveAdmissionPolicy,
   clearTurnstileSecret,
   saveLogConfig,
   saveCleanupConfig,
   handleAutoCleanupToggle,
 } = useSystemConfig()
+
+function updateAdmissionPolicyConfig(key: SystemAdmissionPolicyConfigKey, value: number) {
+  systemConfig.value[key] = value
+}
 
 // 数据导出/导入 composable
 const {

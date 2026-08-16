@@ -31,7 +31,7 @@ pub(crate) fn masked_user_api_key_display(
 
 pub(super) fn build_admin_user_api_key_detail_payload(
     state: &AdminAppState<'_>,
-    record: &aether_data::repository::auth::StoredAuthApiKeyExportRecord,
+    record: &crate::data::GatewayAuthApiKeyExportRecord,
     is_locked: bool,
 ) -> serde_json::Value {
     json!({

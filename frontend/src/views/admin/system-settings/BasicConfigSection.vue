@@ -36,48 +36,6 @@
 
       <div>
         <Label
-          for="rate-limit"
-          class="block text-sm font-medium"
-        >
-          默认速率限制 (请求/分钟)
-        </Label>
-        <Input
-          id="rate-limit"
-          :model-value="rateLimitPerMinute"
-          type="number"
-          placeholder="0"
-          class="mt-1"
-          @update:model-value="$emit('update:rateLimitPerMinute', Number($event))"
-        />
-        <p class="mt-1 text-xs text-muted-foreground">
-          0 表示默认不限制；未单独配置的用户和独立 Key 会跟随这里
-        </p>
-      </div>
-
-      <div>
-        <Label
-          for="daily-usage-limit"
-          class="block text-sm font-medium"
-        >
-          默认额度限制（美元/日）
-        </Label>
-        <Input
-          id="daily-usage-limit"
-          :model-value="dailyUsageLimitUsd"
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder="0"
-          class="mt-1"
-          @update:model-value="$emit('update:dailyUsageLimitUsd', Math.max(0, Number($event) || 0))"
-        />
-        <p class="mt-1 text-xs text-muted-foreground">
-          0 表示默认不限制；未单独配置的用户和独立 Key 会跟随这里
-        </p>
-      </div>
-
-      <div>
-        <Label
           for="password-policy-level"
           class="block text-sm font-medium mb-2"
         >
@@ -406,8 +364,6 @@ import { CardSection } from '@/components/layout'
 
 defineProps<{
   defaultUserInitialBalanceUsd: number
-  rateLimitPerMinute: number
-  dailyUsageLimitUsd: number
   enableRegistration: boolean
   passwordPolicyLevel: string
   turnstileEnabled: boolean
@@ -430,8 +386,6 @@ defineProps<{
 defineEmits<{
   save: []
   'update:defaultUserInitialBalanceUsd': [value: number]
-  'update:rateLimitPerMinute': [value: number]
-  'update:dailyUsageLimitUsd': [value: number]
   'update:enableRegistration': [value: boolean]
   'update:passwordPolicyLevel': [value: string]
   'update:turnstileEnabled': [value: boolean]

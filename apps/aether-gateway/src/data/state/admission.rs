@@ -11,6 +11,83 @@ use aether_data::DataLayerError;
 
 use super::GatewayDataState;
 
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub(crate) struct GatewayAuthApiKeyExportRecord {
+    #[serde(flatten)]
+    stored: StoredAuthApiKeyExportRecord,
+    pub(crate) daily_usage_limit_usd: Option<f64>,
+}
+
+impl GatewayAuthApiKeyExportRecord {
+    fn from_stored(
+        stored: StoredAuthApiKeyExportRecord,
+        daily_usage_limit_usd: Option<f64>,
+    ) -> Self {
+        Self {
+            stored,
+            daily_usage_limit_usd,
+        }
+    }
+
+    pub(crate) fn into_stored(self) -> StoredAuthApiKeyExportRecord {
+        self.stored
+    }
+}
+
+impl std::ops::Deref for GatewayAuthApiKeyExportRecord {
+    type Target = StoredAuthApiKeyExportRecord;
+
+    fn deref(&self) -> &Self::Target {
+        &self.stored
+    }
+}
+
+impl std::ops::DerefMut for GatewayAuthApiKeyExportRecord {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.stored
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub(crate) struct GatewayUserGroup {
+    #[serde(flatten)]
+    stored: StoredUserGroup,
+    pub(crate) daily_usage_limit_usd: Option<f64>,
+    pub(crate) daily_usage_limit_mode: String,
+}
+
+impl GatewayUserGroup {
+    pub(crate) fn from_stored(stored: StoredUserGroup, daily_usage_limit_usd: Option<f64>) -> Self {
+        Self {
+            stored,
+            daily_usage_limit_usd,
+            daily_usage_limit_mode: if daily_usage_limit_usd.is_some() {
+                "custom".to_string()
+            } else {
+                "inherit".to_string()
+            },
+        }
+    }
+
+    pub(crate) fn into_stored(self) -> StoredUserGroup {
+        self.stored
+    }
+}
+
+impl std::ops::Deref for GatewayUserGroup {
+    type Target = StoredUserGroup;
+
+    fn deref(&self) -> &Self::Target {
+        &self.stored
+    }
+}
+
+impl std::ops::DerefMut for GatewayUserGroup {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.stored
+    }
+}
+
 impl GatewayDataState {
     pub(crate) async fn get_admission_policy(
         &self,
@@ -163,11 +240,13 @@ impl GatewayDataState {
 
     pub(crate) async fn enrich_api_key_export_record(
         &self,
-        mut record: StoredAuthApiKeyExportRecord,
-    ) -> Result<StoredAuthApiKeyExportRecord, DataLayerError> {
+        record: StoredAuthApiKeyExportRecord,
+    ) -> Result<GatewayAuthApiKeyExportRecord, DataLayerError> {
         let document = self
             .scoped_admission_document(AdmissionScopeKind::ApiKey, &record.api_key_id)
             .await?;
+        let mut record =
+            GatewayAuthApiKeyExportRecord::from_stored(record, document.daily_usage_limit_usd());
         record.rate_limit = document
             .requests_per_minute()
             .map(i32::try_from)
@@ -186,14 +265,13 @@ impl GatewayDataState {
                     "API key concurrency limit exceeds the supported API range".to_string(),
                 )
             })?;
-        record.daily_usage_limit_usd = document.daily_usage_limit_usd();
         Ok(record)
     }
 
     pub(crate) async fn enrich_optional_api_key_export_record(
         &self,
         record: Option<StoredAuthApiKeyExportRecord>,
-    ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
+    ) -> Result<Option<GatewayAuthApiKeyExportRecord>, DataLayerError> {
         match record {
             Some(record) => self.enrich_api_key_export_record(record).await.map(Some),
             None => Ok(None),
@@ -202,8 +280,8 @@ impl GatewayDataState {
 
     pub(crate) async fn enrich_api_key_export_records(
         &self,
-        mut records: Vec<StoredAuthApiKeyExportRecord>,
-    ) -> Result<Vec<StoredAuthApiKeyExportRecord>, DataLayerError> {
+        records: Vec<StoredAuthApiKeyExportRecord>,
+    ) -> Result<Vec<GatewayAuthApiKeyExportRecord>, DataLayerError> {
         let scopes = records
             .iter()
             .map(|record| AdmissionPolicyScope {
@@ -217,11 +295,16 @@ impl GatewayDataState {
             .into_iter()
             .map(|policy| (policy.scope.subject_id, policy.document))
             .collect::<HashMap<_, _>>();
-        for record in &mut records {
+        let mut enriched = Vec::with_capacity(records.len());
+        for record in records {
             let document = policies
                 .get(&record.api_key_id)
                 .cloned()
                 .unwrap_or_default();
+            let mut record = GatewayAuthApiKeyExportRecord::from_stored(
+                record,
+                document.daily_usage_limit_usd(),
+            );
             record.rate_limit = document
                 .requests_per_minute()
                 .map(i32::try_from)
@@ -240,15 +323,15 @@ impl GatewayDataState {
                         "API key concurrency limit exceeds the supported API range".to_string(),
                     )
                 })?;
-            record.daily_usage_limit_usd = document.daily_usage_limit_usd();
+            enriched.push(record);
         }
-        Ok(records)
+        Ok(enriched)
     }
 
     pub(crate) async fn enrich_user_groups(
         &self,
-        mut groups: Vec<StoredUserGroup>,
-    ) -> Result<Vec<StoredUserGroup>, DataLayerError> {
+        groups: Vec<StoredUserGroup>,
+    ) -> Result<Vec<GatewayUserGroup>, DataLayerError> {
         let scopes = groups
             .iter()
             .map(|group| AdmissionPolicyScope {
@@ -262,8 +345,10 @@ impl GatewayDataState {
             .into_iter()
             .map(|policy| (policy.scope.subject_id, policy.document))
             .collect::<HashMap<_, _>>();
-        for group in &mut groups {
+        let mut enriched = Vec::with_capacity(groups.len());
+        for group in groups {
             let document = policies.get(&group.id).cloned().unwrap_or_default();
+            let mut group = GatewayUserGroup::from_stored(group, document.daily_usage_limit_usd());
             group.rate_limit = document
                 .requests_per_minute()
                 .map(i32::try_from)
@@ -278,14 +363,9 @@ impl GatewayDataState {
             } else {
                 "inherit".to_string()
             };
-            group.daily_usage_limit_usd = document.daily_usage_limit_usd();
-            group.daily_usage_limit_mode = if group.daily_usage_limit_usd.is_some() {
-                "custom".to_string()
-            } else {
-                "inherit".to_string()
-            };
+            enriched.push(group);
         }
-        Ok(groups)
+        Ok(enriched)
     }
 
     pub(crate) async fn enrich_user_export_rows(

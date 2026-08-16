@@ -508,12 +508,13 @@ pub(super) async fn handle_users_me_api_key_install_session_create(
             false,
         );
     };
+    let record = record.into_stored();
 
     build_api_key_install_session_response(
         state,
         request_context,
         headers,
-        record.api_key_id.clone(),
+        record.api_key_id,
         record.name.unwrap_or_else(|| "API Key".to_string()),
         api_key,
         payload,

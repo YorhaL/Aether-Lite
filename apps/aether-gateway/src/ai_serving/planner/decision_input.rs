@@ -277,7 +277,7 @@ pub(crate) async fn attach_routing_policy_to_local_requested_model_input(
                 );
                 user_groups?
                     .into_iter()
-                    .map(|group| group.id)
+                    .map(|group| group.into_stored().id)
                     .collect::<Vec<_>>()
             } else {
                 Vec::new()

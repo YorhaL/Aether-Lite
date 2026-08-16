@@ -6,4 +6,4 @@ pub(crate) mod decision_trace;
 pub(crate) mod state;
 
 pub use config::GatewayDataConfig;
-pub(crate) use state::GatewayDataState;
+pub(crate) use state::{GatewayAuthApiKeyExportRecord, GatewayDataState, GatewayUserGroup};

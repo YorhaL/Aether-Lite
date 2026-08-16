@@ -60,8 +60,8 @@ pub(super) fn build_admin_user_payload_with_groups(
     rate_limit: Option<i32>,
     rate_limit_mode: Option<&str>,
     unlimited: bool,
-    groups: &[aether_data::repository::users::StoredUserGroup],
-    policy_groups: &[aether_data::repository::users::StoredUserGroup],
+    groups: &[crate::data::GatewayUserGroup],
+    policy_groups: &[crate::data::GatewayUserGroup],
     system_daily_usage_limit_usd: f64,
 ) -> serde_json::Value {
     json!({
@@ -104,8 +104,8 @@ pub(super) fn build_admin_user_export_payload(
     last_login_at: Option<chrono::DateTime<chrono::Utc>>,
     request_count: u64,
     total_tokens: u64,
-    groups: &[aether_data::repository::users::StoredUserGroup],
-    policy_groups: &[aether_data::repository::users::StoredUserGroup],
+    groups: &[crate::data::GatewayUserGroup],
+    policy_groups: &[crate::data::GatewayUserGroup],
     system_daily_usage_limit_usd: f64,
 ) -> serde_json::Value {
     json!({
@@ -143,9 +143,7 @@ pub(super) fn build_admin_user_export_payload(
     })
 }
 
-pub(super) fn user_group_badge_payload(
-    group: &aether_data::repository::users::StoredUserGroup,
-) -> serde_json::Value {
+pub(super) fn user_group_badge_payload(group: &crate::data::GatewayUserGroup) -> serde_json::Value {
     json!({
         "id": group.id,
         "name": group.name,
@@ -160,7 +158,7 @@ fn effective_policy_payload(
     allowed_api_formats_mode: &str,
     allowed_models: Option<&Vec<String>>,
     allowed_models_mode: &str,
-    groups: &[aether_data::repository::users::StoredUserGroup],
+    groups: &[crate::data::GatewayUserGroup],
     system_daily_usage_limit_usd: f64,
 ) -> serde_json::Value {
     let mut sorted_groups = groups.to_vec();
@@ -199,10 +197,8 @@ fn effective_policy_payload(
 fn effective_list_policy_payload(
     user_values: Option<&Vec<String>>,
     user_mode: &str,
-    groups: &[aether_data::repository::users::StoredUserGroup],
-    group_field: impl Fn(
-        &aether_data::repository::users::StoredUserGroup,
-    ) -> (&String, Option<&Vec<String>>),
+    groups: &[crate::data::GatewayUserGroup],
+    group_field: impl Fn(&crate::data::GatewayUserGroup) -> (&String, Option<&Vec<String>>),
 ) -> serde_json::Value {
     let mut effective = None;
     let mut group_sources = Vec::new();
@@ -229,7 +225,7 @@ fn effective_list_policy_payload(
 }
 
 fn effective_rate_limit_policy_payload(
-    groups: &[aether_data::repository::users::StoredUserGroup],
+    groups: &[crate::data::GatewayUserGroup],
 ) -> serde_json::Value {
     let group_sources = groups
         .iter()
@@ -243,7 +239,7 @@ fn effective_rate_limit_policy_payload(
 }
 
 fn effective_daily_usage_limit_policy_payload(
-    groups: &[aether_data::repository::users::StoredUserGroup],
+    groups: &[crate::data::GatewayUserGroup],
     system_daily_usage_limit_usd: f64,
 ) -> serde_json::Value {
     let group_sources = groups
@@ -262,9 +258,7 @@ fn effective_daily_usage_limit_policy_payload(
     }
 }
 
-fn group_admission_grant(
-    groups: &[aether_data::repository::users::StoredUserGroup],
-) -> AdmissionPolicyDocument {
+fn group_admission_grant(groups: &[crate::data::GatewayUserGroup]) -> AdmissionPolicyDocument {
     groups
         .iter()
         .fold(AdmissionPolicyDocument::default(), |document, group| {
@@ -285,7 +279,7 @@ fn policy_payload(
     mode: &str,
     value: serde_json::Value,
     source: &str,
-    groups: &[&aether_data::repository::users::StoredUserGroup],
+    groups: &[&crate::data::GatewayUserGroup],
 ) -> serde_json::Value {
     let single_group = groups.first().copied().filter(|_| groups.len() == 1);
     json!({
@@ -358,26 +352,31 @@ mod tests {
     use super::*;
     use aether_data::repository::users::{StoredUserAuthRecord, StoredUserGroup};
 
-    fn sample_group(id: &str, name: &str, rate_limit: Option<i32>) -> StoredUserGroup {
-        StoredUserGroup {
-            id: id.to_string(),
-            name: name.to_string(),
-            normalized_name: name.to_ascii_lowercase(),
-            description: None,
-            priority: 0,
-            allowed_providers: None,
-            allowed_providers_mode: "inherit".to_string(),
-            allowed_api_formats: None,
-            allowed_api_formats_mode: "inherit".to_string(),
-            allowed_models: None,
-            allowed_models_mode: "inherit".to_string(),
-            rate_limit,
-            rate_limit_mode: "custom".to_string(),
-            daily_usage_limit_usd: None,
-            daily_usage_limit_mode: "inherit".to_string(),
-            created_at: None,
-            updated_at: None,
-        }
+    fn sample_group(
+        id: &str,
+        name: &str,
+        rate_limit: Option<i32>,
+    ) -> crate::data::GatewayUserGroup {
+        crate::data::GatewayUserGroup::from_stored(
+            StoredUserGroup {
+                id: id.to_string(),
+                name: name.to_string(),
+                normalized_name: name.to_ascii_lowercase(),
+                description: None,
+                priority: 0,
+                allowed_providers: None,
+                allowed_providers_mode: "inherit".to_string(),
+                allowed_api_formats: None,
+                allowed_api_formats_mode: "inherit".to_string(),
+                allowed_models: None,
+                allowed_models_mode: "inherit".to_string(),
+                rate_limit,
+                rate_limit_mode: "custom".to_string(),
+                created_at: None,
+                updated_at: None,
+            },
+            None,
+        )
     }
 
     fn sample_user() -> StoredUserAuthRecord {

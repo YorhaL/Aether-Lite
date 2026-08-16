@@ -177,7 +177,6 @@ pub(super) async fn build_admin_create_api_key_response(
                 allowed_models,
                 ip_rules,
                 rate_limit: payload.rate_limit,
-                daily_usage_limit_usd: payload.daily_usage_limit_usd,
                 concurrent_limit,
                 force_capabilities: None,
                 is_active: true,
@@ -187,6 +186,7 @@ pub(super) async fn build_admin_create_api_key_response(
                 total_tokens: 0,
                 total_cost_usd: 0.0,
             },
+            payload.daily_usage_limit_usd,
         )
         .await?
     else {
@@ -426,8 +426,6 @@ pub(super) async fn build_admin_update_api_key_response(
                 name,
                 rate_limit_present: field_presence.contains("rate_limit"),
                 rate_limit: payload.rate_limit,
-                daily_usage_limit_present: field_presence.contains("daily_usage_limit_usd"),
-                daily_usage_limit_usd: payload.daily_usage_limit_usd,
                 concurrent_limit_present: field_presence.contains("concurrent_limit"),
                 concurrent_limit,
                 allowed_providers,
@@ -443,6 +441,9 @@ pub(super) async fn build_admin_update_api_key_response(
                 auto_delete_on_expiry_present: field_presence.contains("auto_delete_on_expiry"),
                 auto_delete_on_expiry: effective_auto_delete_on_expiry,
             },
+            field_presence
+                .contains("daily_usage_limit_usd")
+                .then_some(payload.daily_usage_limit_usd),
         )
         .await?
     else {

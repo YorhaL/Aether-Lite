@@ -80,11 +80,11 @@ pub(in super::super) async fn build_admin_create_user_group_response(
             "当前为只读模式，无法创建用户分组",
         ));
     }
-    let record = match parse_group_record(request_body) {
+    let (record, daily_usage_limit_usd) = match parse_group_record(request_body) {
         Ok(value) => value,
         Err(detail) => return Ok(bad_request_owned(detail)),
     };
-    let group = match state.create_user_group(record).await {
+    let group = match state.create_user_group(record, daily_usage_limit_usd).await {
         Ok(Some(group)) => group,
         Ok(None) => {
             return Ok(build_admin_users_read_only_response(
@@ -119,11 +119,14 @@ pub(in super::super) async fn build_admin_update_user_group_response(
     let Some(group_id) = user_group_id_from_path(request_context.path()) else {
         return Ok(build_admin_users_bad_request_response("缺少 group_id"));
     };
-    let record = match parse_group_record(request_body) {
+    let (record, daily_usage_limit_usd) = match parse_group_record(request_body) {
         Ok(value) => value,
         Err(detail) => return Ok(bad_request_owned(detail)),
     };
-    let group = match state.update_user_group(&group_id, record).await {
+    let group = match state
+        .update_user_group(&group_id, record, daily_usage_limit_usd)
+        .await
+    {
         Ok(Some(group)) => group,
         Ok(None) => return Ok(not_found("用户分组不存在")),
         Err(err) if is_duplicate_group_name_error(&err) => {
@@ -361,7 +364,13 @@ pub(crate) async fn read_default_user_group_id(
 
 fn parse_group_record(
     request_body: Option<&axum::body::Bytes>,
-) -> Result<aether_data::repository::users::UpsertUserGroupRecord, String> {
+) -> Result<
+    (
+        aether_data::repository::users::UpsertUserGroupRecord,
+        Option<f64>,
+    ),
+    String,
+> {
     let Some(body) = request_body.filter(|body| !body.is_empty()) else {
         return Err("请求数据验证失败".to_string());
     };
@@ -385,24 +394,28 @@ fn parse_group_record(
     let allowed_api_formats = normalize_admin_user_api_formats(payload.allowed_api_formats)?;
     let allowed_models =
         normalize_admin_user_string_list(payload.allowed_models, "allowed_models")?;
-    Ok(aether_data::repository::users::UpsertUserGroupRecord {
-        name,
-        description: payload
-            .description
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty()),
-        priority: 0,
-        allowed_providers,
-        allowed_providers_mode: normalize_list_mode(&payload.allowed_providers_mode)?,
-        allowed_api_formats,
-        allowed_api_formats_mode: normalize_list_mode(&payload.allowed_api_formats_mode)?,
-        allowed_models,
-        allowed_models_mode: normalize_list_mode(&payload.allowed_models_mode)?,
-        rate_limit: payload.rate_limit,
-        rate_limit_mode: normalize_rate_mode(&payload.rate_limit_mode)?,
-        daily_usage_limit_usd: payload.daily_usage_limit_usd,
-        daily_usage_limit_mode: normalize_rate_mode(&payload.daily_usage_limit_mode)?,
-    })
+    let daily_usage_limit_mode = normalize_rate_mode(&payload.daily_usage_limit_mode)?;
+    let daily_usage_limit_usd = (daily_usage_limit_mode == "custom")
+        .then_some(payload.daily_usage_limit_usd.unwrap_or(0.0).max(0.0));
+    Ok((
+        aether_data::repository::users::UpsertUserGroupRecord {
+            name,
+            description: payload
+                .description
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty()),
+            priority: 0,
+            allowed_providers,
+            allowed_providers_mode: normalize_list_mode(&payload.allowed_providers_mode)?,
+            allowed_api_formats,
+            allowed_api_formats_mode: normalize_list_mode(&payload.allowed_api_formats_mode)?,
+            allowed_models,
+            allowed_models_mode: normalize_list_mode(&payload.allowed_models_mode)?,
+            rate_limit: payload.rate_limit,
+            rate_limit_mode: normalize_rate_mode(&payload.rate_limit_mode)?,
+        },
+        daily_usage_limit_usd,
+    ))
 }
 
 fn parse_members_payload(
@@ -416,7 +429,7 @@ fn parse_members_payload(
 }
 
 fn user_group_payload(
-    group: aether_data::repository::users::StoredUserGroup,
+    group: crate::data::GatewayUserGroup,
     default_group_id: Option<&str>,
 ) -> serde_json::Value {
     json!({

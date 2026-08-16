@@ -310,6 +310,7 @@ impl fmt::Debug for GatewayDataState {
 }
 
 mod auth;
+pub(crate) use admission::{GatewayAuthApiKeyExportRecord, GatewayUserGroup};
 pub(crate) use auth::GatewayUserGroupPolicySets;
 mod admission;
 mod auth_api_key_cache;

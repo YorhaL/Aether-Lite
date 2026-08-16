@@ -633,7 +633,6 @@ impl AuthApiKeyWriteRepository for InMemoryAuthApiKeySnapshotRepository {
                 .as_ref()
                 .map(|value| serde_json::json!(value)),
         )?
-        .with_daily_usage_limit(record.daily_usage_limit_usd)
         .with_activity_timestamps(None, Some(now_unix_secs), Some(now_unix_secs))?;
 
         index
@@ -766,7 +765,6 @@ impl AuthApiKeyWriteRepository for InMemoryAuthApiKeySnapshotRepository {
                 .as_ref()
                 .map(|value| serde_json::json!(value)),
         )?
-        .with_daily_usage_limit(record.daily_usage_limit_usd)
         .with_activity_timestamps(None, Some(now_unix_secs), Some(now_unix_secs))?;
 
         index
@@ -1318,8 +1316,6 @@ mod tests {
                 api_key_id: "key-1".to_string(),
                 name: None,
                 rate_limit: None,
-                daily_usage_limit_present: true,
-                daily_usage_limit_usd: Some(6.0),
                 concurrent_limit: Some(11),
                 ip_rules: None,
             })
@@ -1327,23 +1323,6 @@ mod tests {
             .expect("update should succeed")
             .expect("record should exist");
         assert_eq!(updated.concurrent_limit, None);
-        assert_eq!(updated.daily_usage_limit_usd, None);
-
-        let cleared = repository
-            .update_user_api_key_basic(UpdateUserApiKeyBasicRecord {
-                user_id: "user-1".to_string(),
-                api_key_id: "key-1".to_string(),
-                name: None,
-                rate_limit: None,
-                daily_usage_limit_present: true,
-                daily_usage_limit_usd: None,
-                concurrent_limit: None,
-                ip_rules: None,
-            })
-            .await
-            .expect("policy field update should succeed")
-            .expect("record should exist");
-        assert_eq!(cleared.daily_usage_limit_usd, None);
 
         repository
             .find_api_key_snapshot(AuthApiKeyLookupKey::ApiKeyId("key-1"))
@@ -1367,8 +1346,6 @@ mod tests {
                 name: None,
                 rate_limit_present: false,
                 rate_limit: None,
-                daily_usage_limit_present: true,
-                daily_usage_limit_usd: Some(7.0),
                 concurrent_limit_present: true,
                 concurrent_limit: Some(13),
                 allowed_providers: None,
@@ -1384,7 +1361,6 @@ mod tests {
             .expect("update should succeed")
             .expect("record should exist");
         assert_eq!(updated.concurrent_limit, None);
-        assert_eq!(updated.daily_usage_limit_usd, None);
 
         repository
             .find_api_key_snapshot(AuthApiKeyLookupKey::ApiKeyId("key-standalone"))

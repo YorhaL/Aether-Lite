@@ -65,12 +65,13 @@ pub(super) async fn build_admin_create_api_key_install_session_response(
         )
             .into_response());
     };
+    let record = record.into_stored();
 
     let response = build_api_key_install_session_response(
         state.app(),
         request_context.public(),
         request_headers,
-        record.api_key_id.clone(),
+        record.api_key_id,
         record.name.unwrap_or_else(|| "API Key".to_string()),
         api_key,
         payload,

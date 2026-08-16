@@ -93,6 +93,44 @@ describe('useSystemConfig', () => {
     expect(state.hasBasicConfigChanges.value).toBe(false)
   })
 
+  it('loads and saves every admission policy field in sequence', async () => {
+    getAllSystemConfigsMock.mockResolvedValue([
+      { key: 'rate_limit_per_minute', value: 120 },
+      { key: 'daily_usage_limit_usd', value: 25.5 },
+      { key: 'concurrent_limit', value: 8 },
+    ])
+    const savedKeys: string[] = []
+    updateSystemConfigMock.mockImplementation(async (key: string) => {
+      savedKeys.push(key)
+      return {}
+    })
+
+    const state = useSystemConfig()
+    await state.loadSystemConfig()
+
+    expect(state.systemConfig.value.rate_limit_per_minute).toBe(120)
+    expect(state.systemConfig.value.daily_usage_limit_usd).toBe(25.5)
+    expect(state.systemConfig.value.concurrent_limit).toBe(8)
+
+    state.systemConfig.value.concurrent_limit = 12
+    expect(state.hasAdmissionPolicyChanges.value).toBe(true)
+
+    await state.saveAdmissionPolicy()
+
+    expect(savedKeys).toEqual([
+      'rate_limit_per_minute',
+      'daily_usage_limit_usd',
+      'concurrent_limit',
+    ])
+    expect(updateSystemConfigMock).toHaveBeenNthCalledWith(
+      3,
+      'concurrent_limit',
+      12,
+      '系统并发请求限制（0 表示不限制）',
+    )
+    expect(state.hasAdmissionPolicyChanges.value).toBe(false)
+  })
+
   it('keeps Cyber failover disabled by default and saves the enabled state', async () => {
     getAllSystemConfigsMock.mockResolvedValue([])
     updateSystemConfigMock.mockResolvedValue({})

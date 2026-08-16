@@ -50,7 +50,6 @@ SELECT
   api_keys.allowed_models,
   api_keys.ip_rules,
   NULL AS rate_limit,
-  NULL AS daily_usage_limit_usd,
   NULL AS concurrent_limit,
   api_keys.force_capabilities,
   api_keys.feature_settings,
@@ -1016,9 +1015,6 @@ fn map_auth_api_key_export_row(
             "api_keys.ip_rules",
         )?)
     })
-    .map(|record| {
-        record.with_daily_usage_limit(row.try_get("daily_usage_limit_usd").ok().flatten())
-    })
     .map(|record| record.with_feature_settings(feature_settings))
     .and_then(|record| {
         record.with_activity_timestamps(
@@ -1137,7 +1133,6 @@ mod tests {
                 allowed_models: Some(vec!["gpt-4.1".to_string()]),
                 ip_rules: Some(vec!["203.0.113.10".to_string()]),
                 rate_limit: 100,
-                daily_usage_limit_usd: Some(12.5),
                 concurrent_limit: Some(5),
                 force_capabilities: Some(json!({"cache": true})),
                 is_active: true,
@@ -1153,7 +1148,6 @@ mod tests {
         assert_eq!(user_key.allowed_models, Some(vec!["gpt-4.1".to_string()]));
         assert_eq!(user_key.total_tokens, 42);
         assert_eq!(user_key.rate_limit, None);
-        assert_eq!(user_key.daily_usage_limit_usd, None);
         assert_eq!(user_key.concurrent_limit, None);
 
         let updated_user_key = repository
@@ -1162,8 +1156,6 @@ mod tests {
                 api_key_id: "key-created-user".to_string(),
                 name: Some("Updated User".to_string()),
                 rate_limit: Some(150),
-                daily_usage_limit_present: true,
-                daily_usage_limit_usd: Some(8.0),
                 concurrent_limit: Some(6),
                 ip_rules: Some(Some(vec!["10.0.0.0/24".to_string()])),
             })
@@ -1171,24 +1163,7 @@ mod tests {
             .expect("user key should update")
             .expect("user key should reload");
         assert_eq!(updated_user_key.name, Some("Updated User".to_string()));
-        assert_eq!(updated_user_key.daily_usage_limit_usd, None);
         assert_eq!(updated_user_key.concurrent_limit, None);
-
-        let cleared_user_key = repository
-            .update_user_api_key_basic(UpdateUserApiKeyBasicRecord {
-                user_id: "user-1".to_string(),
-                api_key_id: "key-created-user".to_string(),
-                name: None,
-                rate_limit: None,
-                daily_usage_limit_present: true,
-                daily_usage_limit_usd: None,
-                concurrent_limit: None,
-                ip_rules: None,
-            })
-            .await
-            .expect("user key policy field update should succeed")
-            .expect("user key should reload");
-        assert_eq!(cleared_user_key.daily_usage_limit_usd, None);
 
         assert!(repository
             .set_user_api_key_locked("user-1", "key-created-user", true)
@@ -1260,7 +1235,6 @@ mod tests {
                 allowed_models: None,
                 ip_rules: None,
                 rate_limit: None,
-                daily_usage_limit_usd: None,
                 concurrent_limit: Some(2),
                 force_capabilities: None,
                 is_active: true,
@@ -1281,8 +1255,6 @@ mod tests {
                 name: Some("Updated Standalone".to_string()),
                 rate_limit_present: true,
                 rate_limit: Some(20),
-                daily_usage_limit_present: true,
-                daily_usage_limit_usd: Some(4.0),
                 concurrent_limit_present: true,
                 concurrent_limit: None,
                 allowed_providers: Some(None),
@@ -1298,7 +1270,6 @@ mod tests {
             .expect("standalone key should update")
             .expect("standalone key should reload");
         assert_eq!(standalone.name, Some("Updated Standalone".to_string()));
-        assert_eq!(standalone.daily_usage_limit_usd, None);
         assert_eq!(standalone.allowed_providers, None);
         assert_eq!(
             standalone.allowed_api_formats,

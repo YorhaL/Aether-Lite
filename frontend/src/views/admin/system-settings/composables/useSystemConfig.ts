@@ -3,16 +3,19 @@ import { useToast } from '@/composables/useToast'
 import { adminApi } from '@/api/admin'
 import { log } from '@/utils/logger'
 import { useSiteInfo } from '@/composables/useSiteInfo'
+import {
+  createDefaultSystemAdmissionPolicyConfig,
+  SYSTEM_ADMISSION_POLICY_FIELDS,
+  type SystemAdmissionPolicyConfig,
+} from '../admissionPolicyConfig'
 
-export interface SystemConfig {
+export interface SystemConfig extends SystemAdmissionPolicyConfig {
   // 站点信息
   site_name: string
   site_subtitle: string
   // 网络代理
   // 基础配置
   default_user_initial_balance_usd: number
-  rate_limit_per_minute: number
-  daily_usage_limit_usd: number
   enable_registration: boolean
   password_policy_level: string
   turnstile_enabled: boolean
@@ -53,8 +56,7 @@ const CONFIG_KEYS = [
   'site_subtitle',
   // 基础配置
   'default_user_initial_balance_usd',
-  'rate_limit_per_minute',
-  'daily_usage_limit_usd',
+  ...SYSTEM_ADMISSION_POLICY_FIELDS.map((field) => field.key),
   'enable_registration',
   'password_policy_level',
   'turnstile_enabled',
@@ -95,8 +97,7 @@ function createDefaultConfig(): SystemConfig {
     site_subtitle: 'AI Gateway',
     // 基础配置
     default_user_initial_balance_usd: 10.0,
-    rate_limit_per_minute: 0,
-    daily_usage_limit_usd: 0,
+    ...createDefaultSystemAdmissionPolicyConfig(),
     enable_registration: false,
     password_policy_level: 'weak',
     turnstile_enabled: false,
@@ -144,6 +145,7 @@ export function useSystemConfig() {
   // 各模块 loading 状态
   const siteInfoLoading = ref(false)
   const basicConfigLoading = ref(false)
+  const admissionPolicyLoading = ref(false)
   const logConfigLoading = ref(false)
   const cleanupConfigLoading = ref(false)
 
@@ -162,8 +164,6 @@ export function useSystemConfig() {
     if (!originalConfig.value) return false
     return (
       systemConfig.value.default_user_initial_balance_usd !== originalConfig.value.default_user_initial_balance_usd ||
-      systemConfig.value.rate_limit_per_minute !== originalConfig.value.rate_limit_per_minute ||
-      systemConfig.value.daily_usage_limit_usd !== originalConfig.value.daily_usage_limit_usd ||
       systemConfig.value.enable_registration !== originalConfig.value.enable_registration ||
       systemConfig.value.password_policy_level !== originalConfig.value.password_policy_level ||
       systemConfig.value.turnstile_enabled !== originalConfig.value.turnstile_enabled ||
@@ -186,6 +186,14 @@ export function useSystemConfig() {
       originalConfig.value.enable_standard_text_sync_heartbeat ||
       systemConfig.value.cyber_continue_failover !==
       originalConfig.value.cyber_continue_failover
+    )
+  })
+
+  const hasAdmissionPolicyChanges = computed(() => {
+    if (systemConfigLoading.value) return false
+    if (!originalConfig.value) return false
+    return SYSTEM_ADMISSION_POLICY_FIELDS.some(
+      (field) => systemConfig.value[field.key] !== originalConfig.value?.[field.key]
     )
   })
 
@@ -314,6 +322,30 @@ export function useSystemConfig() {
     }
   }
 
+  async function saveAdmissionPolicy() {
+    admissionPolicyLoading.value = true
+    try {
+      for (const field of SYSTEM_ADMISSION_POLICY_FIELDS) {
+        await adminApi.updateSystemConfig(
+          field.key,
+          systemConfig.value[field.key],
+          field.description,
+        )
+      }
+      if (originalConfig.value) {
+        for (const field of SYSTEM_ADMISSION_POLICY_FIELDS) {
+          originalConfig.value[field.key] = systemConfig.value[field.key]
+        }
+      }
+      success('流控策略已保存')
+    } catch (err) {
+      error('保存流控策略失败')
+      log.error('保存流控策略失败:', err)
+    } finally {
+      admissionPolicyLoading.value = false
+    }
+  }
+
   async function saveBasicConfig() {
     basicConfigLoading.value = true
     try {
@@ -322,16 +354,6 @@ export function useSystemConfig() {
           key: 'default_user_initial_balance_usd',
           value: systemConfig.value.default_user_initial_balance_usd,
           description: '默认用户初始额度（美元）',
-        },
-        {
-          key: 'rate_limit_per_minute',
-          value: systemConfig.value.rate_limit_per_minute,
-          description: '每分钟请求限制',
-        },
-        {
-          key: 'daily_usage_limit_usd',
-          value: systemConfig.value.daily_usage_limit_usd,
-          description: '默认额度限制（美元/日，0 表示不限制）',
         },
         {
           key: 'enable_registration',
@@ -415,8 +437,6 @@ export function useSystemConfig() {
       )
       if (originalConfig.value) {
         originalConfig.value.default_user_initial_balance_usd = systemConfig.value.default_user_initial_balance_usd
-        originalConfig.value.rate_limit_per_minute = systemConfig.value.rate_limit_per_minute
-        originalConfig.value.daily_usage_limit_usd = systemConfig.value.daily_usage_limit_usd
         originalConfig.value.enable_registration = systemConfig.value.enable_registration
         originalConfig.value.password_policy_level = systemConfig.value.password_policy_level
         originalConfig.value.turnstile_enabled = systemConfig.value.turnstile_enabled
@@ -613,11 +633,13 @@ export function useSystemConfig() {
     // loading 状态
     siteInfoLoading,
     basicConfigLoading,
+    admissionPolicyLoading,
     logConfigLoading,
     cleanupConfigLoading,
     // 变动检测
     hasSiteInfoChanges,
     hasBasicConfigChanges,
+    hasAdmissionPolicyChanges,
     hasLogConfigChanges,
     hasCleanupConfigChanges,
     // 计算属性
@@ -628,6 +650,7 @@ export function useSystemConfig() {
     loadSystemVersion,
     // 保存函数
     saveSiteInfo,
+    saveAdmissionPolicy,
     saveBasicConfig,
     clearTurnstileSecret,
     saveLogConfig,

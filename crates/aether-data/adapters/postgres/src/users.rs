@@ -610,8 +610,6 @@ SELECT
   allowed_models_mode,
   NULL::INTEGER AS rate_limit,
   'inherit'::text AS rate_limit_mode,
-  NULL::DOUBLE PRECISION AS daily_usage_limit_usd,
-  'inherit'::text AS daily_usage_limit_mode,
   created_at,
   updated_at
 FROM user_groups
@@ -2260,12 +2258,6 @@ fn map_user_group_row(row: &sqlx::postgres::PgRow) -> Result<StoredUserGroup, Da
         row.try_get("created_at").map_postgres_err()?,
         row.try_get("updated_at").map_postgres_err()?,
     )
-    .and_then(|group| {
-        group.with_daily_usage_limit(
-            row.try_get("daily_usage_limit_usd").map_postgres_err()?,
-            row.try_get("daily_usage_limit_mode").map_postgres_err()?,
-        )
-    })
 }
 
 fn map_user_group_member_row(

@@ -159,8 +159,6 @@ SELECT
   allowed_models_mode,
   NULL AS rate_limit,
   'inherit' AS rate_limit_mode,
-  NULL AS daily_usage_limit_usd,
-  'inherit' AS daily_usage_limit_mode,
   created_at,
   updated_at
 FROM user_groups
@@ -2023,12 +2021,6 @@ fn map_user_group_row(row: &SqliteRow) -> Result<StoredUserGroup, DataLayerError
         optional_datetime_from_unix_secs(row.try_get("created_at").map_sql_err()?),
         optional_datetime_from_unix_secs(row.try_get("updated_at").map_sql_err()?),
     )
-    .and_then(|group| {
-        group.with_daily_usage_limit(
-            row.try_get("daily_usage_limit_usd").map_sql_err()?,
-            row.try_get("daily_usage_limit_mode").map_sql_err()?,
-        )
-    })
 }
 
 fn map_user_group_member_row(row: &SqliteRow) -> Result<StoredUserGroupMember, DataLayerError> {
@@ -2600,16 +2592,12 @@ INSERT INTO oauth_providers (
                 allowed_models_mode: "inherit".to_string(),
                 rate_limit: None,
                 rate_limit_mode: "inherit".to_string(),
-                daily_usage_limit_usd: Some(12.5),
-                daily_usage_limit_mode: "custom".to_string(),
             })
             .await
             .expect("group should create")
             .expect("group should reload");
         assert_eq!(created.rate_limit, None);
         assert_eq!(created.rate_limit_mode, "inherit");
-        assert_eq!(created.daily_usage_limit_usd, None);
-        assert_eq!(created.daily_usage_limit_mode, "inherit");
 
         let updated = repository
             .update_user_group(
@@ -2626,15 +2614,12 @@ INSERT INTO oauth_providers (
                     allowed_models_mode: "inherit".to_string(),
                     rate_limit: None,
                     rate_limit_mode: "inherit".to_string(),
-                    daily_usage_limit_usd: None,
-                    daily_usage_limit_mode: "inherit".to_string(),
                 },
             )
             .await
             .expect("group should update")
             .expect("group should reload");
-        assert_eq!(updated.daily_usage_limit_usd, None);
-        assert_eq!(updated.daily_usage_limit_mode, "inherit");
+        assert_eq!(updated.rate_limit, None);
 
         assert!(repository
             .delete_user_group(&created.id)

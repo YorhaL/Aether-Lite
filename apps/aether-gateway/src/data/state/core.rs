@@ -979,7 +979,7 @@ impl GatewayDataState {
                     .chain(api_keys.into_iter().map(|api_key| {
                         aether_data::repository::admission::AdmissionPolicyScope {
                             kind: aether_data::repository::admission::AdmissionScopeKind::ApiKey,
-                            subject_id: api_key.api_key_id,
+                            subject_id: api_key.into_stored().api_key_id,
                         }
                     }))
                     .collect()

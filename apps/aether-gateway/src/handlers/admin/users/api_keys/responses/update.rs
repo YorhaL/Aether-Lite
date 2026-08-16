@@ -120,16 +120,17 @@ pub(crate) async fn build_admin_update_user_api_key_response(
     };
 
     let Some(updated) = state
-        .update_user_api_key_basic(aether_data::repository::auth::UpdateUserApiKeyBasicRecord {
-            user_id: user_id.clone(),
-            api_key_id: api_key_id.clone(),
-            name,
-            rate_limit: payload.rate_limit,
-            daily_usage_limit_present: payload.daily_usage_limit_usd.is_some(),
-            daily_usage_limit_usd: payload.daily_usage_limit_usd.flatten(),
-            concurrent_limit,
-            ip_rules,
-        })
+        .update_user_api_key_basic(
+            aether_data::repository::auth::UpdateUserApiKeyBasicRecord {
+                user_id: user_id.clone(),
+                api_key_id: api_key_id.clone(),
+                name,
+                rate_limit: payload.rate_limit,
+                concurrent_limit,
+                ip_rules,
+            },
+            payload.daily_usage_limit_usd,
+        )
         .await?
     else {
         return Ok((

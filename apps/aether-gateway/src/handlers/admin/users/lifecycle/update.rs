@@ -171,7 +171,7 @@ pub(in super::super) async fn build_admin_update_user_response(
             .list_user_groups_for_user(&user_id)
             .await?
             .into_iter()
-            .map(|group| group.id)
+            .map(|group| group.into_stored().id)
             .collect::<Vec<_>>();
         Some(
             state

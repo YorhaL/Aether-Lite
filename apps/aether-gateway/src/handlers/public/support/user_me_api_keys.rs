@@ -157,7 +157,7 @@ fn build_users_me_api_key_writer_unavailable_response() -> Response<Body> {
 
 fn build_users_me_api_key_list_payload(
     state: &AppState,
-    record: &aether_data::repository::auth::StoredAuthApiKeyExportRecord,
+    record: &crate::data::GatewayAuthApiKeyExportRecord,
     is_locked: bool,
 ) -> serde_json::Value {
     json!({
@@ -182,7 +182,7 @@ fn build_users_me_api_key_list_payload(
 
 fn build_users_me_api_key_detail_payload(
     state: &AppState,
-    record: &aether_data::repository::auth::StoredAuthApiKeyExportRecord,
+    record: &crate::data::GatewayAuthApiKeyExportRecord,
     is_locked: bool,
 ) -> serde_json::Value {
     json!({
@@ -599,7 +599,6 @@ pub(super) async fn handle_users_me_api_key_create(
         allowed_models: None,
         ip_rules,
         rate_limit,
-        daily_usage_limit_usd: payload.daily_usage_limit_usd,
         concurrent_limit,
         force_capabilities: None,
         is_active: true,
@@ -609,7 +608,10 @@ pub(super) async fn handle_users_me_api_key_create(
         total_tokens: 0,
         total_cost_usd: 0.0,
     };
-    let Some(created) = (match state.create_user_api_key(record).await {
+    let Some(created) = (match state
+        .create_user_api_key(record, payload.daily_usage_limit_usd)
+        .await
+    {
         Ok(value) => value,
         Err(err) => {
             return build_auth_error_response(
@@ -758,16 +760,17 @@ pub(super) async fn handle_users_me_api_key_update(
     };
 
     let Some(updated) = (match state
-        .update_user_api_key_basic(aether_data::repository::auth::UpdateUserApiKeyBasicRecord {
-            user_id: auth.user.id.clone(),
-            api_key_id: snapshot.api_key_id.clone(),
-            name,
-            rate_limit,
-            daily_usage_limit_present: payload.daily_usage_limit_usd.is_some(),
-            daily_usage_limit_usd: payload.daily_usage_limit_usd.flatten(),
-            concurrent_limit,
-            ip_rules,
-        })
+        .update_user_api_key_basic(
+            aether_data::repository::auth::UpdateUserApiKeyBasicRecord {
+                user_id: auth.user.id.clone(),
+                api_key_id: snapshot.api_key_id.clone(),
+                name,
+                rate_limit,
+                concurrent_limit,
+                ip_rules,
+            },
+            payload.daily_usage_limit_usd,
+        )
         .await
     {
         Ok(value) => value,
@@ -1117,7 +1120,10 @@ pub(super) async fn handle_users_me_api_key_capabilities_put(
 
     Json(json!({
         "message": "API密钥能力配置已更新",
-        "force_capabilities": updated.force_capabilities.unwrap_or(serde_json::Value::Null),
+        "force_capabilities": updated
+            .into_stored()
+            .force_capabilities
+            .unwrap_or(serde_json::Value::Null),
     }))
     .into_response()
 }

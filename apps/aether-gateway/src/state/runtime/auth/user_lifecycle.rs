@@ -241,7 +241,7 @@ impl AppState {
 
     pub(crate) async fn list_user_groups(
         &self,
-    ) -> Result<Vec<aether_data::repository::users::StoredUserGroup>, GatewayError> {
+    ) -> Result<Vec<crate::data::GatewayUserGroup>, GatewayError> {
         self.data
             .list_user_groups()
             .await
@@ -251,7 +251,7 @@ impl AppState {
     pub(crate) async fn find_user_group_by_id(
         &self,
         group_id: &str,
-    ) -> Result<Option<aether_data::repository::users::StoredUserGroup>, GatewayError> {
+    ) -> Result<Option<crate::data::GatewayUserGroup>, GatewayError> {
         self.data
             .find_user_group_by_id(group_id)
             .await
@@ -261,7 +261,7 @@ impl AppState {
     pub(crate) async fn list_user_groups_by_ids(
         &self,
         group_ids: &[String],
-    ) -> Result<Vec<aether_data::repository::users::StoredUserGroup>, GatewayError> {
+    ) -> Result<Vec<crate::data::GatewayUserGroup>, GatewayError> {
         self.data
             .list_user_groups_by_ids(group_ids)
             .await
@@ -271,10 +271,11 @@ impl AppState {
     pub(crate) async fn create_user_group(
         &self,
         record: aether_data::repository::users::UpsertUserGroupRecord,
-    ) -> Result<Option<aether_data::repository::users::StoredUserGroup>, GatewayError> {
+        daily_usage_limit_usd: Option<f64>,
+    ) -> Result<Option<crate::data::GatewayUserGroup>, GatewayError> {
         let group = self
             .data
-            .create_user_group(record)
+            .create_user_group(record, daily_usage_limit_usd)
             .await
             .map_err(|err| GatewayError::Internal(err.to_string()))?;
         if group.is_some() {
@@ -287,10 +288,11 @@ impl AppState {
         &self,
         group_id: &str,
         record: aether_data::repository::users::UpsertUserGroupRecord,
-    ) -> Result<Option<aether_data::repository::users::StoredUserGroup>, GatewayError> {
+        daily_usage_limit_usd: Option<f64>,
+    ) -> Result<Option<crate::data::GatewayUserGroup>, GatewayError> {
         let group = self
             .data
-            .update_user_group(group_id, record)
+            .update_user_group(group_id, record, daily_usage_limit_usd)
             .await
             .map_err(|err| GatewayError::Internal(err.to_string()))?;
         if group.is_some() {
@@ -338,7 +340,7 @@ impl AppState {
     pub(crate) async fn list_user_groups_for_user(
         &self,
         user_id: &str,
-    ) -> Result<Vec<aether_data::repository::users::StoredUserGroup>, GatewayError> {
+    ) -> Result<Vec<crate::data::GatewayUserGroup>, GatewayError> {
         let user_id = user_id.trim();
         if user_id.is_empty() {
             return Ok(Vec::new());
@@ -391,7 +393,7 @@ impl AppState {
         &self,
         user_id: &str,
         group_ids: &[String],
-    ) -> Result<Vec<aether_data::repository::users::StoredUserGroup>, GatewayError> {
+    ) -> Result<Vec<crate::data::GatewayUserGroup>, GatewayError> {
         let groups = self
             .data
             .replace_user_groups_for_user(user_id, group_ids)
@@ -954,8 +956,6 @@ mod tests {
             allowed_models_mode: allowed_models_mode.to_string(),
             rate_limit: None,
             rate_limit_mode: "inherit".to_string(),
-            daily_usage_limit_usd: None,
-            daily_usage_limit_mode: "inherit".to_string(),
         }
     }
 
@@ -984,7 +984,7 @@ mod tests {
             .expect("state should build")
             .with_data_state_for_tests(GatewayDataState::with_user_reader_for_tests(repository));
         let group = state
-            .create_user_group(user_group_record(Some(vec!["gpt-4.1"]), "specific"))
+            .create_user_group(user_group_record(Some(vec!["gpt-4.1"]), "specific"), None)
             .await
             .expect("group should create")
             .expect("group should exist");
@@ -1000,7 +1000,7 @@ mod tests {
             .is_some());
 
         state
-            .update_user_group(&group.id, user_group_record(None, "unrestricted"))
+            .update_user_group(&group.id, user_group_record(None, "unrestricted"), None)
             .await
             .expect("group should update")
             .expect("group should exist after update");

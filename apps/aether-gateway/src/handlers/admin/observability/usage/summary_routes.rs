@@ -600,7 +600,7 @@ async fn resolve_admin_usage_search_context(
                     .list_auth_api_key_export_records_by_name_search(keyword)
                     .await?
                     .into_iter()
-                    .map(|record| record.api_key_id)
+                    .map(|record| record.into_stored().api_key_id)
                     .collect(),
             );
         }

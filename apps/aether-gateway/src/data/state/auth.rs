@@ -1,12 +1,12 @@
 use super::{
-    AuthApiKeyLookupKey, CreateManagementTokenRecord, DataLayerError, GatewayAuthApiKeySnapshot,
-    GatewayDataState, ManagementTokenCounterDelta, ManagementTokenListQuery,
-    RegenerateManagementTokenSecret, StoredAuthApiKeyExportRecord, StoredAuthApiKeySnapshot,
-    StoredLdapModuleConfig, StoredManagementToken, StoredManagementTokenListPage,
-    StoredManagementTokenWithUser, StoredOAuthProviderConfig, StoredOAuthProviderModuleConfig,
-    StoredUserAuthRecord, StoredUserOAuthLinkSummary, StoredUserPreferenceRecord,
-    StoredUserSessionRecord, StoredWalletSnapshot, UpdateManagementTokenRecord,
-    UpsertOAuthProviderConfigRecord,
+    AuthApiKeyLookupKey, CreateManagementTokenRecord, DataLayerError,
+    GatewayAuthApiKeyExportRecord, GatewayAuthApiKeySnapshot, GatewayDataState, GatewayUserGroup,
+    ManagementTokenCounterDelta, ManagementTokenListQuery, RegenerateManagementTokenSecret,
+    StoredAuthApiKeySnapshot, StoredLdapModuleConfig, StoredManagementToken,
+    StoredManagementTokenListPage, StoredManagementTokenWithUser, StoredOAuthProviderConfig,
+    StoredOAuthProviderModuleConfig, StoredUserAuthRecord, StoredUserOAuthLinkSummary,
+    StoredUserPreferenceRecord, StoredUserSessionRecord, StoredWalletSnapshot,
+    UpdateManagementTokenRecord, UpsertOAuthProviderConfigRecord,
 };
 use crate::LocalMutationOutcome;
 use aether_data::backend::PrivacyDataState;
@@ -21,8 +21,8 @@ pub(crate) struct GatewayUserEffectiveListPolicies {
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct GatewayUserGroupPolicySets {
-    pub(crate) assigned_groups: Vec<aether_data::repository::users::StoredUserGroup>,
-    pub(crate) effective_groups: Vec<aether_data::repository::users::StoredUserGroup>,
+    pub(crate) assigned_groups: Vec<GatewayUserGroup>,
+    pub(crate) effective_groups: Vec<GatewayUserGroup>,
 }
 
 impl GatewayDataState {
@@ -104,9 +104,7 @@ impl GatewayDataState {
         }
     }
 
-    pub(crate) async fn list_user_groups(
-        &self,
-    ) -> Result<Vec<aether_data::repository::users::StoredUserGroup>, DataLayerError> {
+    pub(crate) async fn list_user_groups(&self) -> Result<Vec<GatewayUserGroup>, DataLayerError> {
         let groups = match &self.user_reader {
             Some(repository) => repository.list_user_groups().await,
             None => Ok(Vec::new()),
@@ -117,7 +115,7 @@ impl GatewayDataState {
     pub(crate) async fn find_user_group_by_id(
         &self,
         group_id: &str,
-    ) -> Result<Option<aether_data::repository::users::StoredUserGroup>, DataLayerError> {
+    ) -> Result<Option<GatewayUserGroup>, DataLayerError> {
         let group = match &self.user_reader {
             Some(repository) => repository.find_user_group_by_id(group_id).await,
             None => Ok(None),
@@ -132,7 +130,7 @@ impl GatewayDataState {
     pub(crate) async fn list_user_groups_by_ids(
         &self,
         group_ids: &[String],
-    ) -> Result<Vec<aether_data::repository::users::StoredUserGroup>, DataLayerError> {
+    ) -> Result<Vec<GatewayUserGroup>, DataLayerError> {
         let groups = match &self.user_reader {
             Some(repository) => repository.list_user_groups_by_ids(group_ids).await,
             None => Ok(Vec::new()),
@@ -143,11 +141,10 @@ impl GatewayDataState {
     pub(crate) async fn create_user_group(
         &self,
         record: aether_data::repository::users::UpsertUserGroupRecord,
-    ) -> Result<Option<aether_data::repository::users::StoredUserGroup>, DataLayerError> {
+        daily_usage_limit_usd: Option<f64>,
+    ) -> Result<Option<GatewayUserGroup>, DataLayerError> {
         let request_limit = (record.rate_limit_mode == "custom")
             .then_some(record.rate_limit.unwrap_or(0).max(0) as u32);
-        let daily_limit = (record.daily_usage_limit_mode == "custom")
-            .then_some(record.daily_usage_limit_usd.unwrap_or(0.0).max(0.0));
         let created = match &self.user_reader {
             Some(repository) => repository.create_user_group(record).await,
             None => Ok(None),
@@ -157,7 +154,7 @@ impl GatewayDataState {
         };
         let document = aether_data::repository::admission::AdmissionPolicyDocument::default()
             .with_requests_per_minute(request_limit)
-            .with_daily_usage_limit_usd(daily_limit);
+            .with_daily_usage_limit_usd(daily_usage_limit_usd);
         if let Err(error) = self
             .store_scoped_admission_document(
                 aether_data::repository::admission::AdmissionScopeKind::UserGroup,
@@ -182,11 +179,10 @@ impl GatewayDataState {
         &self,
         group_id: &str,
         record: aether_data::repository::users::UpsertUserGroupRecord,
-    ) -> Result<Option<aether_data::repository::users::StoredUserGroup>, DataLayerError> {
+        daily_usage_limit_usd: Option<f64>,
+    ) -> Result<Option<GatewayUserGroup>, DataLayerError> {
         let request_limit = (record.rate_limit_mode == "custom")
             .then_some(record.rate_limit.unwrap_or(0).max(0) as u32);
-        let daily_limit = (record.daily_usage_limit_mode == "custom")
-            .then_some(record.daily_usage_limit_usd.unwrap_or(0.0).max(0.0));
         let updated = match &self.user_reader {
             Some(repository) => repository.update_user_group(group_id, record).await,
             None => Ok(None),
@@ -196,7 +192,7 @@ impl GatewayDataState {
         };
         let document = aether_data::repository::admission::AdmissionPolicyDocument::default()
             .with_requests_per_minute(request_limit)
-            .with_daily_usage_limit_usd(daily_limit);
+            .with_daily_usage_limit_usd(daily_usage_limit_usd);
         self.store_scoped_admission_document(
             aether_data::repository::admission::AdmissionScopeKind::UserGroup,
             group_id,
@@ -255,7 +251,7 @@ impl GatewayDataState {
     pub(crate) async fn list_user_groups_for_user(
         &self,
         user_id: &str,
-    ) -> Result<Vec<aether_data::repository::users::StoredUserGroup>, DataLayerError> {
+    ) -> Result<Vec<GatewayUserGroup>, DataLayerError> {
         let groups = match &self.user_reader {
             Some(repository) => repository.list_user_groups_for_user(user_id).await,
             None => Ok(Vec::new()),
@@ -282,7 +278,7 @@ impl GatewayDataState {
         &self,
         user_id: &str,
         group_ids: &[String],
-    ) -> Result<Vec<aether_data::repository::users::StoredUserGroup>, DataLayerError> {
+    ) -> Result<Vec<GatewayUserGroup>, DataLayerError> {
         let groups = match &self.user_reader {
             Some(repository) => {
                 repository
@@ -933,7 +929,7 @@ impl GatewayDataState {
                 .chain(api_keys.into_iter().map(|api_key| {
                     aether_data::repository::admission::AdmissionPolicyScope {
                         kind: aether_data::repository::admission::AdmissionScopeKind::ApiKey,
-                        subject_id: api_key.api_key_id,
+                        subject_id: api_key.into_stored().api_key_id,
                     }
                 }))
                 .collect::<Vec<_>>();
@@ -1315,7 +1311,7 @@ impl GatewayDataState {
     pub(crate) async fn list_auth_api_key_export_records_by_user_ids(
         &self,
         user_ids: &[String],
-    ) -> Result<Vec<StoredAuthApiKeyExportRecord>, DataLayerError> {
+    ) -> Result<Vec<GatewayAuthApiKeyExportRecord>, DataLayerError> {
         let records = match &self.auth_api_key_reader {
             Some(repository) => repository.list_export_api_keys_by_user_ids(user_ids).await,
             None => Ok(Vec::new()),
@@ -1326,7 +1322,7 @@ impl GatewayDataState {
     pub(crate) async fn list_auth_api_key_export_records_by_ids(
         &self,
         api_key_ids: &[String],
-    ) -> Result<Vec<StoredAuthApiKeyExportRecord>, DataLayerError> {
+    ) -> Result<Vec<GatewayAuthApiKeyExportRecord>, DataLayerError> {
         let records = match &self.auth_api_key_reader {
             Some(repository) => repository.list_export_api_keys_by_ids(api_key_ids).await,
             None => Ok(Vec::new()),
@@ -1344,7 +1340,7 @@ impl GatewayDataState {
             return Ok(self
                 .find_auth_api_key_export_standalone_record_by_id(api_key_id)
                 .await?
-                .and_then(|record| record.feature_settings));
+                .and_then(|record| record.into_stored().feature_settings));
         }
 
         Ok(self
@@ -1352,13 +1348,13 @@ impl GatewayDataState {
             .await?
             .into_iter()
             .find(|record| record.user_id == user_id && !record.is_standalone)
-            .and_then(|record| record.feature_settings))
+            .and_then(|record| record.into_stored().feature_settings))
     }
 
     pub(crate) async fn list_auth_api_key_export_records_by_name_search(
         &self,
         name_search: &str,
-    ) -> Result<Vec<StoredAuthApiKeyExportRecord>, DataLayerError> {
+    ) -> Result<Vec<GatewayAuthApiKeyExportRecord>, DataLayerError> {
         let records = match &self.auth_api_key_reader {
             Some(repository) => {
                 repository
@@ -1373,7 +1369,7 @@ impl GatewayDataState {
     pub(crate) async fn list_auth_api_key_export_standalone_records_page(
         &self,
         query: &aether_data::repository::auth::StandaloneApiKeyExportListQuery,
-    ) -> Result<Vec<StoredAuthApiKeyExportRecord>, DataLayerError> {
+    ) -> Result<Vec<GatewayAuthApiKeyExportRecord>, DataLayerError> {
         let records = match &self.auth_api_key_reader {
             Some(repository) => repository.list_export_standalone_api_keys_page(query).await,
             None => Ok(Vec::new()),
@@ -1422,7 +1418,7 @@ impl GatewayDataState {
 
     pub(crate) async fn list_auth_api_key_export_standalone_records(
         &self,
-    ) -> Result<Vec<StoredAuthApiKeyExportRecord>, DataLayerError> {
+    ) -> Result<Vec<GatewayAuthApiKeyExportRecord>, DataLayerError> {
         let records = match &self.auth_api_key_reader {
             Some(repository) => repository.list_export_standalone_api_keys().await,
             None => Ok(Vec::new()),
@@ -1447,7 +1443,7 @@ impl GatewayDataState {
     pub(crate) async fn find_auth_api_key_export_standalone_record_by_id(
         &self,
         api_key_id: &str,
-    ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
+    ) -> Result<Option<GatewayAuthApiKeyExportRecord>, DataLayerError> {
         let record = match &self.auth_api_key_reader {
             Some(repository) => {
                 repository
@@ -1465,13 +1461,14 @@ impl GatewayDataState {
     pub(crate) async fn create_user_api_key(
         &self,
         record: aether_data::repository::auth::CreateUserApiKeyRecord,
-    ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
+        daily_usage_limit_usd: Option<f64>,
+    ) -> Result<Option<GatewayAuthApiKeyExportRecord>, DataLayerError> {
         let scope_id = record.api_key_id.clone();
         let user_id = record.user_id.clone();
         let document = aether_data::repository::admission::AdmissionPolicyDocument::default()
             .with_requests_per_minute(Some(record.rate_limit.max(0) as u32))
             .with_concurrent_requests(record.concurrent_limit.map(|value| value.max(0) as u32))
-            .with_daily_usage_limit_usd(record.daily_usage_limit_usd);
+            .with_daily_usage_limit_usd(daily_usage_limit_usd);
         let created = match &self.auth_api_key_writer {
             Some(repository) => repository.create_user_api_key(record).await,
             None => Ok(None),
@@ -1498,12 +1495,13 @@ impl GatewayDataState {
     pub(crate) async fn create_standalone_api_key(
         &self,
         record: aether_data::repository::auth::CreateStandaloneApiKeyRecord,
-    ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
+        daily_usage_limit_usd: Option<f64>,
+    ) -> Result<Option<GatewayAuthApiKeyExportRecord>, DataLayerError> {
         let scope_id = record.api_key_id.clone();
         let document = aether_data::repository::admission::AdmissionPolicyDocument::default()
             .with_requests_per_minute(record.rate_limit.map(|value| value.max(0) as u32))
             .with_concurrent_requests(record.concurrent_limit.map(|value| value.max(0) as u32))
-            .with_daily_usage_limit_usd(record.daily_usage_limit_usd);
+            .with_daily_usage_limit_usd(daily_usage_limit_usd);
         let created = match &self.auth_api_key_writer {
             Some(repository) => repository.create_standalone_api_key(record).await,
             None => Ok(None),
@@ -1530,7 +1528,8 @@ impl GatewayDataState {
     pub(crate) async fn update_user_api_key_basic(
         &self,
         record: aether_data::repository::auth::UpdateUserApiKeyBasicRecord,
-    ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
+        daily_usage_limit_usd: Option<Option<f64>>,
+    ) -> Result<Option<GatewayAuthApiKeyExportRecord>, DataLayerError> {
         let mut document = self
             .scoped_admission_document(
                 aether_data::repository::admission::AdmissionScopeKind::ApiKey,
@@ -1543,8 +1542,8 @@ impl GatewayDataState {
         if let Some(concurrent_limit) = record.concurrent_limit {
             document = document.with_concurrent_requests(Some(concurrent_limit.max(0) as u32));
         }
-        if record.daily_usage_limit_present {
-            document = document.with_daily_usage_limit_usd(record.daily_usage_limit_usd);
+        if let Some(daily_usage_limit_usd) = daily_usage_limit_usd {
+            document = document.with_daily_usage_limit_usd(daily_usage_limit_usd);
         }
         let api_key_id = record.api_key_id.clone();
         let updated = match &self.auth_api_key_writer {
@@ -1566,7 +1565,8 @@ impl GatewayDataState {
     pub(crate) async fn update_standalone_api_key_basic(
         &self,
         record: aether_data::repository::auth::UpdateStandaloneApiKeyBasicRecord,
-    ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
+        daily_usage_limit_usd: Option<Option<f64>>,
+    ) -> Result<Option<GatewayAuthApiKeyExportRecord>, DataLayerError> {
         let mut document = self
             .scoped_admission_document(
                 aether_data::repository::admission::AdmissionScopeKind::ApiKey,
@@ -1581,8 +1581,8 @@ impl GatewayDataState {
             document = document
                 .with_concurrent_requests(record.concurrent_limit.map(|value| value.max(0) as u32));
         }
-        if record.daily_usage_limit_present {
-            document = document.with_daily_usage_limit_usd(record.daily_usage_limit_usd);
+        if let Some(daily_usage_limit_usd) = daily_usage_limit_usd {
+            document = document.with_daily_usage_limit_usd(daily_usage_limit_usd);
         }
         let api_key_id = record.api_key_id.clone();
         let updated = match &self.auth_api_key_writer {
@@ -1606,7 +1606,7 @@ impl GatewayDataState {
         user_id: &str,
         api_key_id: &str,
         is_active: bool,
-    ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
+    ) -> Result<Option<GatewayAuthApiKeyExportRecord>, DataLayerError> {
         let record = match &self.auth_api_key_writer {
             Some(repository) => {
                 repository
@@ -1622,7 +1622,7 @@ impl GatewayDataState {
         &self,
         api_key_id: &str,
         is_active: bool,
-    ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
+    ) -> Result<Option<GatewayAuthApiKeyExportRecord>, DataLayerError> {
         let record = match &self.auth_api_key_writer {
             Some(repository) => {
                 repository
@@ -1655,7 +1655,7 @@ impl GatewayDataState {
         user_id: &str,
         api_key_id: &str,
         allowed_providers: Option<Vec<String>>,
-    ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
+    ) -> Result<Option<GatewayAuthApiKeyExportRecord>, DataLayerError> {
         let record = match &self.auth_api_key_writer {
             Some(repository) => {
                 repository
@@ -1672,7 +1672,7 @@ impl GatewayDataState {
         user_id: &str,
         api_key_id: &str,
         force_capabilities: Option<serde_json::Value>,
-    ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
+    ) -> Result<Option<GatewayAuthApiKeyExportRecord>, DataLayerError> {
         let record = match &self.auth_api_key_writer {
             Some(repository) => {
                 repository
@@ -1689,7 +1689,7 @@ impl GatewayDataState {
         user_id: &str,
         api_key_id: &str,
         feature_settings: Option<serde_json::Value>,
-    ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
+    ) -> Result<Option<GatewayAuthApiKeyExportRecord>, DataLayerError> {
         let record = match &self.auth_api_key_writer {
             Some(repository) => {
                 repository
@@ -1707,7 +1707,7 @@ impl GatewayDataState {
         total_requests: u64,
         total_tokens: u64,
         total_cost_usd: f64,
-    ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
+    ) -> Result<Option<GatewayAuthApiKeyExportRecord>, DataLayerError> {
         let record = match &self.auth_api_key_writer {
             Some(repository) => {
                 repository
@@ -1728,7 +1728,7 @@ impl GatewayDataState {
         &self,
         api_key_id: &str,
         feature_settings: Option<serde_json::Value>,
-    ) -> Result<Option<StoredAuthApiKeyExportRecord>, DataLayerError> {
+    ) -> Result<Option<GatewayAuthApiKeyExportRecord>, DataLayerError> {
         let record = match &self.auth_api_key_writer {
             Some(repository) => {
                 repository
@@ -1942,8 +1942,8 @@ impl GatewayDataState {
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
-        let groups_by_id = repository
-            .list_user_groups_by_ids(&all_group_ids)
+        let groups_by_id = self
+            .enrich_user_groups(repository.list_user_groups_by_ids(&all_group_ids).await?)
             .await?
             .into_iter()
             .map(|group| (group.id.clone(), group))

@@ -54,21 +54,15 @@ pub(crate) async fn merge_admission_system_config_entries(
         .cloned()
         .collect::<Vec<_>>();
     let document = system_admission_document(state).await?;
-    if let Some(value) = document.requests_per_minute() {
-        entries.push(aether_data::repository::system::StoredSystemConfigEntry {
-            key: "rate_limit_per_minute".to_string(),
-            value: json!(value),
-            description: None,
-            updated_at_unix_secs: None,
-        });
-    }
-    if let Some(value) = document.daily_usage_limit_usd() {
-        entries.push(aether_data::repository::system::StoredSystemConfigEntry {
-            key: "daily_usage_limit_usd".to_string(),
-            value: json!(value),
-            description: None,
-            updated_at_unix_secs: None,
-        });
+    for key in SYSTEM_ADMISSION_CONFIG_KEYS {
+        if let Some(value) = system_admission_value(&document, key) {
+            entries.push(aether_data::repository::system::StoredSystemConfigEntry {
+                key: key.to_string(),
+                value,
+                description: None,
+                updated_at_unix_secs: None,
+            });
+        }
     }
     Ok(entries)
 }
@@ -122,6 +116,11 @@ pub(crate) async fn apply_admin_system_config_update(
                     .and_then(|value| u32::try_from(value).ok()),
             ),
             "daily_usage_limit_usd" => document.with_daily_usage_limit_usd(normalized.as_f64()),
+            "concurrent_limit" => document.with_concurrent_requests(
+                normalized
+                    .as_u64()
+                    .and_then(|value| u32::try_from(value).ok()),
+            ),
             _ => unreachable!("admission config key checked above"),
         };
         state
@@ -189,6 +188,7 @@ pub(crate) async fn delete_admin_system_config(
             document = match key.as_str() {
                 "rate_limit_per_minute" => document.with_requests_per_minute(None),
                 "daily_usage_limit_usd" => document.with_daily_usage_limit_usd(None),
+                "concurrent_limit" => document.with_concurrent_requests(None),
                 _ => unreachable!("admission config key checked above"),
             };
             if existed {
@@ -219,8 +219,14 @@ pub(crate) async fn delete_admin_system_config(
 }
 
 fn is_admission_config_key(key: &str) -> bool {
-    matches!(key, "rate_limit_per_minute" | "daily_usage_limit_usd")
+    SYSTEM_ADMISSION_CONFIG_KEYS.contains(&key)
 }
+
+const SYSTEM_ADMISSION_CONFIG_KEYS: [&str; 3] = [
+    "rate_limit_per_minute",
+    "daily_usage_limit_usd",
+    "concurrent_limit",
+];
 
 async fn system_admission_document(
     state: &AdminAppState<'_>,
@@ -249,6 +255,7 @@ fn system_admission_value(
     match key {
         "rate_limit_per_minute" => document.requests_per_minute().map(|value| json!(value)),
         "daily_usage_limit_usd" => document.daily_usage_limit_usd().map(|value| json!(value)),
+        "concurrent_limit" => document.concurrent_requests().map(|value| json!(value)),
         _ => None,
     }
 }
@@ -282,6 +289,61 @@ fn normalized_admission_config_value(
                 .ok_or("daily_usage_limit_usd 必须是大于等于 0 的有限数值")?;
             Ok(json!(parsed))
         }
+        "concurrent_limit" => {
+            let parsed = value
+                .as_u64()
+                .or_else(|| {
+                    value
+                        .as_str()
+                        .and_then(|raw| raw.trim().parse::<u64>().ok())
+                })
+                .and_then(|value| u32::try_from(value).ok())
+                .ok_or("concurrent_limit 必须是 0 到 4294967295 之间的整数")?;
+            Ok(json!(parsed))
+        }
         _ => unreachable!("admission config key checked by caller"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn system_admission_config_keys_cover_every_supported_rule() {
+        let document = AdmissionPolicyDocument::default()
+            .with_requests_per_minute(Some(120))
+            .with_daily_usage_limit_usd(Some(25.5))
+            .with_concurrent_requests(Some(8));
+
+        assert_eq!(
+            system_admission_value(&document, "rate_limit_per_minute"),
+            Some(json!(120))
+        );
+        assert_eq!(
+            system_admission_value(&document, "daily_usage_limit_usd"),
+            Some(json!(25.5))
+        );
+        assert_eq!(
+            system_admission_value(&document, "concurrent_limit"),
+            Some(json!(8))
+        );
+        assert!(SYSTEM_ADMISSION_CONFIG_KEYS
+            .into_iter()
+            .all(is_admission_config_key));
+    }
+
+    #[test]
+    fn system_concurrent_limit_accepts_non_negative_u32_values_only() {
+        assert_eq!(
+            normalized_admission_config_value("concurrent_limit", &json!(16)),
+            Ok(json!(16))
+        );
+        assert_eq!(
+            normalized_admission_config_value("concurrent_limit", &json!("32")),
+            Ok(json!(32))
+        );
+        assert!(normalized_admission_config_value("concurrent_limit", &json!(-1)).is_err());
+        assert!(normalized_admission_config_value("concurrent_limit", &json!(1.5)).is_err());
     }
 }

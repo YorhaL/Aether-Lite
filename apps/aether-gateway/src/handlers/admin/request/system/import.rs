@@ -586,6 +586,7 @@ fn build_imported_user_group_record(
         Option<String>,
         String,
         aether_data::repository::users::UpsertUserGroupRecord,
+        Option<f64>,
     ),
     String,
 > {
@@ -660,6 +661,8 @@ fn build_imported_user_group_record(
             "inherit".to_string()
         }
     });
+    let admission_daily_usage_limit_usd = (daily_usage_limit_mode == "custom")
+        .then_some(daily_usage_limit_usd.unwrap_or(0.0).max(0.0));
 
     let normalized_name = name.to_ascii_lowercase();
 
@@ -678,9 +681,8 @@ fn build_imported_user_group_record(
             allowed_models_mode,
             rate_limit,
             rate_limit_mode,
-            daily_usage_limit_usd,
-            daily_usage_limit_mode,
         },
+        admission_daily_usage_limit_usd,
     ))
 }
 
@@ -688,7 +690,7 @@ fn resolve_imported_user_group_ids(
     user: &Map<String, Value>,
     imported_group_id_map: &BTreeMap<String, String>,
     imported_group_name_map: &BTreeMap<String, String>,
-    groups_by_name: &BTreeMap<String, aether_data::repository::users::StoredUserGroup>,
+    groups_by_name: &BTreeMap<String, crate::data::GatewayUserGroup>,
 ) -> Result<Vec<String>, String> {
     let raw_group_ids =
         imported_string_list_from_value(user.get("group_ids"), "group_ids")?.unwrap_or_default();
@@ -1829,7 +1831,7 @@ impl<'a> AdminAppState<'a> {
                 Ok(value) => value,
                 Err(detail) => return Ok(Err(invalid_request(detail))),
             };
-            let (export_id, normalized_name, record) = invalid_value!(
+            let (export_id, normalized_name, record, daily_usage_limit_usd) = invalid_value!(
                 build_imported_user_group_record(group, &format!("user_groups[{index}]"))
             );
             if default_group_id
@@ -1862,7 +1864,9 @@ impl<'a> AdminAppState<'a> {
                         ))));
                     }
                     AdminImportMergeMode::Overwrite => {
-                        let Some(updated) = self.update_user_group(&existing.id, record).await?
+                        let Some(updated) = self
+                            .update_user_group(&existing.id, record, daily_usage_limit_usd)
+                            .await?
                         else {
                             return Ok(Err((
                                 http::StatusCode::SERVICE_UNAVAILABLE,
@@ -1876,7 +1880,10 @@ impl<'a> AdminAppState<'a> {
                 continue;
             }
 
-            let Some(created) = self.create_user_group(record).await? else {
+            let Some(created) = self
+                .create_user_group(record, daily_usage_limit_usd)
+                .await?
+            else {
                 return Ok(Err((
                     http::StatusCode::SERVICE_UNAVAILABLE,
                     json!({ "detail": "Admin system data unavailable" }),
@@ -2348,9 +2355,6 @@ impl<'a> AdminAppState<'a> {
                                         api_key_id: existing_key.api_key_id.clone(),
                                         name: name.clone(),
                                         rate_limit: Some(rate_limit),
-                                        daily_usage_limit_present: key
-                                            .contains_key("daily_usage_limit_usd"),
-                                        daily_usage_limit_usd,
                                         concurrent_limit: if key.contains_key("concurrent_limit") {
                                             concurrent_limit
                                         } else {
@@ -2359,6 +2363,8 @@ impl<'a> AdminAppState<'a> {
                                         ip_rules: imported_ip_rules_present(key)
                                             .then(|| ip_rules.clone()),
                                     },
+                                    key.contains_key("daily_usage_limit_usd")
+                                        .then_some(daily_usage_limit_usd),
                                 )
                                 .await?;
                             if updated.is_none() {
@@ -2439,27 +2445,29 @@ impl<'a> AdminAppState<'a> {
                 }
 
                 let created = self
-                    .create_user_api_key(aether_data::repository::auth::CreateUserApiKeyRecord {
-                        user_id: user_id.clone(),
-                        api_key_id: Uuid::new_v4().to_string(),
-                        key_hash: key_hash.clone(),
-                        key_encrypted,
-                        name,
-                        allowed_providers,
-                        allowed_api_formats,
-                        allowed_models,
-                        ip_rules,
-                        rate_limit,
+                    .create_user_api_key(
+                        aether_data::repository::auth::CreateUserApiKeyRecord {
+                            user_id: user_id.clone(),
+                            api_key_id: Uuid::new_v4().to_string(),
+                            key_hash: key_hash.clone(),
+                            key_encrypted,
+                            name,
+                            allowed_providers,
+                            allowed_api_formats,
+                            allowed_models,
+                            ip_rules,
+                            rate_limit,
+                            concurrent_limit,
+                            force_capabilities,
+                            is_active,
+                            expires_at_unix_secs,
+                            auto_delete_on_expiry,
+                            total_requests,
+                            total_tokens,
+                            total_cost_usd,
+                        },
                         daily_usage_limit_usd,
-                        concurrent_limit,
-                        force_capabilities,
-                        is_active,
-                        expires_at_unix_secs,
-                        auto_delete_on_expiry,
-                        total_requests,
-                        total_tokens,
-                        total_cost_usd,
-                    })
+                    )
                     .await?;
                 let Some(created) = created else {
                     return Ok(Err((
@@ -2621,9 +2629,6 @@ impl<'a> AdminAppState<'a> {
                                     name: name.clone(),
                                     rate_limit_present: true,
                                     rate_limit: Some(rate_limit),
-                                    daily_usage_limit_present: key
-                                        .contains_key("daily_usage_limit_usd"),
-                                    daily_usage_limit_usd,
                                     concurrent_limit_present: key.contains_key("concurrent_limit"),
                                     concurrent_limit,
                                     allowed_providers: Some(allowed_providers.clone()),
@@ -2636,6 +2641,8 @@ impl<'a> AdminAppState<'a> {
                                     auto_delete_on_expiry_present: false,
                                     auto_delete_on_expiry: false,
                                 },
+                                key.contains_key("daily_usage_limit_usd")
+                                    .then_some(daily_usage_limit_usd),
                             )
                             .await?;
                             if updated.is_none() {
@@ -2716,7 +2723,6 @@ impl<'a> AdminAppState<'a> {
                             allowed_models,
                             ip_rules,
                             rate_limit: Some(rate_limit),
-                            daily_usage_limit_usd,
                             concurrent_limit,
                             force_capabilities,
                             is_active,
@@ -2726,6 +2732,7 @@ impl<'a> AdminAppState<'a> {
                             total_tokens,
                             total_cost_usd,
                         },
+                        daily_usage_limit_usd,
                     )
                     .await?;
                 let Some(created) = created else {

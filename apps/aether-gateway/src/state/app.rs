@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::time::{Duration, Instant};
 
-use aether_data::repository::users::StoredUserGroup;
+use crate::data::GatewayUserGroup;
 use aether_data_contracts::repository::usage::UsageCounterHealthSnapshot;
 use aether_runtime::ConcurrencyGate;
 use aether_runtime_state::{RuntimeSemaphore, RuntimeState};
@@ -399,7 +399,7 @@ pub struct AppState {
     pub(crate) auth_wallet_snapshot_cache:
         Arc<ValueCache<String, aether_data::repository::wallet::StoredWalletSnapshot>>,
     pub(crate) auth_request_cost_upper_bound_cache: Arc<ValueCache<String, f64>>,
-    pub(crate) user_groups_for_user_cache: Arc<ValueCache<String, Vec<StoredUserGroup>>>,
+    pub(crate) user_groups_for_user_cache: Arc<ValueCache<String, Vec<GatewayUserGroup>>>,
     pub(crate) routing_group_selection_cache:
         Arc<ValueCache<String, crate::routing::GatewayRoutingGroupSelection>>,
     pub(crate) auth_api_key_last_used_cache: Arc<AuthApiKeyLastUsedCache>,

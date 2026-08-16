@@ -106,7 +106,7 @@ pub(in super::super) async fn build_admin_monitoring_cache_affinity_delete_respo
     .await?;
     let api_key_name = api_key_by_id
         .remove(&affinity_key)
-        .and_then(|item| item.name)
+        .and_then(|item| item.into_stored().name)
         .unwrap_or_else(|| affinity_key.chars().take(8).collect::<String>());
 
     Ok(

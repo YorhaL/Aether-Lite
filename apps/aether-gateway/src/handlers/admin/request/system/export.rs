@@ -190,10 +190,8 @@ impl<'a> AdminAppState<'a> {
             })
             .collect::<BTreeMap<_, _>>();
 
-        let mut api_keys_by_user_id = BTreeMap::<
-            String,
-            Vec<aether_data::repository::auth::StoredAuthApiKeyExportRecord>,
-        >::new();
+        let mut api_keys_by_user_id =
+            BTreeMap::<String, Vec<crate::data::GatewayAuthApiKeyExportRecord>>::new();
         for key in user_api_keys.into_iter().filter(|key| !key.is_standalone) {
             api_keys_by_user_id
                 .entry(key.user_id.clone())
@@ -326,7 +324,7 @@ impl<'a> AdminAppState<'a> {
 
     fn build_admin_system_users_export_api_key_payload(
         &self,
-        key: &aether_data::repository::auth::StoredAuthApiKeyExportRecord,
+        key: &crate::data::GatewayAuthApiKeyExportRecord,
         wallet: Option<&aether_data::repository::wallet::StoredWalletSnapshot>,
         include_is_standalone: bool,
     ) -> serde_json::Value {

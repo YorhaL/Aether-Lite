@@ -73,7 +73,7 @@ pub(super) async fn build_admin_monitoring_cache_affinities_response(
                 .list_auth_api_key_export_records_by_user_ids(std::slice::from_ref(&user.id))
                 .await?
                 .into_iter()
-                .map(|item| item.api_key_id)
+                .map(|item| item.into_stored().api_key_id)
                 .collect::<std::collections::BTreeSet<_>>();
             list_admin_monitoring_cache_affinity_records_by_affinity_keys(state, &user_api_key_ids)
                 .await?
@@ -281,7 +281,7 @@ pub(super) async fn build_admin_monitoring_cache_affinity_response(
             .list_auth_api_key_export_records_by_user_ids(std::slice::from_ref(&user.id))
             .await?
             .into_iter()
-            .map(|item| item.api_key_id)
+            .map(|item| item.into_stored().api_key_id)
             .collect::<std::collections::BTreeSet<_>>();
         let affinities =
             list_admin_monitoring_cache_affinity_records_by_affinity_keys(state, &user_api_key_ids)

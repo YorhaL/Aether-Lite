@@ -25,7 +25,7 @@ impl AppState {
                         .await?
                         .into_iter()
                         .find(|record| record.api_key_id == api_key_id && record.user_id == user_id)
-                        .and_then(|record| record.force_capabilities);
+                        .and_then(|record| record.into_stored().force_capabilities);
                     Ok(value)
                 },
             )
@@ -59,8 +59,7 @@ impl AppState {
     pub(crate) async fn list_auth_api_key_export_records_by_user_ids(
         &self,
         user_ids: &[String],
-    ) -> Result<Vec<aether_data::repository::auth::StoredAuthApiKeyExportRecord>, GatewayError>
-    {
+    ) -> Result<Vec<crate::data::GatewayAuthApiKeyExportRecord>, GatewayError> {
         self.data
             .list_auth_api_key_export_records_by_user_ids(user_ids)
             .await
@@ -70,8 +69,7 @@ impl AppState {
     pub(crate) async fn list_auth_api_key_export_records_by_ids(
         &self,
         api_key_ids: &[String],
-    ) -> Result<Vec<aether_data::repository::auth::StoredAuthApiKeyExportRecord>, GatewayError>
-    {
+    ) -> Result<Vec<crate::data::GatewayAuthApiKeyExportRecord>, GatewayError> {
         self.data
             .list_auth_api_key_export_records_by_ids(api_key_ids)
             .await
@@ -81,8 +79,7 @@ impl AppState {
     pub(crate) async fn list_auth_api_key_export_records_by_name_search(
         &self,
         name_search: &str,
-    ) -> Result<Vec<aether_data::repository::auth::StoredAuthApiKeyExportRecord>, GatewayError>
-    {
+    ) -> Result<Vec<crate::data::GatewayAuthApiKeyExportRecord>, GatewayError> {
         self.data
             .list_auth_api_key_export_records_by_name_search(name_search)
             .await
@@ -92,8 +89,7 @@ impl AppState {
     pub(crate) async fn list_auth_api_key_export_standalone_records_page(
         &self,
         query: &aether_data::repository::auth::StandaloneApiKeyExportListQuery,
-    ) -> Result<Vec<aether_data::repository::auth::StoredAuthApiKeyExportRecord>, GatewayError>
-    {
+    ) -> Result<Vec<crate::data::GatewayAuthApiKeyExportRecord>, GatewayError> {
         self.data
             .list_auth_api_key_export_standalone_records_page(query)
             .await
@@ -133,8 +129,7 @@ impl AppState {
 
     pub(crate) async fn list_auth_api_key_export_standalone_records(
         &self,
-    ) -> Result<Vec<aether_data::repository::auth::StoredAuthApiKeyExportRecord>, GatewayError>
-    {
+    ) -> Result<Vec<crate::data::GatewayAuthApiKeyExportRecord>, GatewayError> {
         self.data
             .list_auth_api_key_export_standalone_records()
             .await
@@ -154,8 +149,7 @@ impl AppState {
     pub(crate) async fn find_auth_api_key_export_standalone_record_by_id(
         &self,
         api_key_id: &str,
-    ) -> Result<Option<aether_data::repository::auth::StoredAuthApiKeyExportRecord>, GatewayError>
-    {
+    ) -> Result<Option<crate::data::GatewayAuthApiKeyExportRecord>, GatewayError> {
         self.data
             .find_auth_api_key_export_standalone_record_by_id(api_key_id)
             .await
@@ -232,11 +226,11 @@ impl AppState {
     pub(crate) async fn create_user_api_key(
         &self,
         record: aether_data::repository::auth::CreateUserApiKeyRecord,
-    ) -> Result<Option<aether_data::repository::auth::StoredAuthApiKeyExportRecord>, GatewayError>
-    {
+        daily_usage_limit_usd: Option<f64>,
+    ) -> Result<Option<crate::data::GatewayAuthApiKeyExportRecord>, GatewayError> {
         let api_key = self
             .data
-            .create_user_api_key(record)
+            .create_user_api_key(record, daily_usage_limit_usd)
             .await
             .map_err(|err| GatewayError::Internal(err.to_string()))?;
         if api_key.is_some() {
@@ -248,11 +242,11 @@ impl AppState {
     pub(crate) async fn create_standalone_api_key(
         &self,
         record: aether_data::repository::auth::CreateStandaloneApiKeyRecord,
-    ) -> Result<Option<aether_data::repository::auth::StoredAuthApiKeyExportRecord>, GatewayError>
-    {
+        daily_usage_limit_usd: Option<f64>,
+    ) -> Result<Option<crate::data::GatewayAuthApiKeyExportRecord>, GatewayError> {
         let api_key = self
             .data
-            .create_standalone_api_key(record)
+            .create_standalone_api_key(record, daily_usage_limit_usd)
             .await
             .map_err(|err| GatewayError::Internal(err.to_string()))?;
         if api_key.is_some() {
@@ -264,11 +258,11 @@ impl AppState {
     pub(crate) async fn update_user_api_key_basic(
         &self,
         record: aether_data::repository::auth::UpdateUserApiKeyBasicRecord,
-    ) -> Result<Option<aether_data::repository::auth::StoredAuthApiKeyExportRecord>, GatewayError>
-    {
+        daily_usage_limit_usd: Option<Option<f64>>,
+    ) -> Result<Option<crate::data::GatewayAuthApiKeyExportRecord>, GatewayError> {
         let api_key = self
             .data
-            .update_user_api_key_basic(record)
+            .update_user_api_key_basic(record, daily_usage_limit_usd)
             .await
             .map_err(|err| GatewayError::Internal(err.to_string()))?;
         if api_key.is_some() {
@@ -280,11 +274,11 @@ impl AppState {
     pub(crate) async fn update_standalone_api_key_basic(
         &self,
         record: aether_data::repository::auth::UpdateStandaloneApiKeyBasicRecord,
-    ) -> Result<Option<aether_data::repository::auth::StoredAuthApiKeyExportRecord>, GatewayError>
-    {
+        daily_usage_limit_usd: Option<Option<f64>>,
+    ) -> Result<Option<crate::data::GatewayAuthApiKeyExportRecord>, GatewayError> {
         let api_key = self
             .data
-            .update_standalone_api_key_basic(record)
+            .update_standalone_api_key_basic(record, daily_usage_limit_usd)
             .await
             .map_err(|err| GatewayError::Internal(err.to_string()))?;
         if api_key.is_some() {
@@ -298,8 +292,7 @@ impl AppState {
         user_id: &str,
         api_key_id: &str,
         is_active: bool,
-    ) -> Result<Option<aether_data::repository::auth::StoredAuthApiKeyExportRecord>, GatewayError>
-    {
+    ) -> Result<Option<crate::data::GatewayAuthApiKeyExportRecord>, GatewayError> {
         let api_key = self
             .data
             .set_user_api_key_active(user_id, api_key_id, is_active)
@@ -315,8 +308,7 @@ impl AppState {
         &self,
         api_key_id: &str,
         is_active: bool,
-    ) -> Result<Option<aether_data::repository::auth::StoredAuthApiKeyExportRecord>, GatewayError>
-    {
+    ) -> Result<Option<crate::data::GatewayAuthApiKeyExportRecord>, GatewayError> {
         let api_key = self
             .data
             .set_standalone_api_key_active(api_key_id, is_active)
@@ -350,8 +342,7 @@ impl AppState {
         user_id: &str,
         api_key_id: &str,
         allowed_providers: Option<Vec<String>>,
-    ) -> Result<Option<aether_data::repository::auth::StoredAuthApiKeyExportRecord>, GatewayError>
-    {
+    ) -> Result<Option<crate::data::GatewayAuthApiKeyExportRecord>, GatewayError> {
         let api_key = self
             .data
             .set_user_api_key_allowed_providers(user_id, api_key_id, allowed_providers)
@@ -368,8 +359,7 @@ impl AppState {
         user_id: &str,
         api_key_id: &str,
         force_capabilities: Option<serde_json::Value>,
-    ) -> Result<Option<aether_data::repository::auth::StoredAuthApiKeyExportRecord>, GatewayError>
-    {
+    ) -> Result<Option<crate::data::GatewayAuthApiKeyExportRecord>, GatewayError> {
         let api_key = self
             .data
             .set_user_api_key_force_capabilities(user_id, api_key_id, force_capabilities)
@@ -386,8 +376,7 @@ impl AppState {
         user_id: &str,
         api_key_id: &str,
         feature_settings: Option<serde_json::Value>,
-    ) -> Result<Option<aether_data::repository::auth::StoredAuthApiKeyExportRecord>, GatewayError>
-    {
+    ) -> Result<Option<crate::data::GatewayAuthApiKeyExportRecord>, GatewayError> {
         let api_key = self
             .data
             .set_user_api_key_feature_settings(user_id, api_key_id, feature_settings)
@@ -405,8 +394,7 @@ impl AppState {
         total_requests: u64,
         total_tokens: u64,
         total_cost_usd: f64,
-    ) -> Result<Option<aether_data::repository::auth::StoredAuthApiKeyExportRecord>, GatewayError>
-    {
+    ) -> Result<Option<crate::data::GatewayAuthApiKeyExportRecord>, GatewayError> {
         let api_key = self
             .data
             .set_api_key_usage_totals(api_key_id, total_requests, total_tokens, total_cost_usd)
@@ -422,8 +410,7 @@ impl AppState {
         &self,
         api_key_id: &str,
         feature_settings: Option<serde_json::Value>,
-    ) -> Result<Option<aether_data::repository::auth::StoredAuthApiKeyExportRecord>, GatewayError>
-    {
+    ) -> Result<Option<crate::data::GatewayAuthApiKeyExportRecord>, GatewayError> {
         let api_key = self
             .data
             .set_standalone_api_key_feature_settings(api_key_id, feature_settings)

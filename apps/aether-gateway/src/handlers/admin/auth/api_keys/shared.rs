@@ -154,7 +154,7 @@ fn masked_admin_api_key_display(state: &AdminAppState<'_>, ciphertext: Option<&s
 
 pub(super) fn build_admin_api_key_list_item_payload(
     state: &AdminAppState<'_>,
-    record: &aether_data::repository::auth::StoredAuthApiKeyExportRecord,
+    record: &crate::data::GatewayAuthApiKeyExportRecord,
     wallet: Option<&aether_data::repository::wallet::StoredWalletSnapshot>,
 ) -> serde_json::Value {
     json!({
@@ -186,7 +186,7 @@ pub(super) fn build_admin_api_key_list_item_payload(
 
 pub(super) fn build_admin_api_key_detail_payload(
     state: &AdminAppState<'_>,
-    record: &aether_data::repository::auth::StoredAuthApiKeyExportRecord,
+    record: &crate::data::GatewayAuthApiKeyExportRecord,
     wallet: Option<&aether_data::repository::wallet::StoredWalletSnapshot>,
 ) -> serde_json::Value {
     json!({

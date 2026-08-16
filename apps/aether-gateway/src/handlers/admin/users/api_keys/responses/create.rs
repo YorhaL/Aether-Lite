@@ -160,27 +160,29 @@ pub(crate) async fn build_admin_create_user_api_key_response(
     };
 
     let Some(created) = state
-        .create_user_api_key(aether_data::repository::auth::CreateUserApiKeyRecord {
-            user_id: target_user_id.clone(),
-            api_key_id: uuid::Uuid::new_v4().to_string(),
-            key_hash: hash_admin_user_api_key(&plaintext_key),
-            key_encrypted: Some(key_encrypted),
-            name: Some(name.clone()),
-            allowed_providers: None,
-            allowed_api_formats: None,
-            allowed_models: None,
-            ip_rules,
-            rate_limit,
-            daily_usage_limit_usd: payload.daily_usage_limit_usd,
-            concurrent_limit,
-            force_capabilities: None,
-            is_active: true,
-            expires_at_unix_secs: None,
-            auto_delete_on_expiry: false,
-            total_requests: 0,
-            total_tokens: 0,
-            total_cost_usd: 0.0,
-        })
+        .create_user_api_key(
+            aether_data::repository::auth::CreateUserApiKeyRecord {
+                user_id: target_user_id.clone(),
+                api_key_id: uuid::Uuid::new_v4().to_string(),
+                key_hash: hash_admin_user_api_key(&plaintext_key),
+                key_encrypted: Some(key_encrypted),
+                name: Some(name.clone()),
+                allowed_providers: None,
+                allowed_api_formats: None,
+                allowed_models: None,
+                ip_rules,
+                rate_limit,
+                concurrent_limit,
+                force_capabilities: None,
+                is_active: true,
+                expires_at_unix_secs: None,
+                auto_delete_on_expiry: false,
+                total_requests: 0,
+                total_tokens: 0,
+                total_cost_usd: 0.0,
+            },
+            payload.daily_usage_limit_usd,
+        )
         .await?
     else {
         return Ok(build_admin_users_data_unavailable_response());

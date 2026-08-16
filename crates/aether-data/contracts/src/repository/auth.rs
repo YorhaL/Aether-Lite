@@ -350,7 +350,6 @@ pub struct StoredAuthApiKeyExportRecord {
     pub allowed_models: Option<Vec<String>>,
     pub ip_rules: Option<Vec<String>>,
     pub rate_limit: Option<i32>,
-    pub daily_usage_limit_usd: Option<f64>,
     pub concurrent_limit: Option<i32>,
     pub force_capabilities: Option<serde_json::Value>,
     pub feature_settings: Option<serde_json::Value>,
@@ -423,7 +422,6 @@ impl StoredAuthApiKeyExportRecord {
             allowed_models: parse_string_list(allowed_models, "api_keys.allowed_models")?,
             ip_rules: None,
             rate_limit,
-            daily_usage_limit_usd: None,
             concurrent_limit,
             force_capabilities,
             feature_settings: None,
@@ -465,11 +463,6 @@ impl StoredAuthApiKeyExportRecord {
         self
     }
 
-    pub fn with_daily_usage_limit(mut self, daily_usage_limit_usd: Option<f64>) -> Self {
-        self.daily_usage_limit_usd = daily_usage_limit_usd;
-        self
-    }
-
     pub fn with_ip_rules(
         mut self,
         ip_rules: Option<serde_json::Value>,
@@ -504,7 +497,6 @@ pub struct CreateUserApiKeyRecord {
     pub allowed_models: Option<Vec<String>>,
     pub ip_rules: Option<Vec<String>>,
     pub rate_limit: i32,
-    pub daily_usage_limit_usd: Option<f64>,
     pub concurrent_limit: Option<i32>,
     pub force_capabilities: Option<serde_json::Value>,
     pub is_active: bool,
@@ -521,8 +513,6 @@ pub struct UpdateUserApiKeyBasicRecord {
     pub api_key_id: String,
     pub name: Option<String>,
     pub rate_limit: Option<i32>,
-    pub daily_usage_limit_present: bool,
-    pub daily_usage_limit_usd: Option<f64>,
     pub concurrent_limit: Option<i32>,
     pub ip_rules: Option<Option<Vec<String>>>,
 }
@@ -539,7 +529,6 @@ pub struct CreateStandaloneApiKeyRecord {
     pub allowed_models: Option<Vec<String>>,
     pub ip_rules: Option<Vec<String>>,
     pub rate_limit: Option<i32>,
-    pub daily_usage_limit_usd: Option<f64>,
     pub concurrent_limit: Option<i32>,
     pub force_capabilities: Option<serde_json::Value>,
     pub is_active: bool,
@@ -556,8 +545,6 @@ pub struct UpdateStandaloneApiKeyBasicRecord {
     pub name: Option<String>,
     pub rate_limit_present: bool,
     pub rate_limit: Option<i32>,
-    pub daily_usage_limit_present: bool,
-    pub daily_usage_limit_usd: Option<f64>,
     pub concurrent_limit_present: bool,
     pub concurrent_limit: Option<i32>,
     pub allowed_providers: Option<Option<Vec<String>>>,
