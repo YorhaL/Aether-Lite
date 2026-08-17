@@ -174,6 +174,19 @@ fn extract_trusted_auth_headers(headers: &http::HeaderMap) -> Option<GatewayTrus
     })
 }
 
+#[cfg(not(test))]
+pub(super) fn extract_trusted_admin_headers(
+    _headers: &http::HeaderMap,
+) -> Option<GatewayTrustedAdminHeaders> {
+    // The public gateway has no authenticated upstream that is allowed to
+    // assert an administrator principal. `x-aether-gateway` is also emitted
+    // on public responses, so it cannot serve as proof that these headers were
+    // produced by a trusted hop. Production requests must authenticate with a
+    // real admin session or management bearer token instead.
+    None
+}
+
+#[cfg(test)]
 pub(super) fn extract_trusted_admin_headers(
     headers: &http::HeaderMap,
 ) -> Option<GatewayTrustedAdminHeaders> {
