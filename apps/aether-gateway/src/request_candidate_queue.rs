@@ -1,7 +1,8 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map::RandomState, HashMap, HashSet};
 use std::future::Future;
+use std::hash::{BuildHasher, Hasher};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use aether_data_contracts::repository::candidates::{
@@ -9,7 +10,7 @@ use aether_data_contracts::repository::candidates::{
 };
 use aether_runtime::{MetricKind, MetricSample};
 use tokio::sync::{mpsc, Semaphore};
-use tokio::time::{interval, MissedTickBehavior};
+use tokio::time::{interval, Instant, MissedTickBehavior};
 use tracing::{debug, warn};
 
 const MODE_ENV: &str = "AETHER_GATEWAY_REQUEST_CANDIDATE_WRITE_MODE";
@@ -38,7 +39,8 @@ const DEFAULT_RUNTIME_THREADS: usize = 1;
 const MAX_RUNTIME_THREADS: usize = 8;
 const RUNTIME_THREAD_STACK_BYTES: usize = 2 * 1024 * 1024;
 const RUNTIME_THREAD_NAME: &str = "aether-candidate-queue";
-const FAILED_FLUSH_RETRY_DELAY_MS: u64 = 25;
+const FAILED_FLUSH_RETRY_BASE_DELAY_MS: u64 = 100;
+const FAILED_FLUSH_RETRY_MAX_DELAY_MS: u64 = 30_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RequestCandidateWriteMode {
@@ -135,6 +137,7 @@ struct RequestCandidateQueueMetrics {
     flushed_total: AtomicU64,
     priority_flushed_total: AtomicU64,
     flush_failed_total: AtomicU64,
+    permanent_dropped_total: AtomicU64,
     flush_batches_total: AtomicU64,
     flush_sql_ops_total: AtomicU64,
     flush_sql_records_total: AtomicU64,
@@ -143,6 +146,13 @@ struct RequestCandidateQueueMetrics {
     db_write_wait_total: AtomicU64,
     compacted_total: AtomicU64,
     sync_fallback_total: AtomicU64,
+    retry_states: Mutex<HashMap<(usize, RequestCandidateQueueLane), RequestCandidateRetryState>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RequestCandidateRetryState {
+    attempt: u32,
+    retry_not_before: Instant,
 }
 
 #[derive(Debug)]
@@ -789,6 +799,12 @@ impl RequestCandidateQueueRuntime {
                 self.metrics.flush_failed_total.load(Ordering::Acquire),
             ),
             MetricSample::new(
+                "request_candidate_queue_permanent_dropped_total",
+                "Total request candidate records dropped after isolation identified a non-retryable persistence error.",
+                MetricKind::Counter,
+                self.metrics.permanent_dropped_total.load(Ordering::Acquire),
+            ),
+            MetricSample::new(
                 "request_candidate_queue_flush_batches_total",
                 "Total async request candidate persistence flush batches.",
                 MetricKind::Counter,
@@ -1115,7 +1131,8 @@ async fn run_worker(
         // terminal receiver cannot wake this worker because the record has
         // already been received. Flush it here when no active work is waiting;
         // sustained active traffic still uses the 2:1 fairness path below.
-        if active_batch.is_empty()
+        if terminal_batch.is_empty()
+            && active_batch.is_empty()
             && active_receiver.is_empty()
             && terminal_front
                 .as_ref()
@@ -1173,6 +1190,19 @@ async fn run_worker(
                 continue;
             }
         }
+
+        let retry_deadline = request_candidate_next_retry_deadline(&metrics, worker_index);
+        let scheduled_flush = async {
+            if let Some(deadline) = retry_deadline {
+                tokio::select! {
+                    _ = ticker.tick() => {}
+                    _ = tokio::time::sleep_until(deadline) => {}
+                }
+            } else {
+                ticker.tick().await;
+            }
+        };
+        tokio::pin!(scheduled_flush);
 
         tokio::select! {
             biased;
@@ -1239,7 +1269,7 @@ async fn run_worker(
                     }
                 }
             }
-            _ = ticker.tick() => {
+            _ = &mut scheduled_flush => {
                 if !active_batch.is_empty() {
                     flush_batch(
                         &repository,
@@ -1412,11 +1442,188 @@ async fn run_worker(
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum RequestCandidateQueueLane {
     Normal,
     Active,
     Terminal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RequestCandidateWriteErrorDisposition {
+    Retry,
+    IsolateRecord,
+    DropBatch,
+}
+
+fn request_candidate_write_error_disposition(
+    error: &aether_data_contracts::DataLayerError,
+) -> RequestCandidateWriteErrorDisposition {
+    use aether_data_contracts::DataLayerError;
+
+    match error {
+        DataLayerError::InvalidConfiguration(_) => RequestCandidateWriteErrorDisposition::DropBatch,
+        DataLayerError::InvalidInput(_) | DataLayerError::UnexpectedValue(_) => {
+            RequestCandidateWriteErrorDisposition::IsolateRecord
+        }
+        DataLayerError::Postgres(message) | DataLayerError::Sql(message) => {
+            database_error_disposition(message)
+                .unwrap_or(RequestCandidateWriteErrorDisposition::Retry)
+        }
+        DataLayerError::Redis(_) | DataLayerError::TimedOut(_) => {
+            RequestCandidateWriteErrorDisposition::Retry
+        }
+    }
+}
+
+fn database_error_disposition(message: &str) -> Option<RequestCandidateWriteErrorDisposition> {
+    if let Some(code) = database_error_sqlstate(message) {
+        if code.starts_with("21")
+            || code.starts_with("22")
+            || code.starts_with("23")
+            || code.starts_with("44")
+        {
+            return Some(RequestCandidateWriteErrorDisposition::IsolateRecord);
+        }
+        if code.starts_with("0A")
+            || code.starts_with("28")
+            || code.starts_with("3D")
+            || code.starts_with("3F")
+            || code.starts_with("42")
+        {
+            return Some(RequestCandidateWriteErrorDisposition::DropBatch);
+        }
+    }
+    (message.contains("unsupported Unicode escape sequence")
+        || message.contains("\\u0000 cannot be converted to text")
+        || message.contains("invalid byte sequence for encoding \"UTF8\": 0x00")
+        || message.contains("violates foreign key constraint"))
+    .then_some(RequestCandidateWriteErrorDisposition::IsolateRecord)
+}
+
+fn database_error_sqlstate(message: &str) -> Option<&str> {
+    let suffix = message.strip_suffix(')')?;
+    let (_, code) = suffix.rsplit_once("(SQLSTATE ")?;
+    (code.len() == 5
+        && code
+            .bytes()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit()))
+    .then_some(code)
+}
+
+fn request_candidate_write_error_kind(
+    error: &aether_data_contracts::DataLayerError,
+) -> &'static str {
+    use aether_data_contracts::DataLayerError;
+
+    match error {
+        DataLayerError::InvalidConfiguration(_) => "invalid_configuration",
+        DataLayerError::InvalidInput(_) => "invalid_input",
+        DataLayerError::UnexpectedValue(_) => "unexpected_value",
+        DataLayerError::Postgres(_) => "postgres",
+        DataLayerError::Sql(_) => "sql",
+        DataLayerError::Redis(_) => "redis",
+        DataLayerError::TimedOut(_) => "timed_out",
+    }
+}
+
+fn request_candidate_write_error_sqlstate(error: &aether_data_contracts::DataLayerError) -> &str {
+    use aether_data_contracts::DataLayerError;
+
+    match error {
+        DataLayerError::Postgres(message) | DataLayerError::Sql(message) => {
+            database_error_sqlstate(message).unwrap_or("")
+        }
+        _ => "",
+    }
+}
+
+fn request_candidate_retry_delay(
+    metrics: &RequestCandidateQueueMetrics,
+    worker_index: usize,
+    lane: RequestCandidateQueueLane,
+) -> Duration {
+    let mut states = metrics
+        .retry_states
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let attempt = states
+        .get(&(worker_index, lane))
+        .map(|state| state.attempt)
+        .unwrap_or_default()
+        .saturating_add(1);
+    let exponent = attempt.saturating_sub(1).min(16);
+    let multiplier = 1_u64.checked_shl(exponent).unwrap_or(u64::MAX);
+    let delay_ceiling = FAILED_FLUSH_RETRY_BASE_DELAY_MS
+        .saturating_mul(multiplier)
+        .min(FAILED_FLUSH_RETRY_MAX_DELAY_MS);
+    let minimum_delay = delay_ceiling / 2;
+    let jitter_window = delay_ceiling.saturating_sub(minimum_delay);
+    let jitter_seed = request_candidate_retry_jitter_salt()
+        ^ (worker_index as u64 + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15)
+        ^ u64::from(attempt)
+        ^ (lane as u64).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    let delay = Duration::from_millis(
+        minimum_delay.saturating_add(jitter_seed % jitter_window.saturating_add(1)),
+    );
+    states.insert(
+        (worker_index, lane),
+        RequestCandidateRetryState {
+            attempt,
+            retry_not_before: Instant::now() + delay,
+        },
+    );
+    delay
+}
+
+fn request_candidate_retry_is_ready(
+    metrics: &RequestCandidateQueueMetrics,
+    worker_index: usize,
+    lane: RequestCandidateQueueLane,
+) -> bool {
+    metrics
+        .retry_states
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .get(&(worker_index, lane))
+        .is_none_or(|state| Instant::now() >= state.retry_not_before)
+}
+
+fn request_candidate_next_retry_deadline(
+    metrics: &RequestCandidateQueueMetrics,
+    worker_index: usize,
+) -> Option<Instant> {
+    metrics
+        .retry_states
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .iter()
+        .filter_map(|((state_worker_index, _), state)| {
+            (*state_worker_index == worker_index).then_some(state.retry_not_before)
+        })
+        .min()
+}
+
+fn request_candidate_retry_jitter_salt() -> u64 {
+    static SALT: OnceLock<u64> = OnceLock::new();
+    *SALT.get_or_init(|| {
+        let random_state = RandomState::new();
+        let mut hasher = random_state.build_hasher();
+        hasher.write_u32(std::process::id());
+        hasher.finish()
+    })
+}
+
+fn reset_request_candidate_retry_delay(
+    metrics: &RequestCandidateQueueMetrics,
+    worker_index: usize,
+    lane: RequestCandidateQueueLane,
+) {
+    metrics
+        .retry_states
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .remove(&(worker_index, lane));
 }
 
 async fn flush_batch(
@@ -1429,10 +1636,10 @@ async fn flush_batch(
     batch: &mut Vec<UpsertRequestCandidateRecord>,
     admission: Option<&Semaphore>,
 ) {
-    let records = std::mem::take(batch);
-    if records.is_empty() {
+    if batch.is_empty() || !request_candidate_retry_is_ready(metrics, worker_index, lane) {
         return;
     }
+    let records = std::mem::take(batch);
     let source_count = records.len();
     let flush_plan = compact_records_for_flush(records);
     let compacted = source_count.saturating_sub(flush_plan.record_count());
@@ -1447,7 +1654,9 @@ async fn flush_batch(
     let mut retry_streaming = Vec::new();
     let mut retry_terminal = Vec::new();
     let mut blocked_slots = HashSet::new();
-    let mut failed = 0_u64;
+    let mut retry_failed = 0_u64;
+    let mut deferred_source_count = 0_u64;
+    let mut permanent_dropped = 0_u64;
 
     let normal_result = flush_ordered_stage(
         repository,
@@ -1456,13 +1665,19 @@ async fn flush_batch(
         db_write_gate,
         worker_index,
         lane,
+        false,
         flush_plan.normal,
         &blocked_slots,
         &mut retry_normal,
     )
     .await;
-    failed = failed.saturating_add(normal_result.failed_source_count);
+    retry_failed = retry_failed.saturating_add(normal_result.retry_source_count);
+    deferred_source_count =
+        deferred_source_count.saturating_add(normal_result.deferred_source_count);
+    permanent_dropped =
+        permanent_dropped.saturating_add(normal_result.permanent_dropped_source_count);
     blocked_slots.extend(normal_result.failed_slots);
+    let mut abort_batch = normal_result.abort_batch;
 
     let pending_result = flush_ordered_stage(
         repository,
@@ -1471,13 +1686,19 @@ async fn flush_batch(
         db_write_gate,
         worker_index,
         lane,
+        abort_batch,
         flush_plan.pending,
         &blocked_slots,
         &mut retry_pending,
     )
     .await;
-    failed = failed.saturating_add(pending_result.failed_source_count);
+    retry_failed = retry_failed.saturating_add(pending_result.retry_source_count);
+    deferred_source_count =
+        deferred_source_count.saturating_add(pending_result.deferred_source_count);
+    permanent_dropped =
+        permanent_dropped.saturating_add(pending_result.permanent_dropped_source_count);
     blocked_slots.extend(pending_result.failed_slots);
+    abort_batch |= pending_result.abort_batch;
 
     let streaming_result = flush_ordered_stage(
         repository,
@@ -1486,13 +1707,19 @@ async fn flush_batch(
         db_write_gate,
         worker_index,
         lane,
+        abort_batch,
         flush_plan.streaming,
         &blocked_slots,
         &mut retry_streaming,
     )
     .await;
-    failed = failed.saturating_add(streaming_result.failed_source_count);
+    retry_failed = retry_failed.saturating_add(streaming_result.retry_source_count);
+    deferred_source_count =
+        deferred_source_count.saturating_add(streaming_result.deferred_source_count);
+    permanent_dropped =
+        permanent_dropped.saturating_add(streaming_result.permanent_dropped_source_count);
     blocked_slots.extend(streaming_result.failed_slots);
+    abort_batch |= streaming_result.abort_batch;
 
     let terminal_result = flush_ordered_stage(
         repository,
@@ -1501,22 +1728,63 @@ async fn flush_batch(
         db_write_gate,
         worker_index,
         lane,
+        abort_batch,
         flush_plan.terminal,
         &blocked_slots,
         &mut retry_terminal,
     )
     .await;
-    failed = failed.saturating_add(terminal_result.failed_source_count);
+    retry_failed = retry_failed.saturating_add(terminal_result.retry_source_count);
+    deferred_source_count =
+        deferred_source_count.saturating_add(terminal_result.deferred_source_count);
+    permanent_dropped =
+        permanent_dropped.saturating_add(terminal_result.permanent_dropped_source_count);
+    abort_batch |= terminal_result.abort_batch;
 
+    if abort_batch {
+        let retry_record_count = retry_normal
+            .len()
+            .saturating_add(retry_pending.len())
+            .saturating_add(retry_streaming.len())
+            .saturating_add(retry_terminal.len());
+        if retry_record_count > 0 {
+            decrement_atomic_usize_by(&metrics.pending_current, retry_record_count);
+            decrement_lifecycle_pending_by(metrics, lane, retry_record_count);
+            metrics
+                .permanent_dropped_total
+                .fetch_add(deferred_source_count, Ordering::AcqRel);
+            permanent_dropped = permanent_dropped.saturating_add(deferred_source_count);
+            retry_failed = 0;
+            retry_normal.clear();
+            retry_pending.clear();
+            retry_streaming.clear();
+            retry_terminal.clear();
+        }
+    }
+
+    let failed = retry_failed.saturating_add(permanent_dropped);
     if failed > 0 {
         metrics
             .flush_failed_total
             .fetch_add(failed, Ordering::AcqRel);
-        tokio::time::sleep(Duration::from_millis(FAILED_FLUSH_RETRY_DELAY_MS)).await;
+    }
+    if retry_failed > 0 {
         batch.extend(retry_normal);
         batch.extend(retry_pending);
         batch.extend(retry_streaming);
         batch.extend(retry_terminal);
+        let delay = request_candidate_retry_delay(metrics, worker_index, lane);
+        warn!(
+            event_name = "request_candidate_async_flush_retry_scheduled",
+            log_type = "event",
+            worker_index,
+            lane = ?lane,
+            retry_failed,
+            retry_delay_ms = delay.as_millis() as u64,
+            "gateway scheduled request candidate persistence retry with backoff"
+        );
+    } else {
+        reset_request_candidate_retry_delay(metrics, worker_index, lane);
     }
     let released = source_count.saturating_sub(batch.len());
     if released > 0 {
@@ -1530,6 +1798,8 @@ async fn flush_batch(
         worker_index,
         lane = ?lane,
         failed,
+        retry_failed,
+        permanent_dropped,
         "gateway completed request candidate async flush batch"
     );
 }
@@ -1542,20 +1812,27 @@ async fn flush_ordered_stage(
     db_write_gate: Option<&Arc<RequestCandidateDbWriteGate>>,
     worker_index: usize,
     lane: RequestCandidateQueueLane,
+    abort_batch: bool,
     records: Vec<CompactedRequestCandidateRecord>,
     blocked_slots: &HashSet<RequestCandidateSlot>,
     retry_records: &mut Vec<UpsertRequestCandidateRecord>,
 ) -> FlushCompactedRecordsResult {
+    if abort_batch {
+        return drop_compacted_records_without_write(metrics, lane, records);
+    }
+    let retry_records_start = retry_records.len();
+    let mut blocked_source_count = 0_u64;
     let mut ready_records = Vec::with_capacity(records.len());
     for record in records {
         if blocked_slots.contains(&request_candidate_slot(&record.record)) {
+            blocked_source_count = blocked_source_count.saturating_add(record.source_count as u64);
             compact_retry_record(metrics, lane, &record);
             retry_records.push(record.record);
         } else {
             ready_records.push(record);
         }
     }
-    flush_compacted_records(
+    let mut result = flush_compacted_records(
         repository,
         config,
         metrics,
@@ -1565,13 +1842,56 @@ async fn flush_ordered_stage(
         ready_records,
         retry_records,
     )
-    .await
+    .await;
+    if result.abort_batch {
+        let blocked_record_count = retry_records.len().saturating_sub(retry_records_start);
+        retry_records.truncate(retry_records_start);
+        decrement_atomic_usize_by(&metrics.pending_current, blocked_record_count);
+        decrement_lifecycle_pending_by(metrics, lane, blocked_record_count);
+        metrics
+            .permanent_dropped_total
+            .fetch_add(blocked_source_count, Ordering::AcqRel);
+        result.permanent_dropped_source_count = result
+            .permanent_dropped_source_count
+            .saturating_add(blocked_source_count);
+    } else {
+        result.deferred_source_count = result
+            .deferred_source_count
+            .saturating_add(blocked_source_count);
+    }
+    result
 }
 
 #[derive(Debug, Default)]
 struct FlushCompactedRecordsResult {
-    failed_source_count: u64,
+    retry_source_count: u64,
+    deferred_source_count: u64,
+    permanent_dropped_source_count: u64,
     failed_slots: HashSet<RequestCandidateSlot>,
+    abort_batch: bool,
+}
+
+fn drop_compacted_records_without_write(
+    metrics: &RequestCandidateQueueMetrics,
+    lane: RequestCandidateQueueLane,
+    records: Vec<CompactedRequestCandidateRecord>,
+) -> FlushCompactedRecordsResult {
+    let source_count = records
+        .iter()
+        .map(|record| record.source_count)
+        .sum::<usize>();
+    if source_count > 0 {
+        metrics
+            .permanent_dropped_total
+            .fetch_add(source_count as u64, Ordering::AcqRel);
+        decrement_atomic_usize_by(&metrics.pending_current, source_count);
+        decrement_lifecycle_pending_by(metrics, lane, source_count);
+    }
+    FlushCompactedRecordsResult {
+        permanent_dropped_source_count: source_count as u64,
+        abort_batch: true,
+        ..FlushCompactedRecordsResult::default()
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1586,66 +1906,154 @@ async fn flush_compacted_records(
     retry_records: &mut Vec<UpsertRequestCandidateRecord>,
 ) -> FlushCompactedRecordsResult {
     let mut result = FlushCompactedRecordsResult::default();
+    let total_source_count = records
+        .iter()
+        .map(|record| record.source_count)
+        .sum::<usize>();
+    let retry_records_start = retry_records.len();
+    let mut resolved_source_count = 0usize;
     for chunk in records.chunks(config.db_batch_size.max(1)) {
-        let source_count = chunk
-            .iter()
-            .map(|record| record.source_count)
-            .sum::<usize>();
-        let record_count = chunk.len();
-        let upsert_records = chunk
-            .iter()
-            .map(|record| record.record.clone())
-            .collect::<Vec<_>>();
-        debug_assert!(request_candidate_slots_are_unique(&upsert_records));
-        metrics.flush_sql_ops_total.fetch_add(1, Ordering::AcqRel);
-        metrics
-            .flush_sql_records_total
-            .fetch_add(record_count as u64, Ordering::AcqRel);
-        let _db_write_permit = match db_write_gate {
-            Some(gate) => Some(gate.acquire(metrics).await),
-            None => None,
-        };
-        let _db_write_in_flight = RequestCandidateDbWriteInFlightGuard::new(metrics);
-        if let Err(err) = repository.upsert_many(upsert_records).await {
-            result.failed_source_count = result
-                .failed_source_count
-                .saturating_add(source_count as u64);
-            result.failed_slots.extend(
-                chunk
-                    .iter()
-                    .map(|record| request_candidate_slot(&record.record)),
-            );
-            decrement_atomic_usize_by(
-                &metrics.pending_current,
-                source_count.saturating_sub(record_count),
-            );
-            decrement_lifecycle_pending_by(
-                metrics,
-                lane,
-                source_count.saturating_sub(record_count),
-            );
-            warn!(
-                event_name = "request_candidate_async_flush_failed",
-                log_type = "event",
-                worker_index,
-                lane = ?lane,
-                record_count,
-                source_count,
-                error = ?err,
-                "gateway failed to asynchronously persist request candidate DB batch"
-            );
-            retry_records.extend(chunk.iter().map(|record| record.record.clone()));
-        } else {
+        let mut attempts = vec![chunk.to_vec()];
+        while let Some(mut attempt) = attempts.pop() {
+            let source_count = attempt
+                .iter()
+                .map(|record| record.source_count)
+                .sum::<usize>();
+            let record_count = attempt.len();
+            let upsert_records = attempt
+                .iter()
+                .map(|record| record.record.clone())
+                .collect::<Vec<_>>();
+            debug_assert!(request_candidate_slots_are_unique(&upsert_records));
+            metrics.flush_sql_ops_total.fetch_add(1, Ordering::AcqRel);
             metrics
-                .flushed_total
-                .fetch_add(source_count as u64, Ordering::AcqRel);
-            decrement_atomic_usize_by(&metrics.pending_current, source_count);
-            if lane != RequestCandidateQueueLane::Normal {
-                metrics
-                    .priority_flushed_total
-                    .fetch_add(source_count as u64, Ordering::AcqRel);
+                .flush_sql_records_total
+                .fetch_add(record_count as u64, Ordering::AcqRel);
+            let _db_write_permit = match db_write_gate {
+                Some(gate) => Some(gate.acquire(metrics).await),
+                None => None,
+            };
+            let _db_write_in_flight = RequestCandidateDbWriteInFlightGuard::new(metrics);
+            match repository.upsert_many(upsert_records).await {
+                Ok(_) => {
+                    resolved_source_count = resolved_source_count.saturating_add(source_count);
+                    metrics
+                        .flushed_total
+                        .fetch_add(source_count as u64, Ordering::AcqRel);
+                    decrement_atomic_usize_by(&metrics.pending_current, source_count);
+                    if lane != RequestCandidateQueueLane::Normal {
+                        metrics
+                            .priority_flushed_total
+                            .fetch_add(source_count as u64, Ordering::AcqRel);
+                    }
+                    decrement_lifecycle_pending_by(metrics, lane, source_count);
+                }
+                Err(error) => match request_candidate_write_error_disposition(&error) {
+                    RequestCandidateWriteErrorDisposition::Retry => {
+                        resolved_source_count = resolved_source_count.saturating_add(source_count);
+                        result.retry_source_count = result
+                            .retry_source_count
+                            .saturating_add(source_count as u64);
+                        result.deferred_source_count = result
+                            .deferred_source_count
+                            .saturating_add(source_count as u64);
+                        result.failed_slots.extend(
+                            attempt
+                                .iter()
+                                .map(|record| request_candidate_slot(&record.record)),
+                        );
+                        let compacted = source_count.saturating_sub(record_count);
+                        decrement_atomic_usize_by(&metrics.pending_current, compacted);
+                        decrement_lifecycle_pending_by(metrics, lane, compacted);
+                        warn!(
+                            event_name = "request_candidate_async_flush_failed",
+                            log_type = "event",
+                            worker_index,
+                            lane = ?lane,
+                            record_count,
+                            source_count,
+                            error_kind = request_candidate_write_error_kind(&error),
+                            sqlstate = request_candidate_write_error_sqlstate(&error),
+                            "gateway failed to asynchronously persist request candidate DB batch"
+                        );
+                        retry_records.extend(attempt.into_iter().map(|record| record.record));
+                    }
+                    RequestCandidateWriteErrorDisposition::IsolateRecord if attempt.len() > 1 => {
+                        let right = attempt.split_off(attempt.len() / 2);
+                        attempts.push(right);
+                        attempts.push(attempt);
+                    }
+                    RequestCandidateWriteErrorDisposition::IsolateRecord => {
+                        let record = attempt
+                            .pop()
+                            .expect("non-empty isolated candidate persistence attempt");
+                        resolved_source_count =
+                            resolved_source_count.saturating_add(record.source_count);
+                        result.permanent_dropped_source_count = result
+                            .permanent_dropped_source_count
+                            .saturating_add(record.source_count as u64);
+                        metrics
+                            .permanent_dropped_total
+                            .fetch_add(record.source_count as u64, Ordering::AcqRel);
+                        decrement_atomic_usize_by(&metrics.pending_current, record.source_count);
+                        decrement_lifecycle_pending_by(metrics, lane, record.source_count);
+                        warn!(
+                            event_name = "request_candidate_async_permanent_write_dropped",
+                            log_type = "event",
+                            worker_index,
+                            lane = ?lane,
+                            candidate_index = record.record.candidate_index,
+                            retry_index = record.record.retry_index,
+                            status = ?record.record.status,
+                            source_count = record.source_count,
+                            error_kind = request_candidate_write_error_kind(&error),
+                            sqlstate = request_candidate_write_error_sqlstate(&error),
+                            "gateway dropped one non-retryable request candidate persistence record"
+                        );
+                    }
+                    RequestCandidateWriteErrorDisposition::DropBatch => {
+                        let unresolved_source_count =
+                            total_source_count.saturating_sub(resolved_source_count);
+                        let prior_retry_record_count =
+                            retry_records.len().saturating_sub(retry_records_start);
+                        let prior_deferred_source_count = result.deferred_source_count;
+                        retry_records.truncate(retry_records_start);
+                        decrement_atomic_usize_by(
+                            &metrics.pending_current,
+                            unresolved_source_count.saturating_add(prior_retry_record_count),
+                        );
+                        decrement_lifecycle_pending_by(
+                            metrics,
+                            lane,
+                            unresolved_source_count.saturating_add(prior_retry_record_count),
+                        );
+                        let dropped_source_count = (unresolved_source_count as u64)
+                            .saturating_add(prior_deferred_source_count);
+                        result.permanent_dropped_source_count = result
+                            .permanent_dropped_source_count
+                            .saturating_add(dropped_source_count);
+                        result.retry_source_count = 0;
+                        result.deferred_source_count = 0;
+                        result.failed_slots.clear();
+                        result.abort_batch = true;
+                        metrics
+                            .permanent_dropped_total
+                            .fetch_add(dropped_source_count, Ordering::AcqRel);
+                        warn!(
+                            event_name = "request_candidate_async_permanent_batch_dropped",
+                            log_type = "event",
+                            worker_index,
+                            lane = ?lane,
+                            record_count = records.len(),
+                            source_count = dropped_source_count,
+                            error_kind = request_candidate_write_error_kind(&error),
+                            sqlstate = request_candidate_write_error_sqlstate(&error),
+                            "gateway dropped a request candidate batch after a non-retryable global persistence error"
+                        );
+                        return result;
+                    }
+                },
             }
-            decrement_lifecycle_pending_by(metrics, lane, source_count);
         }
     }
     result
@@ -1681,7 +2089,7 @@ fn decrement_lifecycle_pending_by(
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct CompactedRequestCandidateRecord {
     record: UpsertRequestCandidateRecord,
     source_count: usize,
@@ -2088,12 +2496,13 @@ fn should_log_queue_counter(value: u64) -> bool {
 mod tests {
     use super::{
         collect_active_micro_batch, compact_records_for_flush, flush_batch,
-        parse_request_candidate_background_runtime_threads, run_worker,
+        parse_request_candidate_background_runtime_threads, request_candidate_retry_delay,
+        request_candidate_retry_is_ready, request_candidate_write_error_disposition, run_worker,
         spawn_on_request_candidate_background_runtime, RequestCandidateActiveQueueMessage,
         RequestCandidateQueueConfig, RequestCandidateQueueLane, RequestCandidateQueueMetrics,
         RequestCandidateQueueRuntime, RequestCandidateTerminalBarrier,
-        RequestCandidateTerminalQueueRecord, MAX_CONSECUTIVE_ACTIVE_FLUSHES,
-        MAX_CONSECUTIVE_PRIORITY_FLUSHES,
+        RequestCandidateTerminalQueueRecord, RequestCandidateWriteErrorDisposition,
+        MAX_CONSECUTIVE_ACTIVE_FLUSHES, MAX_CONSECUTIVE_PRIORITY_FLUSHES,
     };
     use aether_data::repository::candidates::InMemoryRequestCandidateRepository;
     use aether_data::DataLayerError;
@@ -2165,6 +2574,125 @@ mod tests {
         first_attempt: tokio::sync::Notify,
     }
 
+    #[derive(Default)]
+    struct PoisonPendingRequestCandidateRepository {
+        inner: InMemoryRequestCandidateRepository,
+        attempts: AtomicUsize,
+        poison_attempts: AtomicUsize,
+    }
+
+    #[derive(Default)]
+    struct GlobalFailureRequestCandidateRepository {
+        attempts: AtomicUsize,
+    }
+
+    #[derive(Default)]
+    struct RetryThenGlobalFailureRequestCandidateRepository {
+        attempts: AtomicUsize,
+    }
+
+    #[async_trait::async_trait]
+    impl RequestCandidateWriteRepository for PoisonPendingRequestCandidateRepository {
+        async fn upsert(
+            &self,
+            candidate: UpsertRequestCandidateRecord,
+        ) -> Result<StoredRequestCandidate, DataLayerError> {
+            self.inner.upsert(candidate).await
+        }
+
+        async fn upsert_many(
+            &self,
+            candidates: Vec<UpsertRequestCandidateRecord>,
+        ) -> Result<usize, DataLayerError> {
+            self.attempts.fetch_add(1, Ordering::AcqRel);
+            if candidates.iter().any(|candidate| {
+                candidate.request_id == "poison"
+                    && candidate.status == RequestCandidateStatus::Pending
+            }) {
+                self.poison_attempts.fetch_add(1, Ordering::AcqRel);
+                return Err(DataLayerError::Postgres(
+                    "error returned from database: unsupported Unicode escape sequence (SQLSTATE 22P05)"
+                        .to_string(),
+                ));
+            }
+            let count = candidates.len();
+            for candidate in candidates {
+                self.inner.upsert(candidate).await?;
+            }
+            Ok(count)
+        }
+
+        async fn delete_created_before(
+            &self,
+            created_before_unix_secs: u64,
+            limit: usize,
+        ) -> Result<usize, DataLayerError> {
+            self.inner
+                .delete_created_before(created_before_unix_secs, limit)
+                .await
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl RequestCandidateWriteRepository for GlobalFailureRequestCandidateRepository {
+        async fn upsert(
+            &self,
+            _candidate: UpsertRequestCandidateRecord,
+        ) -> Result<StoredRequestCandidate, DataLayerError> {
+            unreachable!("queue tests use batched candidate persistence")
+        }
+
+        async fn upsert_many(
+            &self,
+            _candidates: Vec<UpsertRequestCandidateRecord>,
+        ) -> Result<usize, DataLayerError> {
+            self.attempts.fetch_add(1, Ordering::AcqRel);
+            Err(DataLayerError::Postgres(
+                "relation does not exist (SQLSTATE 42P01)".to_string(),
+            ))
+        }
+
+        async fn delete_created_before(
+            &self,
+            _created_before_unix_secs: u64,
+            _limit: usize,
+        ) -> Result<usize, DataLayerError> {
+            Ok(0)
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl RequestCandidateWriteRepository for RetryThenGlobalFailureRequestCandidateRepository {
+        async fn upsert(
+            &self,
+            _candidate: UpsertRequestCandidateRecord,
+        ) -> Result<StoredRequestCandidate, DataLayerError> {
+            unreachable!("queue tests use batched candidate persistence")
+        }
+
+        async fn upsert_many(
+            &self,
+            _candidates: Vec<UpsertRequestCandidateRecord>,
+        ) -> Result<usize, DataLayerError> {
+            match self.attempts.fetch_add(1, Ordering::AcqRel) {
+                0 => Err(DataLayerError::TimedOut(
+                    "injected retryable database failure".to_string(),
+                )),
+                _ => Err(DataLayerError::Postgres(
+                    "relation does not exist (SQLSTATE 42P01)".to_string(),
+                )),
+            }
+        }
+
+        async fn delete_created_before(
+            &self,
+            _created_before_unix_secs: u64,
+            _limit: usize,
+        ) -> Result<usize, DataLayerError> {
+            Ok(0)
+        }
+    }
+
     impl Default for FailUntilReleasedRequestCandidateRepository {
         fn default() -> Self {
             Self {
@@ -2193,7 +2721,7 @@ mod tests {
                 self.first_attempt.notify_one();
             }
             if self.failing.load(Ordering::Acquire) {
-                return Err(DataLayerError::UnexpectedValue(
+                return Err(DataLayerError::TimedOut(
                     "injected sustained request candidate failure".to_string(),
                 ));
             }
@@ -2297,7 +2825,7 @@ mod tests {
             {
                 match self.pending_attempts.fetch_add(1, Ordering::AcqRel) {
                     0 => {
-                        return Err(DataLayerError::UnexpectedValue(
+                        return Err(DataLayerError::TimedOut(
                             "injected pending batch failure".to_string(),
                         ));
                     }
@@ -2362,7 +2890,7 @@ mod tests {
                 .expect("batch recorder lock")
                 .push(candidates.clone());
             if self.fail_next_batch.swap(false, Ordering::AcqRel) {
-                return Err(DataLayerError::UnexpectedValue(
+                return Err(DataLayerError::TimedOut(
                     "injected request candidate batch failure".to_string(),
                 ));
             }
@@ -3201,6 +3729,378 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn retry_backoff_is_lane_scoped_and_does_not_block_active_writes() {
+        let recorder = Arc::new(RecordingBatchRequestCandidateRepository::default());
+        recorder.fail_next_batch();
+        let repository: Arc<dyn RequestCandidateWriteRepository> = recorder.clone();
+        let config = RequestCandidateQueueConfig::default();
+        let metrics = RequestCandidateQueueMetrics::default();
+        metrics.pending_current.store(2, Ordering::Release);
+        metrics.priority_pending_current.store(1, Ordering::Release);
+        metrics.active_pending_current.store(1, Ordering::Release);
+        let mut normal_batch = vec![record(
+            "normal-retry",
+            0,
+            0,
+            RequestCandidateStatus::Available,
+        )];
+        let mut active_batch = vec![record(
+            "active-healthy",
+            0,
+            0,
+            RequestCandidateStatus::Pending,
+        )];
+
+        flush_batch(
+            &repository,
+            &config,
+            &metrics,
+            None,
+            0,
+            RequestCandidateQueueLane::Normal,
+            &mut normal_batch,
+            None,
+        )
+        .await;
+
+        assert_eq!(normal_batch.len(), 1);
+        let retry_states = metrics
+            .retry_states
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        assert_eq!(
+            retry_states
+                .get(&(0, RequestCandidateQueueLane::Normal))
+                .map(|state| state.attempt),
+            Some(1)
+        );
+        assert!(!retry_states.contains_key(&(0, RequestCandidateQueueLane::Active)));
+        drop(retry_states);
+        assert!(request_candidate_retry_is_ready(
+            &metrics,
+            0,
+            RequestCandidateQueueLane::Active
+        ));
+
+        flush_batch(
+            &repository,
+            &config,
+            &metrics,
+            None,
+            0,
+            RequestCandidateQueueLane::Active,
+            &mut active_batch,
+            None,
+        )
+        .await;
+
+        assert!(active_batch.is_empty());
+        assert_eq!(
+            recorder
+                .inner
+                .list_by_request_id("active-healthy")
+                .await
+                .expect("active candidate lookup should succeed")
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn retry_backoff_uses_bounded_equal_jitter() {
+        let metrics = RequestCandidateQueueMetrics::default();
+        let first = request_candidate_retry_delay(&metrics, 0, RequestCandidateQueueLane::Normal);
+        let second = request_candidate_retry_delay(&metrics, 0, RequestCandidateQueueLane::Normal);
+        assert!((Duration::from_millis(50)..=Duration::from_millis(100)).contains(&first));
+        assert!((Duration::from_millis(100)..=Duration::from_millis(200)).contains(&second));
+
+        let mut capped = second;
+        for _ in 0..16 {
+            capped = request_candidate_retry_delay(&metrics, 0, RequestCandidateQueueLane::Normal);
+        }
+        assert!((Duration::from_secs(15)..=Duration::from_secs(30)).contains(&capped));
+    }
+
+    #[tokio::test]
+    async fn retry_deadline_wakes_worker_before_a_long_flush_interval() {
+        let repository = Arc::new(RecordingBatchRequestCandidateRepository::default());
+        repository.fail_next_batch();
+        let runtime = RequestCandidateQueueRuntime::spawn(
+            repository.clone(),
+            RequestCandidateQueueConfig {
+                mode: super::RequestCandidateWriteMode::Async,
+                capacity: 4,
+                batch_size: 1,
+                db_batch_size: 1,
+                flush_interval: Duration::from_secs(5),
+                workers: 1,
+                db_write_concurrency_limit: None,
+                full_policy: super::RequestCandidateQueueFullPolicy::Drop,
+            },
+        );
+
+        runtime
+            .enqueue_or_fallback(record(
+                "deadline-wakeup",
+                0,
+                0,
+                RequestCandidateStatus::Available,
+            ))
+            .await
+            .expect("candidate should enter the normal queue");
+
+        tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                if repository
+                    .inner
+                    .list_by_request_id("deadline-wakeup")
+                    .await
+                    .expect("candidate lookup should succeed")
+                    .len()
+                    == 1
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("retry deadline should wake the worker before the five-second ticker");
+        assert_eq!(repository.batches().len(), 2);
+        assert_eq!(runtime.metrics.pending_current.load(Ordering::Acquire), 0);
+    }
+
+    #[tokio::test]
+    async fn permanent_poison_isolated_without_blocking_healthy_batch_records() {
+        let recorder = Arc::new(PoisonPendingRequestCandidateRepository::default());
+        let repository: Arc<dyn RequestCandidateWriteRepository> = recorder.clone();
+        let config = RequestCandidateQueueConfig {
+            db_batch_size: 512,
+            ..RequestCandidateQueueConfig::default()
+        };
+        let metrics = RequestCandidateQueueMetrics::default();
+        metrics.pending_current.store(12, Ordering::Release);
+        metrics
+            .priority_pending_current
+            .store(12, Ordering::Release);
+        metrics.active_pending_current.store(12, Ordering::Release);
+        let admission = Semaphore::new(0);
+        let mut batch = (0..12)
+            .map(|index| {
+                let request_id = if index == 5 {
+                    "poison".to_string()
+                } else {
+                    format!("healthy-{index}")
+                };
+                record(&request_id, 0, 0, RequestCandidateStatus::Pending)
+            })
+            .collect::<Vec<_>>();
+
+        flush_batch(
+            &repository,
+            &config,
+            &metrics,
+            None,
+            0,
+            RequestCandidateQueueLane::Active,
+            &mut batch,
+            Some(&admission),
+        )
+        .await;
+
+        assert!(batch.is_empty(), "permanent poison must not be requeued");
+        assert_eq!(admission.available_permits(), 12);
+        assert_eq!(metrics.pending_current.load(Ordering::Acquire), 0);
+        assert_eq!(metrics.priority_pending_current.load(Ordering::Acquire), 0);
+        assert_eq!(metrics.active_pending_current.load(Ordering::Acquire), 0);
+        assert_eq!(metrics.flushed_total.load(Ordering::Acquire), 11);
+        assert_eq!(metrics.flush_failed_total.load(Ordering::Acquire), 1);
+        assert_eq!(metrics.permanent_dropped_total.load(Ordering::Acquire), 1);
+        assert!(recorder.poison_attempts.load(Ordering::Acquire) <= 5);
+        assert!(recorder.attempts.load(Ordering::Acquire) <= 9);
+        assert!(recorder
+            .inner
+            .list_by_request_id("poison")
+            .await
+            .expect("poison lookup should succeed")
+            .is_empty());
+        for index in 0..12 {
+            if index == 5 {
+                continue;
+            }
+            let request_id = format!("healthy-{index}");
+            assert_eq!(
+                recorder
+                    .inner
+                    .list_by_request_id(&request_id)
+                    .await
+                    .expect("healthy candidate lookup should succeed")
+                    .len(),
+                1
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn global_database_error_short_circuits_the_entire_flush_batch() {
+        let recorder = Arc::new(GlobalFailureRequestCandidateRepository::default());
+        let repository: Arc<dyn RequestCandidateWriteRepository> = recorder.clone();
+        let config = RequestCandidateQueueConfig {
+            db_batch_size: 1,
+            ..RequestCandidateQueueConfig::default()
+        };
+        let metrics = RequestCandidateQueueMetrics::default();
+        metrics.pending_current.store(12, Ordering::Release);
+        metrics
+            .priority_pending_current
+            .store(12, Ordering::Release);
+        metrics.active_pending_current.store(12, Ordering::Release);
+        let admission = Semaphore::new(0);
+        let mut batch = (0..12)
+            .map(|index| {
+                record(
+                    &format!("global-failure-{index}"),
+                    0,
+                    0,
+                    RequestCandidateStatus::Pending,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        flush_batch(
+            &repository,
+            &config,
+            &metrics,
+            None,
+            0,
+            RequestCandidateQueueLane::Active,
+            &mut batch,
+            Some(&admission),
+        )
+        .await;
+
+        assert!(batch.is_empty());
+        assert_eq!(recorder.attempts.load(Ordering::Acquire), 1);
+        assert_eq!(admission.available_permits(), 12);
+        assert_eq!(metrics.pending_current.load(Ordering::Acquire), 0);
+        assert_eq!(metrics.priority_pending_current.load(Ordering::Acquire), 0);
+        assert_eq!(metrics.active_pending_current.load(Ordering::Acquire), 0);
+        assert_eq!(metrics.flush_failed_total.load(Ordering::Acquire), 12);
+        assert_eq!(metrics.permanent_dropped_total.load(Ordering::Acquire), 12);
+    }
+
+    #[tokio::test]
+    async fn permanent_pending_poison_does_not_block_same_slot_terminal_record() {
+        let recorder = Arc::new(PoisonPendingRequestCandidateRepository::default());
+        let repository: Arc<dyn RequestCandidateWriteRepository> = recorder.clone();
+        let config = RequestCandidateQueueConfig::default();
+        let metrics = RequestCandidateQueueMetrics::default();
+        metrics.pending_current.store(3, Ordering::Release);
+        metrics.priority_pending_current.store(3, Ordering::Release);
+        metrics.active_pending_current.store(3, Ordering::Release);
+        let mut batch = vec![
+            record("poison", 0, 0, RequestCandidateStatus::Pending),
+            record("poison", 0, 0, RequestCandidateStatus::Pending),
+            record("poison", 0, 0, RequestCandidateStatus::Success),
+        ];
+
+        flush_batch(
+            &repository,
+            &config,
+            &metrics,
+            None,
+            0,
+            RequestCandidateQueueLane::Active,
+            &mut batch,
+            None,
+        )
+        .await;
+
+        assert!(batch.is_empty());
+        assert_eq!(metrics.permanent_dropped_total.load(Ordering::Acquire), 2);
+        assert_eq!(metrics.flushed_total.load(Ordering::Acquire), 1);
+        assert_eq!(metrics.pending_current.load(Ordering::Acquire), 0);
+        assert_eq!(metrics.priority_pending_current.load(Ordering::Acquire), 0);
+        assert_eq!(metrics.active_pending_current.load(Ordering::Acquire), 0);
+        let stored = recorder
+            .inner
+            .list_by_request_id("poison")
+            .await
+            .expect("terminal candidate lookup should succeed");
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].status, RequestCandidateStatus::Success);
+    }
+
+    #[test]
+    fn candidate_write_errors_distinguish_permanent_data_from_transient_failures() {
+        assert_eq!(
+            request_candidate_write_error_disposition(&DataLayerError::Postgres(
+                "error returned from database: unsupported Unicode escape sequence".to_string()
+            )),
+            RequestCandidateWriteErrorDisposition::IsolateRecord
+        );
+        assert_eq!(
+            request_candidate_write_error_disposition(&DataLayerError::Postgres(
+                "invalid input syntax (SQLSTATE 22P05)".to_string()
+            )),
+            RequestCandidateWriteErrorDisposition::IsolateRecord
+        );
+        assert_eq!(
+            request_candidate_write_error_disposition(&DataLayerError::Postgres(
+                "serialization failure (SQLSTATE 40001)".to_string()
+            )),
+            RequestCandidateWriteErrorDisposition::Retry
+        );
+        assert_eq!(
+            request_candidate_write_error_disposition(&DataLayerError::TimedOut(
+                "postgres acquire".to_string()
+            )),
+            RequestCandidateWriteErrorDisposition::Retry
+        );
+        assert_eq!(
+            request_candidate_write_error_disposition(&DataLayerError::InvalidInput(
+                "bad candidate".to_string()
+            )),
+            RequestCandidateWriteErrorDisposition::IsolateRecord
+        );
+        assert_eq!(
+            request_candidate_write_error_disposition(&DataLayerError::InvalidConfiguration(
+                "database unavailable by configuration".to_string()
+            )),
+            RequestCandidateWriteErrorDisposition::DropBatch
+        );
+        for sqlstate in ["28P01", "42P01", "0A000"] {
+            assert_eq!(
+                request_candidate_write_error_disposition(&DataLayerError::Postgres(format!(
+                    "non-retryable database failure (SQLSTATE {sqlstate})"
+                ))),
+                RequestCandidateWriteErrorDisposition::DropBatch
+            );
+        }
+        for sqlstate in ["21000", "44000"] {
+            assert_eq!(
+                request_candidate_write_error_disposition(&DataLayerError::Postgres(format!(
+                    "record-specific database failure (SQLSTATE {sqlstate})"
+                ))),
+                RequestCandidateWriteErrorDisposition::IsolateRecord
+            );
+        }
+        for malformed in [
+            "invalid input (SQLSTATE 22P05) trailing",
+            "invalid input (SQLSTATE 22p05)",
+            "invalid input (SQLSTATE 22P0)",
+            "invalid input (SQLSTATE 22P050)",
+        ] {
+            assert_eq!(
+                request_candidate_write_error_disposition(&DataLayerError::Postgres(
+                    malformed.to_string()
+                )),
+                RequestCandidateWriteErrorDisposition::Retry
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn failed_pending_stage_blocks_and_retries_later_lifecycle_stages() {
         let recorder = Arc::new(RecordingBatchRequestCandidateRepository::default());
         recorder.fail_next_batch();
@@ -3240,6 +4140,20 @@ mod tests {
         assert_eq!(metrics.pending_current.load(Ordering::Acquire), 3);
         assert_eq!(metrics.priority_pending_current.load(Ordering::Acquire), 3);
         assert_eq!(metrics.flush_failed_total.load(Ordering::Acquire), 1);
+
+        let retry_not_before = metrics
+            .retry_states
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(&(0, RequestCandidateQueueLane::Active))
+            .expect("active retry state should be scheduled")
+            .retry_not_before;
+        tokio::time::sleep_until(retry_not_before).await;
+        assert!(request_candidate_retry_is_ready(
+            &metrics,
+            0,
+            RequestCandidateQueueLane::Active
+        ));
 
         flush_batch(
             &repository,
@@ -3364,6 +4278,45 @@ mod tests {
                 .load(Ordering::Acquire),
             0
         );
+    }
+
+    #[tokio::test]
+    async fn global_abort_counts_prior_retry_and_blocked_source_records_exactly() {
+        let recorder = Arc::new(RetryThenGlobalFailureRequestCandidateRepository::default());
+        let repository: Arc<dyn RequestCandidateWriteRepository> = recorder.clone();
+        let config = RequestCandidateQueueConfig::default();
+        let metrics = RequestCandidateQueueMetrics::default();
+        metrics.pending_current.store(4, Ordering::Release);
+        metrics.priority_pending_current.store(4, Ordering::Release);
+        metrics.active_pending_current.store(4, Ordering::Release);
+        let admission = Semaphore::new(0);
+        let mut batch = vec![
+            record("retry-then-global", 0, 0, RequestCandidateStatus::Pending),
+            record("retry-then-global", 0, 0, RequestCandidateStatus::Pending),
+            record("retry-then-global", 0, 0, RequestCandidateStatus::Streaming),
+            record("global-trigger", 0, 0, RequestCandidateStatus::Streaming),
+        ];
+
+        flush_batch(
+            &repository,
+            &config,
+            &metrics,
+            None,
+            0,
+            RequestCandidateQueueLane::Active,
+            &mut batch,
+            Some(&admission),
+        )
+        .await;
+
+        assert!(batch.is_empty());
+        assert_eq!(recorder.attempts.load(Ordering::Acquire), 2);
+        assert_eq!(admission.available_permits(), 4);
+        assert_eq!(metrics.pending_current.load(Ordering::Acquire), 0);
+        assert_eq!(metrics.priority_pending_current.load(Ordering::Acquire), 0);
+        assert_eq!(metrics.active_pending_current.load(Ordering::Acquire), 0);
+        assert_eq!(metrics.flush_failed_total.load(Ordering::Acquire), 4);
+        assert_eq!(metrics.permanent_dropped_total.load(Ordering::Acquire), 4);
     }
 
     #[tokio::test]
@@ -3815,7 +4768,13 @@ mod tests {
                 .expect("lossless lifecycle overflow should resume after DB recovery");
         });
 
-        tokio::time::sleep(Duration::from_millis(150)).await;
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while repository.attempts.load(Ordering::Acquire) < 2 {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("lifecycle retry should run after its backoff");
         assert!(!overflow_task.is_finished());
         assert_eq!(runtime.priority_admission.available_permits(), 0);
         assert_eq!(
@@ -3830,7 +4789,8 @@ mod tests {
             2,
             "sustained failures must not admit an unbounded retry resident set"
         );
-        assert!(repository.attempts.load(Ordering::Acquire) >= 2);
+        let attempts_during_outage = repository.attempts.load(Ordering::Acquire);
+        assert!(attempts_during_outage >= 2);
 
         repository.failing.store(false, Ordering::Release);
         tokio::time::timeout(Duration::from_secs(2), overflow_task)
@@ -3908,12 +4868,19 @@ mod tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(Duration::from_millis(150)).await;
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while repository.attempts.load(Ordering::Acquire) < 2 {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("normal retry should run after its backoff");
         assert_eq!(runtime.normal_admission.available_permits(), 0);
         assert_eq!(runtime.metrics.pending_current.load(Ordering::Acquire), 2);
         assert_eq!(runtime.metrics.enqueued_total.load(Ordering::Acquire), 2);
         assert_eq!(runtime.metrics.dropped_total.load(Ordering::Acquire), 1);
-        assert!(repository.attempts.load(Ordering::Acquire) >= 2);
+        let attempts_during_outage = repository.attempts.load(Ordering::Acquire);
+        assert!(attempts_during_outage >= 2);
 
         repository.failing.store(false, Ordering::Release);
         tokio::time::timeout(Duration::from_secs(2), async {

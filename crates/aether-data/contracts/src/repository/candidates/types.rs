@@ -532,6 +532,21 @@ impl UpsertRequestCandidateRecord {
                 "request candidate upsert request_id cannot be empty".to_string(),
             ));
         }
+        for (field, value) in [
+            ("id", Some(self.id.as_str())),
+            ("request_id", Some(self.request_id.as_str())),
+            ("user_id", self.user_id.as_deref()),
+            ("api_key_id", self.api_key_id.as_deref()),
+            ("provider_id", self.provider_id.as_deref()),
+            ("endpoint_id", self.endpoint_id.as_deref()),
+            ("key_id", self.key_id.as_deref()),
+        ] {
+            if value.is_some_and(|value| value.contains('\0')) {
+                return Err(crate::DataLayerError::InvalidInput(format!(
+                    "request candidate upsert {field} cannot contain NUL"
+                )));
+            }
+        }
         Ok(())
     }
 }
@@ -607,6 +622,7 @@ mod tests {
     use super::{
         derive_request_candidate_final_status, request_candidate_lifecycle_would_regress,
         RequestCandidateFinalStatus, RequestCandidateStatus, StoredRequestCandidate,
+        UpsertRequestCandidateRecord,
     };
 
     fn candidate(
@@ -708,5 +724,41 @@ mod tests {
                 incoming,
             ));
         }
+    }
+
+    #[test]
+    fn candidate_upsert_rejects_nul_in_persistence_identity_fields() {
+        let mut record = UpsertRequestCandidateRecord {
+            id: "candidate-1".to_string(),
+            request_id: "request-1".to_string(),
+            user_id: None,
+            api_key_id: None,
+            username: None,
+            api_key_name: None,
+            candidate_index: 0,
+            retry_index: 0,
+            provider_id: None,
+            endpoint_id: None,
+            key_id: None,
+            status: RequestCandidateStatus::Pending,
+            skip_reason: None,
+            is_cached: None,
+            status_code: None,
+            error_type: None,
+            error_message: None,
+            latency_ms: None,
+            concurrent_requests: None,
+            extra_data: None,
+            required_capabilities: None,
+            created_at_unix_ms: None,
+            started_at_unix_ms: None,
+            finished_at_unix_ms: None,
+        };
+
+        record.request_id = "request\0poison".to_string();
+        assert!(record.validate().is_err());
+        record.request_id = "request-1".to_string();
+        record.key_id = Some("key\0poison".to_string());
+        assert!(record.validate().is_err());
     }
 }
