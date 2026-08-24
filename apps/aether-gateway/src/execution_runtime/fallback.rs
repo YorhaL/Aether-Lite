@@ -17,6 +17,12 @@ fn openai_image_success_disables_local_success_failover(
             .eq_ignore_ascii_case("openai:image")
 }
 
+fn response_body_has_explicit_error(body_json: Option<&Value>) -> bool {
+    body_json
+        .and_then(|body| body.get("error"))
+        .is_some_and(|error| !error.is_null())
+}
+
 pub(crate) async fn should_retry_next_local_candidate_sync(
     state: &AppState,
     plan: &ExecutionPlan,
@@ -133,7 +139,7 @@ pub(crate) fn should_fallback_to_control_sync(
         return true;
     };
 
-    body_json.get("error").is_some()
+    response_body_has_explicit_error(Some(body_json))
 }
 
 pub(crate) fn should_finalize_sync_response(report_kind: Option<&str>) -> bool {
@@ -145,7 +151,7 @@ pub(crate) fn resolve_core_sync_error_finalize_report_kind(
     result: &ExecutionResult,
     body_json: Option<&serde_json::Value>,
 ) -> Option<String> {
-    let has_embedded_error = body_json.is_some_and(|value| value.get("error").is_some());
+    let has_embedded_error = response_body_has_explicit_error(body_json);
     if result.status_code < 400 && !has_embedded_error {
         return None;
     }
@@ -328,4 +334,103 @@ pub(crate) fn resolve_core_stream_direct_finalize_report_kind(plan_kind: &str) -
     };
 
     Some(report_kind.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use aether_contracts::ExecutionResult;
+    use serde_json::json;
+
+    use super::{resolve_core_sync_error_finalize_report_kind, should_fallback_to_control_sync};
+
+    fn execution_result(status_code: u16) -> ExecutionResult {
+        ExecutionResult {
+            request_id: "req-1".to_string(),
+            candidate_id: Some("candidate-1".to_string()),
+            status_code,
+            headers: Default::default(),
+            response_observation: None,
+            body: None,
+            telemetry: None,
+            error: None,
+        }
+    }
+
+    #[test]
+    fn sync_responses_completed_with_null_error_does_not_fallback() {
+        let result = execution_result(200);
+        let body = json!({
+            "object": "response",
+            "status": "completed",
+            "error": null,
+            "output": []
+        });
+
+        assert!(!should_fallback_to_control_sync(
+            "openai_responses_sync",
+            &result,
+            Some(&body),
+            false,
+            false,
+            false,
+        ));
+        assert_eq!(
+            resolve_core_sync_error_finalize_report_kind(
+                "openai_responses_sync",
+                &result,
+                Some(&body),
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn sync_responses_with_non_null_error_still_falls_back() {
+        let result = execution_result(200);
+        let body = json!({
+            "object": "response",
+            "status": "failed",
+            "error": {
+                "code": "server_error",
+                "message": "upstream failed"
+            }
+        });
+
+        assert!(should_fallback_to_control_sync(
+            "openai_responses_sync",
+            &result,
+            Some(&body),
+            false,
+            false,
+            false,
+        ));
+        assert_eq!(
+            resolve_core_sync_error_finalize_report_kind(
+                "openai_responses_sync",
+                &result,
+                Some(&body),
+            )
+            .as_deref(),
+            Some("openai_responses_sync_finalize")
+        );
+    }
+
+    #[test]
+    fn sync_responses_non_success_http_status_still_falls_back() {
+        let result = execution_result(502);
+        let body = json!({
+            "object": "response",
+            "status": "failed",
+            "error": null
+        });
+
+        assert!(should_fallback_to_control_sync(
+            "openai_responses_sync",
+            &result,
+            Some(&body),
+            false,
+            false,
+            false,
+        ));
+    }
 }
