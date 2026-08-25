@@ -87,6 +87,16 @@ impl<'a> AdminAppState<'a> {
         self.app.aggregate_usage_audits(query).await
     }
 
+    pub(crate) async fn summarize_usage_breakdown(
+        &self,
+        query: &aether_data_contracts::repository::usage::UsageBreakdownSummaryQuery,
+    ) -> Result<
+        Vec<aether_data_contracts::repository::usage::StoredUsageBreakdownSummaryRow>,
+        GatewayError,
+    > {
+        self.app.summarize_usage_breakdown(query).await
+    }
+
     pub(crate) async fn summarize_usage_audits(
         &self,
         query: &aether_data_contracts::repository::usage::UsageAuditSummaryQuery,

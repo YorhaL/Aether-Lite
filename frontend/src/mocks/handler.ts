@@ -1721,7 +1721,9 @@ const mockHandlers: Record<string, (config: AxiosRequestConfig) => Promise<Axios
     requireAdmin()
     const params = config.params || {}
     const groupBy = params.group_by || 'model'
-    const records = getUsageRecords()
+    const records = getUsageRecords().filter(record => (
+      !params.user_id || record.user_id === params.user_id
+    ))
 
     if (groupBy === 'model') {
       // 按模型聚合

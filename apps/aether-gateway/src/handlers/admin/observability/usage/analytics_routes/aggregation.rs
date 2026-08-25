@@ -10,7 +10,8 @@ use aether_admin::observability::usage::{
     ADMIN_USAGE_DATA_UNAVAILABLE_DETAIL,
 };
 use aether_data_contracts::repository::usage::{
-    StoredUsageAuditAggregation, UsageAuditAggregationGroupBy, UsageAuditAggregationQuery,
+    StoredUsageAuditAggregation, StoredUsageBreakdownSummaryRow, UsageAuditAggregationGroupBy,
+    UsageAuditAggregationQuery, UsageBreakdownGroupBy, UsageBreakdownSummaryQuery,
 };
 use axum::{
     body::Body,
@@ -132,6 +133,48 @@ fn admin_usage_aggregation_by_api_format_json(
         .collect::<Vec<_>>())
 }
 
+fn usage_breakdown_aggregation_rows(
+    rows: Vec<StoredUsageBreakdownSummaryRow>,
+    group_by: UsageBreakdownGroupBy,
+    limit: usize,
+) -> Vec<StoredUsageAuditAggregation> {
+    rows.into_iter()
+        .filter(|row| {
+            !matches!(
+                row.group_key.trim().to_ascii_lowercase().as_str(),
+                "" | "unknown" | "unknow" | "pending"
+            )
+        })
+        .take(limit)
+        .map(|row| {
+            let avg_response_time_ms = (row.overall_response_time_samples > 0).then(|| {
+                row.overall_response_time_sum_ms / row.overall_response_time_samples as f64
+            });
+            let provider_name =
+                matches!(group_by, UsageBreakdownGroupBy::Provider).then(|| row.group_key.clone());
+            StoredUsageAuditAggregation {
+                group_key: row.group_key,
+                display_name: provider_name,
+                secondary_name: matches!(group_by, UsageBreakdownGroupBy::Provider)
+                    .then(|| "legacy_name".to_string()),
+                request_count: row.request_count,
+                total_tokens: row.total_tokens,
+                output_tokens: row.output_tokens,
+                effective_input_tokens: row.effective_input_tokens,
+                total_input_context: row.total_input_context,
+                cache_creation_tokens: row.cache_creation_tokens,
+                cache_creation_ephemeral_5m_tokens: row.cache_creation_ephemeral_5m_tokens,
+                cache_creation_ephemeral_1h_tokens: row.cache_creation_ephemeral_1h_tokens,
+                cache_read_tokens: row.cache_read_tokens,
+                total_cost_usd: row.total_cost_usd,
+                actual_total_cost_usd: row.actual_total_cost_usd,
+                avg_response_time_ms,
+                success_count: Some(row.success_count),
+            }
+        })
+        .collect()
+}
+
 pub(super) async fn build_admin_usage_aggregation_stats_response(
     state: &AdminAppState<'_>,
     request_context: &AdminRequestContext<'_>,
@@ -167,6 +210,9 @@ pub(super) async fn build_admin_usage_aggregation_stats_response(
     else {
         return Ok(Json(json!([])).into_response());
     };
+    let user_id = query_param_value(query, "user_id")
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
     let group_by_query = match group_by.as_str() {
         "model" => UsageAuditAggregationGroupBy::Model,
         "user" => UsageAuditAggregationGroupBy::User,
@@ -180,15 +226,49 @@ pub(super) async fn build_admin_usage_aggregation_stats_response(
             | UsageAuditAggregationGroupBy::Provider
             | UsageAuditAggregationGroupBy::ApiFormat
     );
-    let usage = state
-        .aggregate_usage_audits(&UsageAuditAggregationQuery {
-            created_from_unix_secs,
-            created_until_unix_secs,
-            group_by: group_by_query,
-            limit,
-            exclude_reserved_provider_labels,
-        })
-        .await?;
+    let usage = if let Some(user_id) = user_id {
+        let breakdown_group_by = match group_by.as_str() {
+            "model" => Some(UsageBreakdownGroupBy::Model),
+            "provider" => Some(UsageBreakdownGroupBy::Provider),
+            "api_format" => Some(UsageBreakdownGroupBy::ApiFormat),
+            _ => None,
+        };
+        if let Some(breakdown_group_by) = breakdown_group_by {
+            let rows = state
+                .summarize_usage_breakdown(&UsageBreakdownSummaryQuery {
+                    created_from_unix_secs,
+                    created_until_unix_secs,
+                    user_id: Some(user_id),
+                    provider_name: None,
+                    model: None,
+                    api_format: None,
+                    exclude_status_codes: Vec::new(),
+                    group_by: breakdown_group_by,
+                })
+                .await?;
+            usage_breakdown_aggregation_rows(rows, breakdown_group_by, limit)
+        } else {
+            state
+                .aggregate_usage_audits(&UsageAuditAggregationQuery {
+                    created_from_unix_secs,
+                    created_until_unix_secs,
+                    group_by: group_by_query,
+                    limit,
+                    exclude_reserved_provider_labels,
+                })
+                .await?
+        }
+    } else {
+        state
+            .aggregate_usage_audits(&UsageAuditAggregationQuery {
+                created_from_unix_secs,
+                created_until_unix_secs,
+                group_by: group_by_query,
+                limit,
+                exclude_reserved_provider_labels,
+            })
+            .await?
+    };
 
     let response = match group_by.as_str() {
         "model" => admin_usage_aggregation_by_model_json(&usage),
@@ -198,4 +278,51 @@ pub(super) async fn build_admin_usage_aggregation_stats_response(
         _ => unreachable!(),
     };
     Ok(Json(response).into_response())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_breakdown(group_key: &str, request_count: u64) -> StoredUsageBreakdownSummaryRow {
+        StoredUsageBreakdownSummaryRow {
+            group_key: group_key.to_string(),
+            request_count,
+            input_tokens: 20,
+            total_tokens: 50,
+            output_tokens: 30,
+            effective_input_tokens: 20,
+            total_input_context: 25,
+            cache_creation_tokens: 3,
+            cache_creation_ephemeral_5m_tokens: 2,
+            cache_creation_ephemeral_1h_tokens: 1,
+            cache_read_tokens: 5,
+            total_cost_usd: 1.25,
+            actual_total_cost_usd: 0.75,
+            success_count: request_count.saturating_sub(1),
+            response_time_sum_ms: 80.0,
+            response_time_samples: 1,
+            overall_response_time_sum_ms: 120.0,
+            overall_response_time_samples: 2,
+        }
+    }
+
+    #[test]
+    fn user_breakdown_rows_preserve_usage_and_filter_reserved_groups() {
+        let rows = usage_breakdown_aggregation_rows(
+            vec![
+                sample_breakdown("OpenAI", 4),
+                sample_breakdown("unknown", 3),
+            ],
+            UsageBreakdownGroupBy::Provider,
+            10,
+        );
+
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].group_key, "OpenAI");
+        assert_eq!(rows[0].display_name.as_deref(), Some("OpenAI"));
+        assert_eq!(rows[0].request_count, 4);
+        assert_eq!(rows[0].total_tokens, 50);
+        assert_eq!(rows[0].avg_response_time_ms, Some(60.0));
+    }
 }

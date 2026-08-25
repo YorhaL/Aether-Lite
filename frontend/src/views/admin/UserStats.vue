@@ -59,7 +59,19 @@
         :metric="metric"
         :loading="leaderboardLoading"
         @update:metric="metric = $event"
-      />
+      >
+        <template #pagination>
+          <Pagination
+            v-if="leaderboardTotal > 0"
+            :current="leaderboardPage"
+            :total="leaderboardTotal"
+            :page-size="leaderboardPageSize"
+            :page-size-options="leaderboardPageSizeOptions"
+            @update:current="leaderboardPage = $event"
+            @update:page-size="leaderboardPageSize = $event"
+          />
+        </template>
+      </LeaderboardTable>
 
       <Card class="p-4 space-y-3">
         <h3 class="text-sm font-semibold">
@@ -73,39 +85,143 @@
         </div>
         <div
           v-else
-          class="grid grid-cols-2 gap-3 text-sm"
+          class="space-y-4"
         >
-          <div>
-            <div class="text-xs text-muted-foreground">
-              请求数
+          <div class="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <div class="text-xs text-muted-foreground">
+                请求数
+              </div>
+              <div class="font-semibold">
+                {{ userSummary?.total_requests ?? 0 }}
+              </div>
             </div>
-            <div class="font-semibold">
-              {{ userSummary?.total_requests ?? 0 }}
+            <div>
+              <div class="text-xs text-muted-foreground">
+                Tokens
+              </div>
+              <div class="font-semibold">
+                {{ formatTokens(userSummary?.total_tokens ?? 0) }}
+              </div>
+            </div>
+            <div>
+              <div class="text-xs text-muted-foreground">
+                成本
+              </div>
+              <div class="font-semibold">
+                {{ formatCurrency(userSummary?.total_cost ?? 0) }}
+              </div>
+            </div>
+            <div>
+              <div class="text-xs text-muted-foreground">
+                错误率
+              </div>
+              <div class="font-semibold">
+                {{ userSummary?.error_rate ?? 0 }}%
+              </div>
             </div>
           </div>
-          <div>
-            <div class="text-xs text-muted-foreground">
-              Tokens
-            </div>
-            <div class="font-semibold">
-              {{ formatTokens(userSummary?.total_tokens ?? 0) }}
-            </div>
-          </div>
-          <div>
-            <div class="text-xs text-muted-foreground">
-              成本
-            </div>
-            <div class="font-semibold">
-              {{ formatCurrency(userSummary?.total_cost ?? 0) }}
-            </div>
-          </div>
-          <div>
-            <div class="text-xs text-muted-foreground">
-              错误率
-            </div>
-            <div class="font-semibold">
-              {{ userSummary?.error_rate ?? 0 }}%
-            </div>
+
+          <div class="grid gap-4 border-t border-border/60 pt-4 xl:grid-cols-2">
+            <section class="min-w-0 space-y-2">
+              <div class="flex items-center justify-between gap-2">
+                <h4 class="text-xs font-medium">
+                  Model 用量
+                </h4>
+                <span class="text-[11px] text-muted-foreground">
+                  {{ modelUsage.length }} 种
+                </span>
+              </div>
+              <div
+                v-if="modelUsage.length === 0"
+                class="rounded-md border border-dashed px-3 py-4 text-center text-xs text-muted-foreground"
+              >
+                当前范围内暂无 Model 用量
+              </div>
+              <div
+                v-else
+                class="max-h-64 space-y-2 overflow-y-auto pr-1"
+              >
+                <div
+                  v-for="item in modelUsage"
+                  :key="item.model"
+                  class="rounded-md border border-border/60 p-2.5"
+                >
+                  <div class="flex items-start justify-between gap-2 text-xs">
+                    <span
+                      class="min-w-0 truncate font-medium"
+                      :title="item.model"
+                    >
+                      {{ item.model }}
+                    </span>
+                    <span class="shrink-0 text-muted-foreground">
+                      {{ usageShare(item.total_tokens) }}
+                    </span>
+                  </div>
+                  <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div
+                      class="h-full rounded-full bg-primary/75"
+                      :style="{ width: usageShare(item.total_tokens) }"
+                    />
+                  </div>
+                  <div class="mt-2 flex flex-wrap justify-between gap-x-2 text-[11px] text-muted-foreground">
+                    <span>{{ item.request_count }} 次</span>
+                    <span>{{ formatTokens(item.total_tokens) }}</span>
+                    <span>{{ formatCurrency(item.total_cost) }}</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="min-w-0 space-y-2">
+              <div class="flex items-center justify-between gap-2">
+                <h4 class="text-xs font-medium">
+                  Provider 用量
+                </h4>
+                <span class="text-[11px] text-muted-foreground">
+                  {{ providerUsage.length }} 个
+                </span>
+              </div>
+              <div
+                v-if="providerUsage.length === 0"
+                class="rounded-md border border-dashed px-3 py-4 text-center text-xs text-muted-foreground"
+              >
+                当前范围内暂无 Provider 用量
+              </div>
+              <div
+                v-else
+                class="max-h-64 space-y-2 overflow-y-auto pr-1"
+              >
+                <div
+                  v-for="item in providerUsage"
+                  :key="item.provider_key || item.provider_id || item.provider"
+                  class="rounded-md border border-border/60 p-2.5"
+                >
+                  <div class="flex items-start justify-between gap-2 text-xs">
+                    <span
+                      class="min-w-0 truncate font-medium"
+                      :title="item.provider"
+                    >
+                      {{ item.provider }}
+                    </span>
+                    <span class="shrink-0 text-muted-foreground">
+                      {{ usageShare(item.total_tokens) }}
+                    </span>
+                  </div>
+                  <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div
+                      class="h-full rounded-full bg-emerald-500/75"
+                      :style="{ width: usageShare(item.total_tokens) }"
+                    />
+                  </div>
+                  <div class="mt-2 flex flex-wrap justify-between gap-x-2 text-[11px] text-muted-foreground">
+                    <span>{{ item.request_count }} 次</span>
+                    <span>{{ formatTokens(item.total_tokens) }}</span>
+                    <span>{{ formatCurrency(item.total_cost) }}</span>
+                  </div>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
       </Card>
@@ -145,13 +261,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { Card, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui'
+import { Card, Pagination, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui'
 import LineChart from '@/components/charts/LineChart.vue'
 import { LoadingState, TimeRangePicker } from '@/components/common'
 import { LeaderboardTable } from '@/components/stats'
 import { adminApi, type LeaderboardItem } from '@/api/admin'
 import { usersApi, type User } from '@/api/users'
-import { usageApi } from '@/api/usage'
+import { usageApi, type UsageByModel, type UsageByProvider } from '@/api/usage'
 import { formatCurrency, formatTokens } from '@/utils/format'
 import { getDateRangeFromPeriod } from '@/features/usage/composables'
 import type { DateRangeParams } from '@/features/usage/types'
@@ -164,6 +280,10 @@ const selectedUserId = ref<string | null>(null)
 const compareUserId = ref<string>('__none__')
 
 const leaderboard = ref<LeaderboardItem[]>([])
+const leaderboardPage = ref(1)
+const leaderboardPageSize = ref(10)
+const leaderboardTotal = ref(0)
+const leaderboardPageSizeOptions = [10, 20, 50, 100]
 const leaderboardLoading = ref(false)
 
 interface UsageSummary {
@@ -179,6 +299,8 @@ interface TimeSeriesItem {
 }
 
 const userSummary = ref<UsageSummary | null>(null)
+const modelUsage = ref<UsageByModel[]>([])
+const providerUsage = ref<UsageByProvider[]>([])
 const summaryLoading = ref(false)
 
 const series = ref<TimeSeriesItem[]>([])
@@ -224,10 +346,16 @@ async function loadLeaderboard() {
     const response = await adminApi.getLeaderboardUsers({
       ...buildTimeRangeParams(),
       metric: metric.value,
-      limit: 10
+      limit: leaderboardPageSize.value,
+      offset: (leaderboardPage.value - 1) * leaderboardPageSize.value,
+      include_inactive: true
     })
     if (requestId !== leaderboardRequestId) return
     leaderboard.value = response.items
+    leaderboardTotal.value = response.total
+    if (response.items.length === 0 && response.total > 0 && leaderboardPage.value > 1) {
+      leaderboardPage.value = 1
+    }
   } finally {
     if (requestId === leaderboardRequestId) {
       leaderboardLoading.value = false
@@ -248,17 +376,32 @@ async function loadSummary() {
   const requestId = ++summaryRequestId
   summaryLoading.value = true
   try {
-    const summary = await usageApi.getUsageStats({
+    const filters = {
       ...buildTimeRangeParams(),
       user_id: selectedUserId.value
-    })
+    }
+    const [summary, models, providers] = await Promise.all([
+      usageApi.getUsageStats(filters),
+      usageApi.getUsageByModel({ ...filters, limit: 100 }),
+      usageApi.getUsageByProvider({ ...filters, limit: 100 })
+    ])
     if (requestId !== summaryRequestId) return
     userSummary.value = summary
+    modelUsage.value = [...models].sort((left, right) => right.total_tokens - left.total_tokens)
+    providerUsage.value = [...providers].sort((left, right) => right.total_tokens - left.total_tokens)
   } finally {
     if (requestId === summaryRequestId) {
       summaryLoading.value = false
     }
   }
+}
+
+function usageShare(tokens: number): string {
+  const total = userSummary.value?.total_tokens ?? 0
+  if (total <= 0 || tokens <= 0) {
+    return '0%'
+  }
+  return `${Math.min(100, Math.max(0, tokens / total * 100)).toFixed(1)}%`
 }
 
 async function loadSeries() {
@@ -363,7 +506,18 @@ function scheduleUserPanelsLoad() {
   }, 120)
 }
 
-watch([timeRange, metric], scheduleLeaderboardLoad, { deep: true })
+function resetLeaderboardPage() {
+  if (leaderboardPage.value === 1) {
+    return
+  }
+  leaderboardPage.value = 1
+}
+
+watch([timeRange, metric], () => {
+  resetLeaderboardPage()
+  scheduleLeaderboardLoad()
+}, { deep: true })
+watch([leaderboardPage, leaderboardPageSize], scheduleLeaderboardLoad)
 watch([timeRange, selectedUserId, compareUserId], scheduleUserPanelsLoad, { deep: true })
 
 onMounted(async () => {
