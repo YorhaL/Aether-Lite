@@ -1,5 +1,6 @@
 mod body_buffer;
 mod local;
+mod websocket;
 
 use self::body_buffer::{
     buffer_and_normalize_request_body, build_request_body_buffer_error_response,

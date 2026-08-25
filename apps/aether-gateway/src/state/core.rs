@@ -283,6 +283,7 @@ impl AppState {
                 frontdoor_runtime_guards.request_body_buffer_budget_permits,
             )),
             request_gate: None,
+            websocket_connection_gate: None,
             auth_snapshot_load_gate: frontdoor_runtime_guards
                 .auth_snapshot_load_gate_limit
                 .map(|limit| Arc::new(ConcurrencyGate::new("gateway_auth_snapshot_load", limit))),
@@ -299,6 +300,7 @@ impl AppState {
                 ),
             ),
             distributed_request_gate: None,
+            distributed_websocket_connection_gate: None,
             client,
             owner_forward_client,
             auth_context_cache: Arc::new(AuthContextCache::default()),
@@ -486,8 +488,20 @@ impl AppState {
     }
 
     pub fn with_request_concurrency_limit(mut self, limit: usize) -> Self {
-        self.request_gate = Some(Arc::new(ConcurrencyGate::new(
-            "gateway_requests",
+        let limit = limit.max(1);
+        self.request_gate = Some(Arc::new(ConcurrencyGate::new("gateway_requests", limit)));
+        if self.websocket_connection_gate.is_none() {
+            self.websocket_connection_gate = Some(Arc::new(ConcurrencyGate::new(
+                "gateway_websocket_connections",
+                limit,
+            )));
+        }
+        self
+    }
+
+    pub fn with_websocket_connection_limit(mut self, limit: usize) -> Self {
+        self.websocket_connection_gate = Some(Arc::new(ConcurrencyGate::new(
+            "gateway_websocket_connections",
             limit.max(1),
         )));
         self
@@ -551,6 +565,11 @@ impl AppState {
 
     pub fn with_distributed_request_concurrency_gate(mut self, gate: RuntimeSemaphore) -> Self {
         self.distributed_request_gate = Some(Arc::new(gate));
+        self
+    }
+
+    pub fn with_distributed_websocket_connection_gate(mut self, gate: RuntimeSemaphore) -> Self {
+        self.distributed_websocket_connection_gate = Some(Arc::new(gate));
         self
     }
 
@@ -944,6 +963,12 @@ impl AppState {
         self.request_gate.as_ref().map(|gate| gate.snapshot())
     }
 
+    pub(crate) fn websocket_connection_concurrency_snapshot(&self) -> Option<ConcurrencySnapshot> {
+        self.websocket_connection_gate
+            .as_ref()
+            .map(|gate| gate.snapshot())
+    }
+
     pub(crate) fn auth_snapshot_load_concurrency_snapshot(&self) -> Option<ConcurrencySnapshot> {
         self.auth_snapshot_load_gate
             .as_ref()
@@ -966,6 +991,15 @@ impl AppState {
         &self,
     ) -> Result<Option<RuntimeSemaphoreSnapshot>, RuntimeSemaphoreError> {
         match self.distributed_request_gate.as_ref() {
+            Some(gate) => gate.snapshot().await.map(Some),
+            None => Ok(None),
+        }
+    }
+
+    pub(crate) async fn distributed_websocket_connection_concurrency_snapshot(
+        &self,
+    ) -> Result<Option<RuntimeSemaphoreSnapshot>, RuntimeSemaphoreError> {
+        match self.distributed_websocket_connection_gate.as_ref() {
             Some(gate) => gate.snapshot().await.map(Some),
             None => Ok(None),
         }
@@ -1277,6 +1311,9 @@ impl AppState {
         if let Some(snapshot) = self.request_concurrency_snapshot() {
             samples.extend(snapshot.to_metric_samples("gateway_requests"));
         }
+        if let Some(snapshot) = self.websocket_connection_concurrency_snapshot() {
+            samples.extend(snapshot.to_metric_samples("gateway_websocket_connections"));
+        }
         if let Some(snapshot) = self.auth_snapshot_load_concurrency_snapshot() {
             samples.extend(snapshot.to_metric_samples("gateway_auth_snapshot_load"));
         }
@@ -1323,6 +1360,28 @@ impl AppState {
                 .with_labels(vec![MetricLabel::new(
                     "gate",
                     "gateway_requests_distributed",
+                )])],
+            }
+        };
+        let distributed_websocket_connection_metrics = async {
+            let Some(gate) = self.distributed_websocket_connection_gate.as_ref() else {
+                return Vec::new();
+            };
+            match tokio::time::timeout(DISTRIBUTED_CONCURRENCY_METRICS_TIMEOUT, gate.snapshot())
+                .await
+            {
+                Ok(Ok(snapshot)) => {
+                    snapshot.to_metric_samples("gateway_websocket_connections_distributed")
+                }
+                Ok(Err(_)) | Err(_) => vec![MetricSample::new(
+                    "concurrency_unavailable",
+                    "Whether the distributed concurrency gate is currently unavailable.",
+                    MetricKind::Gauge,
+                    1,
+                )
+                .with_labels(vec![MetricLabel::new(
+                    "gate",
+                    "gateway_websocket_connections_distributed",
                 )])],
             }
         };
@@ -1375,6 +1434,7 @@ impl AppState {
             );
         let (
             distributed_request_metrics,
+            distributed_websocket_connection_metrics,
             postgres_observability_metrics,
             postgres_activity_group_metrics,
             redis_runtime_metrics,
@@ -1382,6 +1442,7 @@ impl AppState {
             usage_counter_pending_health_metrics,
         ) = tokio::join!(
             distributed_request_metrics,
+            distributed_websocket_connection_metrics,
             postgres_observability_metrics,
             postgres_activity_group_metrics,
             redis_runtime_metrics,
@@ -1389,6 +1450,7 @@ impl AppState {
             usage_counter_pending_health_metrics,
         );
         samples.extend(distributed_request_metrics);
+        samples.extend(distributed_websocket_connection_metrics);
         samples.extend(postgres_observability_metrics);
         samples.extend(postgres_activity_group_metrics);
         samples.extend(redis_runtime_metrics);
@@ -1498,6 +1560,26 @@ impl AppState {
             .transpose()
             .map_err(RequestAdmissionError::Local)?;
         let distributed = match self.distributed_request_gate.as_ref() {
+            Some(gate) => Some(
+                gate.try_acquire()
+                    .await
+                    .map_err(RequestAdmissionError::Distributed)?,
+            ),
+            None => None,
+        };
+        Ok(AdmissionPermit::from_parts(local, distributed))
+    }
+
+    pub(crate) async fn try_acquire_websocket_connection_permit(
+        &self,
+    ) -> Result<Option<AdmissionPermit>, RequestAdmissionError> {
+        let local = self
+            .websocket_connection_gate
+            .as_ref()
+            .map(|gate| gate.try_acquire())
+            .transpose()
+            .map_err(RequestAdmissionError::Local)?;
+        let distributed = match self.distributed_websocket_connection_gate.as_ref() {
             Some(gate) => Some(
                 gate.try_acquire()
                     .await
@@ -3394,4 +3476,98 @@ fn runtime_miss_diagnostic_has_candidate_signal(
     diagnostic.candidate_count.unwrap_or(0) > 0
         || diagnostic.skipped_candidate_count.unwrap_or(0) > 0
         || !diagnostic.skip_reasons.is_empty()
+}
+
+#[cfg(test)]
+mod websocket_admission_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn websocket_connections_use_independent_admission() {
+        let state = AppState::new()
+            .expect("gateway state should build")
+            .with_request_concurrency_limit(1)
+            .with_websocket_connection_limit(1);
+
+        let request_permit = state
+            .try_acquire_request_permit()
+            .await
+            .expect("request admission should succeed")
+            .expect("request gate should return a permit");
+        let websocket_permit = state
+            .try_acquire_websocket_connection_permit()
+            .await
+            .expect("WebSocket admission should be independent")
+            .expect("WebSocket gate should return a permit");
+
+        assert_eq!(
+            state
+                .request_concurrency_snapshot()
+                .expect("request gate should be configured")
+                .in_flight,
+            1
+        );
+        assert_eq!(
+            state
+                .websocket_connection_concurrency_snapshot()
+                .expect("WebSocket gate should be configured")
+                .in_flight,
+            1
+        );
+        assert!(matches!(
+            state.try_acquire_websocket_connection_permit().await,
+            Err(RequestAdmissionError::Local(
+                aether_runtime::ConcurrencyError::Saturated {
+                    gate: "gateway_websocket_connections",
+                    limit: 1,
+                }
+            ))
+        ));
+
+        drop(request_permit);
+        state
+            .try_acquire_request_permit()
+            .await
+            .expect("request admission should recover independently")
+            .expect("request permit should be returned");
+        drop(websocket_permit);
+        state
+            .try_acquire_websocket_connection_permit()
+            .await
+            .expect("WebSocket admission should recover after release")
+            .expect("WebSocket permit should be returned");
+    }
+
+    #[tokio::test]
+    async fn websocket_connection_metrics_cover_local_and_distributed_gates() {
+        let runtime = RuntimeState::memory(MemoryRuntimeStateConfig::default());
+        let distributed = runtime
+            .semaphore(
+                "gateway_websocket_connections_distributed",
+                9,
+                aether_runtime_state::RuntimeSemaphoreConfig::default(),
+            )
+            .expect("distributed semaphore should build");
+        let state = AppState::new()
+            .expect("gateway state should build")
+            .with_websocket_connection_limit(7)
+            .with_distributed_websocket_connection_gate(distributed);
+
+        let samples = state.collect_metric_samples().await;
+        assert!(samples.iter().any(|sample| {
+            sample.name == "concurrency_available_permits"
+                && sample.value == 7
+                && sample.labels.iter().any(|label| {
+                    label.key == "gate" && label.value == "gateway_websocket_connections"
+                })
+        }));
+        assert!(samples.iter().any(|sample| {
+            sample.name == "concurrency_available_permits"
+                && sample.value == 9
+                && sample.labels.iter().any(|label| {
+                    label.key == "gate"
+                        && label.value == "gateway_websocket_connections_distributed"
+                })
+        }));
+    }
 }
