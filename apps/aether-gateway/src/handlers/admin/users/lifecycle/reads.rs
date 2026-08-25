@@ -73,7 +73,7 @@ pub(in super::super) async fn build_admin_list_users_response(
     ) = tokio::join!(
         state.list_user_auth_by_ids(&user_ids),
         state.list_wallet_snapshots_by_user_ids(&user_ids),
-        state.summarize_usage_totals_by_user_ids(&user_ids),
+        state.list_usage_summary_totals_by_user_ids(&user_ids),
         state.user_group_policy_sets_for_users(&user_ids),
         admin_system_admission_policy(state),
     );

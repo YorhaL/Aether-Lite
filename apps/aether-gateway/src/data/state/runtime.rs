@@ -812,6 +812,21 @@ impl GatewayDataState {
         }
     }
 
+    pub(crate) async fn list_usage_summary_totals_by_user_ids(
+        &self,
+        user_ids: &[String],
+    ) -> Result<Vec<aether_data_contracts::repository::usage::StoredUsageUserTotals>, DataLayerError>
+    {
+        match &self.usage_reader {
+            Some(repository) => {
+                repository
+                    .list_usage_summary_totals_by_user_ids(user_ids)
+                    .await
+            }
+            None => Ok(Vec::new()),
+        }
+    }
+
     pub(crate) async fn summarize_usage_cache_hit_summary(
         &self,
         query: &aether_data_contracts::repository::usage::UsageCacheHitSummaryQuery,

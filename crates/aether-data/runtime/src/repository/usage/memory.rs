@@ -49,6 +49,7 @@ pub struct InMemoryUsageReadRepository {
     by_request_id: RwLock<BTreeMap<String, StoredRequestUsageAudit>>,
     detached_bodies: RwLock<BTreeMap<String, Value>>,
     provider_usage_windows: RwLock<Vec<StoredProviderUsageWindow>>,
+    user_summary_totals: RwLock<BTreeMap<String, StoredUsageUserTotals>>,
     auth_api_keys: Option<Arc<InMemoryAuthApiKeySnapshotRepository>>,
     provider_catalog: Option<Arc<InMemoryProviderCatalogReadRepository>>,
 }
@@ -68,6 +69,7 @@ impl InMemoryUsageReadRepository {
             by_request_id: RwLock::new(by_request_id),
             detached_bodies: RwLock::new(BTreeMap::new()),
             provider_usage_windows: RwLock::new(Vec::new()),
+            user_summary_totals: RwLock::new(BTreeMap::new()),
             auth_api_keys: None,
             provider_catalog: None,
         }
@@ -121,6 +123,7 @@ impl InMemoryUsageReadRepository {
             by_request_id: RwLock::new(by_request_id),
             detached_bodies: RwLock::new(detached_bodies),
             provider_usage_windows: RwLock::new(Vec::new()),
+            user_summary_totals: RwLock::new(BTreeMap::new()),
             auth_api_keys: None,
             provider_catalog: None,
         }
@@ -134,6 +137,25 @@ impl InMemoryUsageReadRepository {
             by_request_id: self.by_request_id,
             detached_bodies: self.detached_bodies,
             provider_usage_windows: RwLock::new(items.into_iter().collect()),
+            user_summary_totals: self.user_summary_totals,
+            auth_api_keys: self.auth_api_keys,
+            provider_catalog: self.provider_catalog,
+        }
+    }
+
+    pub fn with_user_summary_totals<I>(self, items: I) -> Self
+    where
+        I: IntoIterator<Item = StoredUsageUserTotals>,
+    {
+        let items = items
+            .into_iter()
+            .map(|item| (item.user_id.clone(), item))
+            .collect();
+        Self {
+            by_request_id: self.by_request_id,
+            detached_bodies: self.detached_bodies,
+            provider_usage_windows: self.provider_usage_windows,
+            user_summary_totals: RwLock::new(items),
             auth_api_keys: self.auth_api_keys,
             provider_catalog: self.provider_catalog,
         }
@@ -2493,6 +2515,20 @@ impl UsageReadRepository for InMemoryUsageReadRepository {
             entry.total_tokens = entry.total_tokens.saturating_add(item.total_tokens);
         }
         Ok(totals.into_values().collect())
+    }
+
+    async fn list_usage_summary_totals_by_user_ids(
+        &self,
+        user_ids: &[String],
+    ) -> Result<Vec<StoredUsageUserTotals>, DataLayerError> {
+        let totals = self
+            .user_summary_totals
+            .read()
+            .expect("usage repository lock");
+        Ok(user_ids
+            .iter()
+            .filter_map(|user_id| totals.get(user_id).cloned())
+            .collect())
     }
 
     async fn summarize_usage_by_provider_api_key_ids(

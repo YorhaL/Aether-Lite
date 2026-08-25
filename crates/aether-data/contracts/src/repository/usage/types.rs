@@ -1724,6 +1724,12 @@ pub trait UsageReadRepository: Send + Sync {
         user_ids: &[String],
     ) -> Result<Vec<StoredUsageUserTotals>, crate::DataLayerError>;
 
+    /// Reads the maintained all-time rollup without scanning raw usage rows.
+    async fn list_usage_summary_totals_by_user_ids(
+        &self,
+        user_ids: &[String],
+    ) -> Result<Vec<StoredUsageUserTotals>, crate::DataLayerError>;
+
     async fn summarize_usage_cache_hit_summary(
         &self,
         query: &UsageCacheHitSummaryQuery,

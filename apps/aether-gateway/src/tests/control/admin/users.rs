@@ -11,7 +11,9 @@ use aether_data::repository::users::{
 };
 use aether_data::repository::wallet::InMemoryWalletRepository;
 use aether_data::repository::wallet::StoredWalletSnapshot;
-use aether_data_contracts::repository::usage::StoredRequestUsageAudit;
+use aether_data_contracts::repository::usage::{
+    StoredRequestUsageAudit, StoredUsageUserTotals,
+};
 use axum::body::Body;
 use axum::routing::{any, delete, get, patch, post, put};
 use axum::{extract::Request, Router};
@@ -355,41 +357,48 @@ async fn gateway_handles_admin_users_root_locally_with_trusted_admin_principal()
         sample_admin_wallet("user-2", "monthly"),
         sample_admin_wallet("user-3", "monthly"),
     ]));
-    let usage_repository = Arc::new(InMemoryUsageReadRepository::seed(vec![
-        sample_usage_row(
-            "usage-1",
-            "req-1",
-            Some("user-1"),
-            "OpenAI",
-            "completed",
-            80,
-        ),
-        sample_usage_row("usage-2", "req-2", Some("user-1"), "OpenAI", "failed", 20),
-        sample_usage_row(
-            "usage-3",
-            "req-3",
-            Some("user-1"),
-            "OpenAI",
-            "streaming",
-            999,
-        ),
-        sample_usage_row(
-            "usage-4",
-            "req-4",
-            Some("user-1"),
-            "pending",
-            "completed",
-            999,
-        ),
-        sample_usage_row(
-            "usage-5",
-            "req-5",
-            Some("user-3"),
-            "OpenAI",
-            "completed",
-            777,
-        ),
-    ]));
+    let usage_repository = Arc::new(
+        InMemoryUsageReadRepository::seed(vec![
+            sample_usage_row(
+                "usage-1",
+                "req-1",
+                Some("user-1"),
+                "OpenAI",
+                "completed",
+                80,
+            ),
+            sample_usage_row("usage-2", "req-2", Some("user-1"), "OpenAI", "failed", 20),
+            sample_usage_row(
+                "usage-3",
+                "req-3",
+                Some("user-1"),
+                "OpenAI",
+                "streaming",
+                999,
+            ),
+            sample_usage_row(
+                "usage-4",
+                "req-4",
+                Some("user-1"),
+                "pending",
+                "completed",
+                999,
+            ),
+            sample_usage_row(
+                "usage-5",
+                "req-5",
+                Some("user-3"),
+                "OpenAI",
+                "completed",
+                777,
+            ),
+        ])
+        .with_user_summary_totals(vec![StoredUsageUserTotals {
+            user_id: "user-1".to_string(),
+            request_count: 12,
+            total_tokens: 345,
+        }]),
+    );
 
     let (upstream_url, upstream_handle) = start_server(upstream).await;
     let gateway = build_router_with_state(
@@ -433,8 +442,8 @@ async fn gateway_handles_admin_users_root_locally_with_trusted_admin_principal()
     assert_eq!(items[0]["rate_limit"], 60);
     assert_eq!(items[0]["unlimited"], true);
     assert_eq!(items[0]["is_active"], true);
-    assert_eq!(items[0]["request_count"], 2);
-    assert_eq!(items[0]["total_tokens"], 100);
+    assert_eq!(items[0]["request_count"], 12);
+    assert_eq!(items[0]["total_tokens"], 345);
 
     let search_response = reqwest::Client::new()
         .get(format!(

@@ -342,6 +342,16 @@ impl AppState {
             .map_err(|err| GatewayError::Internal(err.to_string()))
     }
 
+    pub(crate) async fn list_usage_summary_totals_by_user_ids(
+        &self,
+        user_ids: &[String],
+    ) -> Result<Vec<usage::StoredUsageUserTotals>, GatewayError> {
+        self.data
+            .list_usage_summary_totals_by_user_ids(user_ids)
+            .await
+            .map_err(|err| GatewayError::Internal(err.to_string()))
+    }
+
     pub(crate) async fn summarize_usage_by_provider_api_key_ids(
         &self,
         provider_api_key_ids: &[String],

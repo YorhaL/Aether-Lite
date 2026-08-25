@@ -2144,6 +2144,58 @@ ORDER BY "usage".user_id ASC
         Ok(totals.into_values().collect())
     }
 
+    pub async fn list_usage_summary_totals_by_user_ids(
+        &self,
+        user_ids: &[String],
+    ) -> Result<Vec<StoredUsageUserTotals>, DataLayerError> {
+        let unique_user_ids = user_ids
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        if unique_user_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut builder = QueryBuilder::<Sqlite>::new(
+            r#"
+SELECT
+  user_id,
+  COALESCE(all_time_requests, 0) AS request_count,
+  COALESCE(
+    all_time_input_tokens
+      + all_time_output_tokens
+      + all_time_cache_creation_tokens
+      + all_time_cache_read_tokens,
+    0
+  ) AS total_tokens
+FROM stats_user_summary
+WHERE user_id IN (
+"#,
+        );
+        {
+            let mut separated = builder.separated(", ");
+            for user_id in unique_user_ids {
+                separated.push_bind(user_id);
+            }
+        }
+        builder.push(") ORDER BY user_id ASC");
+
+        builder
+            .build()
+            .fetch_all(&self.pool)
+            .await
+            .map_sql_err()?
+            .into_iter()
+            .map(|row| {
+                Ok(StoredUsageUserTotals {
+                    user_id: row.try_get("user_id").map_sql_err()?,
+                    request_count: row_u64(&row, "request_count")?,
+                    total_tokens: row_u64(&row, "total_tokens")?,
+                })
+            })
+            .collect()
+    }
+
     async fn summarize_dashboard_usage_from_daily_aggregates(
         &self,
         query: &UsageDashboardSummaryQuery,
@@ -2418,6 +2470,13 @@ impl UsageReadRepository for SqliteUsageReadRepository {
         user_ids: &[String],
     ) -> Result<Vec<StoredUsageUserTotals>, DataLayerError> {
         Self::summarize_usage_totals_by_user_ids(self, user_ids).await
+    }
+
+    async fn list_usage_summary_totals_by_user_ids(
+        &self,
+        user_ids: &[String],
+    ) -> Result<Vec<StoredUsageUserTotals>, DataLayerError> {
+        Self::list_usage_summary_totals_by_user_ids(self, user_ids).await
     }
 
     async fn summarize_usage_cache_hit_summary(
@@ -5235,4 +5294,77 @@ fn row_optional_i32(row: &SqliteRow, field: &str) -> Result<Option<i32>, DataLay
 fn row_u64(row: &SqliteRow, field: &str) -> Result<u64, DataLayerError> {
     let value: i64 = row.try_get(field).map_sql_err()?;
     u64::try_from(value).map_err(|_| DataLayerError::UnexpectedValue(format!("{field} negative")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SqliteUsageReadRepository, StoredUsageUserTotals};
+
+    #[tokio::test]
+    async fn usage_summary_totals_only_read_the_maintained_summary_table() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("sqlite pool should connect");
+        sqlx::query(
+            r#"
+CREATE TABLE stats_user_summary (
+  user_id TEXT PRIMARY KEY NOT NULL,
+  all_time_requests INTEGER NOT NULL DEFAULT 0,
+  all_time_input_tokens INTEGER NOT NULL DEFAULT 0,
+  all_time_output_tokens INTEGER NOT NULL DEFAULT 0,
+  all_time_cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+  all_time_cache_read_tokens INTEGER NOT NULL DEFAULT 0
+)
+"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("summary table should be created");
+        sqlx::query(
+            r#"
+INSERT INTO stats_user_summary (
+  user_id,
+  all_time_requests,
+  all_time_input_tokens,
+  all_time_output_tokens,
+  all_time_cache_creation_tokens,
+  all_time_cache_read_tokens
+) VALUES
+  ('user-2', 12, 100, 200, 30, 15),
+  ('user-1', 7, 40, 50, 6, 4)
+"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("summary rows should be inserted");
+
+        let repository = SqliteUsageReadRepository::new(pool);
+        let totals = repository
+            .list_usage_summary_totals_by_user_ids(&[
+                "user-2".to_string(),
+                "missing-user".to_string(),
+                "user-1".to_string(),
+                "user-2".to_string(),
+            ])
+            .await
+            .expect("summary totals should load");
+
+        assert_eq!(
+            totals,
+            vec![
+                StoredUsageUserTotals {
+                    user_id: "user-1".to_string(),
+                    request_count: 7,
+                    total_tokens: 100,
+                },
+                StoredUsageUserTotals {
+                    user_id: "user-2".to_string(),
+                    request_count: 12,
+                    total_tokens: 345,
+                },
+            ]
+        );
+    }
 }

@@ -8156,6 +8156,50 @@ ORDER BY "usage".user_id ASC
         Ok(items)
     }
 
+    pub async fn list_usage_summary_totals_by_user_ids(
+        &self,
+        user_ids: &[String],
+    ) -> Result<Vec<StoredUsageUserTotals>, DataLayerError> {
+        if user_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut rows = sqlx::query(
+            r#"
+SELECT
+  user_id,
+  COALESCE(all_time_requests, 0)::BIGINT AS request_count,
+  COALESCE(
+    all_time_input_tokens
+      + all_time_output_tokens
+      + all_time_cache_creation_tokens
+      + all_time_cache_read_tokens,
+    0
+  )::BIGINT AS total_tokens
+FROM stats_user_summary
+WHERE user_id = ANY($1::TEXT[])
+ORDER BY user_id ASC
+"#,
+        )
+        .bind(user_ids)
+        .fetch(&self.pool);
+        let mut items = Vec::new();
+        while let Some(row) = rows.try_next().await.map_postgres_err()? {
+            items.push(StoredUsageUserTotals {
+                user_id: row.try_get::<String, _>("user_id").map_postgres_err()?,
+                request_count: row
+                    .try_get::<i64, _>("request_count")
+                    .map_postgres_err()?
+                    .max(0) as u64,
+                total_tokens: row
+                    .try_get::<i64, _>("total_tokens")
+                    .map_postgres_err()?
+                    .max(0) as u64,
+            });
+        }
+        Ok(items)
+    }
+
     pub async fn summarize_usage_by_provider_api_key_ids(
         &self,
         provider_api_key_ids: &[String],
@@ -10311,6 +10355,13 @@ GROUP BY u.user_id, u.api_key_id, 3
         user_ids: &[String],
     ) -> Result<Vec<StoredUsageUserTotals>, DataLayerError> {
         Self::summarize_usage_totals_by_user_ids(self, user_ids).await
+    }
+
+    async fn list_usage_summary_totals_by_user_ids(
+        &self,
+        user_ids: &[String],
+    ) -> Result<Vec<StoredUsageUserTotals>, DataLayerError> {
+        Self::list_usage_summary_totals_by_user_ids(self, user_ids).await
     }
 
     async fn summarize_usage_by_provider_api_key_ids(
