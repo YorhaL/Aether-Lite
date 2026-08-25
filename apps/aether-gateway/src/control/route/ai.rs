@@ -33,6 +33,17 @@ pub(super) fn classify_ai_public_route(
             "openai:rerank",
             true,
         ))
+    } else if method == http::Method::GET
+        && normalized_path == "/v1/realtime"
+        && is_websocket_upgrade_request(headers)
+    {
+        Some(classified(
+            "ai_public",
+            "openai",
+            "realtime",
+            "openai:realtime",
+            true,
+        ))
     } else if method == http::Method::POST
         && matches!(normalized_path, "/v1/responses" | "/v1/responses/compact")
     {
@@ -160,5 +171,48 @@ fn claude_request_auth_channel(headers: &http::HeaderMap) -> &'static str {
         "bearer_like"
     } else {
         "api_key"
+    }
+}
+
+fn is_websocket_upgrade_request(headers: &http::HeaderMap) -> bool {
+    let has_upgrade_connection = headers
+        .get(http::header::CONNECTION)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .any(|value| value.eq_ignore_ascii_case("upgrade"))
+        });
+    let has_websocket_upgrade = headers
+        .get(http::header::UPGRADE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.eq_ignore_ascii_case("websocket"));
+    has_upgrade_connection && has_websocket_upgrade
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::http::header::{CONNECTION, UPGRADE};
+    use axum::http::{HeaderMap, HeaderValue, Method};
+
+    use super::classify_ai_public_route;
+
+    #[test]
+    fn realtime_requires_a_websocket_upgrade() {
+        let mut headers = HeaderMap::new();
+        headers.insert(CONNECTION, HeaderValue::from_static("keep-alive, Upgrade"));
+        headers.insert(UPGRADE, HeaderValue::from_static("websocket"));
+
+        let route = classify_ai_public_route(&Method::GET, "/v1/realtime", &headers)
+            .expect("Realtime WebSocket should classify");
+        assert_eq!(route.route_family, "openai");
+        assert_eq!(route.route_kind, "realtime");
+        assert_eq!(route.auth_endpoint_signature, "openai:realtime");
+
+        assert!(
+            classify_ai_public_route(&Method::GET, "/v1/realtime", &HeaderMap::new()).is_none()
+        );
+        assert!(classify_ai_public_route(&Method::POST, "/v1/realtime", &headers).is_none());
     }
 }

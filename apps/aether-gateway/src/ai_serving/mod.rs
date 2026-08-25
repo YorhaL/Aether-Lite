@@ -10,13 +10,14 @@ use crate::{AppState, GatewayError};
 pub(crate) use self::planner::{
     apply_local_runtime_candidate_terminal_reason, build_local_same_format_stream_attempt_source,
     build_local_same_format_stream_plan_and_reports, build_local_same_format_sync_attempt_source,
-    build_local_same_format_sync_plan_and_reports, maybe_build_stream_decision_payload,
-    maybe_build_stream_plan_payload, maybe_build_sync_decision_payload,
-    maybe_build_sync_plan_payload, planner_is_matching_stream_request,
-    read_candidate_transport_snapshot, record_local_runtime_candidate_skip_reason,
-    CandidateFailureDiagnostic, CandidateFailureDiagnosticKind, EligibleLocalExecutionCandidate,
-    GatewayAuthApiKeySnapshot, GatewayProviderTransportSnapshot, LocalExecutionAttemptSource,
-    PlannerAppState, SkippedLocalExecutionCandidate,
+    build_local_same_format_sync_plan_and_reports, build_passthrough_stream_plan_from_decision,
+    maybe_build_stream_decision_payload, maybe_build_stream_plan_payload,
+    maybe_build_sync_decision_payload, maybe_build_sync_plan_payload,
+    planner_is_matching_stream_request, read_candidate_transport_snapshot,
+    record_local_runtime_candidate_skip_reason, CandidateFailureDiagnostic,
+    CandidateFailureDiagnosticKind, EligibleLocalExecutionCandidate, GatewayAuthApiKeySnapshot,
+    GatewayProviderTransportSnapshot, LocalExecutionAttemptSource, PlannerAppState,
+    SkippedLocalExecutionCandidate,
 };
 pub(crate) use self::pure::*;
 pub(crate) use self::transport::{

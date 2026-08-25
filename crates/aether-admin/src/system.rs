@@ -659,6 +659,12 @@ const ADMIN_API_FORMAT_DEFINITIONS: &[AdminApiFormatDefinition] = &[
         aliases: &["responses_compact"],
     },
     AdminApiFormatDefinition {
+        value: "openai:realtime",
+        label: "OpenAI Realtime",
+        default_path: "/v1/realtime",
+        aliases: &[],
+    },
+    AdminApiFormatDefinition {
         value: "openai:search",
         label: "OpenAI Search",
         default_path: "/v1/alpha/search",
@@ -2418,4 +2424,22 @@ fn suffixed_path_identifier_from_path(
         .strip_suffix(suffix)
         .map(|value| value.trim().trim_matches('/').to_string())
         .filter(|value| !value.is_empty() && !value.contains('/'))
+}
+
+#[cfg(test)]
+mod api_format_tests {
+    use super::build_admin_api_formats_payload;
+
+    #[test]
+    fn admin_api_format_catalog_includes_openai_realtime() {
+        let payload = build_admin_api_formats_payload();
+        let realtime = payload["formats"]
+            .as_array()
+            .expect("formats should be an array")
+            .iter()
+            .find(|format| format["value"] == "openai:realtime")
+            .expect("OpenAI Realtime should be configurable from the admin UI");
+        assert_eq!(realtime["label"], "OpenAI Realtime");
+        assert_eq!(realtime["default_path"], "/v1/realtime");
+    }
 }

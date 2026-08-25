@@ -20,6 +20,7 @@ pub enum FormatId {
     OpenAiChat,
     OpenAiResponses,
     OpenAiResponsesCompact,
+    OpenAiRealtime,
     OpenAiSearch,
     OpenAiEmbedding,
     OpenAiRerank,
@@ -43,6 +44,7 @@ impl FormatId {
             Self::OpenAiChat
             | Self::OpenAiResponses
             | Self::OpenAiResponsesCompact
+            | Self::OpenAiRealtime
             | Self::OpenAiSearch
             | Self::OpenAiEmbedding
             | Self::OpenAiRerank => FormatFamily::OpenAi,
@@ -65,6 +67,7 @@ impl FormatId {
             Self::OpenAiChat => "openai:chat",
             Self::OpenAiResponses => "openai:responses",
             Self::OpenAiResponsesCompact => "openai:responses:compact",
+            Self::OpenAiRealtime => "openai:realtime",
             Self::OpenAiSearch => "openai:search",
             Self::OpenAiEmbedding => "openai:embedding",
             Self::OpenAiRerank => "openai:rerank",
@@ -92,6 +95,7 @@ impl FromStr for FormatId {
             "openai:responses:compact" | "/v1/responses/compact" => {
                 Ok(Self::OpenAiResponsesCompact)
             }
+            "openai:realtime" | "/v1/realtime" => Ok(Self::OpenAiRealtime),
             "openai:search" | "openai_search" | "search" | "/v1/alpha/search" => {
                 Ok(Self::OpenAiSearch)
             }

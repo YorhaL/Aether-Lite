@@ -4,7 +4,7 @@ use std::sync::OnceLock;
 use aether_ai_formats::ApiOperation;
 use regex::Regex;
 use serde_json::Value;
-use url::form_urlencoded;
+use url::{form_urlencoded, Url};
 
 use crate::snapshot::GatewayProviderTransportSnapshot;
 use crate::url::{
@@ -62,7 +62,10 @@ fn build_transport_request_url_inner(
         return None;
     }
 
-    let sanitized_query = if provider_api_format == "claude:messages" {
+    let sanitized_query = if matches!(
+        provider_api_format.as_str(),
+        "claude:messages" | "openai:realtime"
+    ) {
         strip_gateway_credential_query_parameters(params.request_query)
     } else {
         params.request_query.map(ToOwned::to_owned)
@@ -107,6 +110,13 @@ fn build_transport_request_url_inner(
             &transport.endpoint.base_url,
             params.request_query,
         )),
+        "openai:realtime" => build_passthrough_path_url(
+            &transport.endpoint.base_url,
+            "/v1/realtime",
+            params.request_query,
+            GATEWAY_CREDENTIAL_QUERY_KEYS,
+        )
+        .and_then(|url| replace_realtime_model_query(url, params.mapped_model?)),
         "openai:embedding" => build_provider_api_root_url(
             &transport.endpoint.base_url,
             "/embeddings",
@@ -171,12 +181,13 @@ fn build_custom_path_url(
     } else {
         expanded
     };
-    let blocked_query_keys =
-        if provider_api_format.starts_with("gemini:") || provider_api_format == "claude:messages" {
-            GATEWAY_CREDENTIAL_QUERY_KEYS
-        } else {
-            &[]
-        };
+    let blocked_query_keys = if provider_api_format.starts_with("gemini:")
+        || matches!(provider_api_format, "claude:messages" | "openai:realtime")
+    {
+        GATEWAY_CREDENTIAL_QUERY_KEYS
+    } else {
+        &[]
+    };
     let mut url = build_passthrough_path_url(
         &transport.endpoint.base_url,
         &path,
@@ -186,11 +197,36 @@ fn build_custom_path_url(
     if params.api_operation == Some(ApiOperation::ClaudeCountTokens) && !handles_operation {
         url = build_claude_count_tokens_url(&url, None);
     }
+    if provider_api_format == "openai:realtime" {
+        url = replace_realtime_model_query(url, params.mapped_model?)?;
+    }
     Some(add_gemini_stream_query(
         url,
         provider_api_format,
         params.upstream_is_stream,
     ))
+}
+
+fn replace_realtime_model_query(raw_url: String, mapped_model: &str) -> Option<String> {
+    let mapped_model = mapped_model.trim();
+    if mapped_model.is_empty() {
+        return None;
+    }
+    let mut url = Url::parse(raw_url.as_str()).ok()?;
+    let retained = url
+        .query_pairs()
+        .filter(|(name, _)| !name.eq_ignore_ascii_case("model"))
+        .map(|(name, value)| (name.into_owned(), value.into_owned()))
+        .collect::<Vec<_>>();
+    url.set_query(None);
+    {
+        let mut query = url.query_pairs_mut();
+        for (name, value) in retained {
+            query.append_pair(name.as_str(), value.as_str());
+        }
+        query.append_pair("model", mapped_model);
+    }
+    Some(url.to_string())
 }
 
 fn build_path_params<'a>(
@@ -339,4 +375,22 @@ fn custom_path_template_regex() -> &'static Regex {
         Regex::new(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
             .expect("custom path template regex must compile")
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::replace_realtime_model_query;
+
+    #[test]
+    fn realtime_query_replaces_client_model_and_keeps_safe_hints() {
+        let url = replace_realtime_model_query(
+            "https://api.example.test/v1/realtime?trace=1&model=client-alias".to_string(),
+            "provider-model",
+        )
+        .expect("Realtime URL should build");
+        assert_eq!(
+            url,
+            "https://api.example.test/v1/realtime?trace=1&model=provider-model"
+        );
+    }
 }

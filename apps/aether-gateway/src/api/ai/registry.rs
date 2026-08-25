@@ -1,13 +1,17 @@
 use axum::body::Body;
 use axum::extract::Request;
 use axum::http::{header, HeaderValue, Response, StatusCode};
-use axum::routing::{any, post};
+use axum::routing::{any, get, post};
 use axum::Router;
 
 use super::{claude, gemini, openai};
 use crate::api::response::build_local_http_error_response_with_request_path;
 use crate::headers::extract_or_generate_trace_id;
-use crate::{handlers::proxy::proxy_request, state::AppState, GatewayError};
+use crate::{
+    handlers::proxy::{proxy_request, realtime_websocket},
+    state::AppState,
+    GatewayError,
+};
 
 // Router registration patterns live here so AI public ingress has a single mount registry.
 const AI_POST_ROUTE_PATTERNS: &[&str] = &[
@@ -39,6 +43,7 @@ const AI_ANY_ROUTE_PATTERNS: &[&str] =
     &["/v1/models/{*gemini_path}", "/v1beta/models/{*gemini_path}"];
 
 pub(crate) fn mount_ai_routes(mut router: Router<AppState>) -> Router<AppState> {
+    router = router.route("/v1/realtime", get(realtime_websocket));
     for path in AI_POST_ROUTE_PATTERNS {
         router = router.route(path, post(proxy_request));
     }
@@ -120,6 +125,7 @@ mod tests {
                 "/v1beta/models/{model}:{action}",
             ),
             ("openai:rerank", "openai", "rerank", "/v1/rerank"),
+            ("openai:realtime", "openai", "realtime", "/v1/realtime"),
             ("openai:search", "openai", "search", "/v1/alpha/search"),
         ] {
             assert_eq!(

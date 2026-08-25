@@ -31,6 +31,7 @@ pub(crate) use self::passthrough::{
     build_local_same_format_stream_attempt_source, build_local_same_format_stream_plan_and_reports,
     build_local_same_format_sync_attempt_source, build_local_same_format_sync_plan_and_reports,
 };
+pub(crate) use self::plan_builders::build_passthrough_stream_plan_from_decision;
 pub(crate) use self::plan_builders::{AiStreamAttempt, AiSyncAttempt};
 pub(crate) use self::request_gzip::resolve_transport_request_encoding_policy;
 pub(crate) use self::route::is_matching_stream_request as planner_is_matching_stream_request;

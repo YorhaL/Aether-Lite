@@ -27,7 +27,7 @@ pub struct AiExecutionPlanPayload {
     pub auth_context: Option<ExecutionRuntimeAuthContext>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AiExecutionDecision {
     pub action: String,
     #[serde(default)]

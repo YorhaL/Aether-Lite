@@ -15,6 +15,7 @@ describe('api format display helpers', () => {
     expect(normalizeApiFormatAlias('CLAUDE_MESSAGES')).toBe(API_FORMATS.CLAUDE_MESSAGES)
     expect(normalizeApiFormatAlias('OPENAI_RESPONSES')).toBe(API_FORMATS.OPENAI_RESPONSES)
     expect(normalizeApiFormatAlias('OPENAI_RESPONSES_COMPACT')).toBe(API_FORMATS.OPENAI_RESPONSES_COMPACT)
+    expect(normalizeApiFormatAlias('OPENAI_REALTIME')).toBe(API_FORMATS.OPENAI_REALTIME)
     expect(normalizeApiFormatAlias('OPENAI_SEARCH')).toBe(API_FORMATS.OPENAI_SEARCH)
     expect(normalizeApiFormatAlias('SEARCH')).toBe(API_FORMATS.OPENAI_SEARCH)
     expect(normalizeApiFormatAlias('GEMINI_GENERATE_CONTENT')).toBe(API_FORMATS.GEMINI_GENERATE_CONTENT)
@@ -22,6 +23,11 @@ describe('api format display helpers', () => {
     expect(normalizeApiFormatAlias('OPENAI_RERANK')).toBe(API_FORMATS.OPENAI_RERANK)
     expect(normalizeApiFormatAlias('GEMINI_INTERACTIONS')).toBe(API_FORMATS.GEMINI_INTERACTIONS)
     expect(normalizeApiFormatAlias('GEMINI_EMBEDDING')).toBe(API_FORMATS.GEMINI_EMBEDDING)
+  })
+
+  it('formats the OpenAI Realtime endpoint signature', () => {
+    expect(formatApiFormat(API_FORMATS.OPENAI_REALTIME)).toBe('OpenAI Realtime')
+    expect(formatApiFormatShort(API_FORMATS.OPENAI_REALTIME)).toBe('ORT')
   })
 
   it('formats rerank api format ids distinctly from chat formats', () => {

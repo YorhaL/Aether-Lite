@@ -1383,6 +1383,10 @@ async fn gateway_handles_admin_system_api_formats_locally_with_trusted_admin_pri
         .iter()
         .any(|item| item["value"] == "openai:embedding"));
     assert!(formats.iter().any(|item| item["value"] == "openai:rerank"));
+    assert!(formats
+        .iter()
+        .any(|item| item["value"] == "openai:realtime"
+            && item["default_path"] == "/v1/realtime"));
     let gemini_interactions = formats
         .iter()
         .find(|item| item["value"] == "gemini:interactions")

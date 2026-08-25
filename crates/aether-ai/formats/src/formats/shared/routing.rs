@@ -9,10 +9,10 @@ use crate::contracts::{
     GEMINI_CLI_SYNC_PLAN_KIND, GEMINI_EMBEDDING_SYNC_PLAN_KIND,
     GEMINI_INTERACTIONS_STREAM_PLAN_KIND, GEMINI_INTERACTIONS_SYNC_PLAN_KIND,
     OPENAI_CHAT_STREAM_PLAN_KIND, OPENAI_CHAT_SYNC_PLAN_KIND, OPENAI_EMBEDDING_SYNC_PLAN_KIND,
-    OPENAI_IMAGE_STREAM_PLAN_KIND, OPENAI_IMAGE_SYNC_PLAN_KIND, OPENAI_RERANK_SYNC_PLAN_KIND,
-    OPENAI_RESPONSES_COMPACT_STREAM_PLAN_KIND, OPENAI_RESPONSES_COMPACT_SYNC_PLAN_KIND,
-    OPENAI_RESPONSES_STREAM_PLAN_KIND, OPENAI_RESPONSES_SYNC_PLAN_KIND,
-    OPENAI_SEARCH_SYNC_PLAN_KIND,
+    OPENAI_IMAGE_STREAM_PLAN_KIND, OPENAI_IMAGE_SYNC_PLAN_KIND, OPENAI_REALTIME_STREAM_PLAN_KIND,
+    OPENAI_RERANK_SYNC_PLAN_KIND, OPENAI_RESPONSES_COMPACT_STREAM_PLAN_KIND,
+    OPENAI_RESPONSES_COMPACT_SYNC_PLAN_KIND, OPENAI_RESPONSES_STREAM_PLAN_KIND,
+    OPENAI_RESPONSES_SYNC_PLAN_KIND, OPENAI_SEARCH_SYNC_PLAN_KIND,
 };
 
 pub fn resolve_execution_runtime_stream_plan_kind(
@@ -93,6 +93,14 @@ pub fn resolve_execution_runtime_stream_plan_kind_with_client_surface(
         && path == "/v1/responses"
     {
         return Some(OPENAI_RESPONSES_STREAM_PLAN_KIND);
+    }
+
+    if route_family == Some("openai")
+        && route_kind == Some("realtime")
+        && *method == Method::GET
+        && path == "/v1/realtime"
+    {
+        return Some(OPENAI_REALTIME_STREAM_PLAN_KIND);
     }
 
     if route_family == Some("openai")
@@ -352,7 +360,7 @@ pub fn sanitize_request_path_and_query(path: &str, query: Option<&str>) -> Optio
 fn request_query_key_is_safe_to_trace(key: &str) -> bool {
     matches!(
         key.to_ascii_lowercase().as_str(),
-        "alt" | "view" | "pagesize" | "page_size" | "limit" | "offset"
+        "alt" | "view" | "pagesize" | "page_size" | "limit" | "offset" | "model"
     )
 }
 
@@ -501,6 +509,7 @@ pub fn supports_stream_execution_decision_kind(plan_kind: &str) -> bool {
     matches!(
         plan_kind,
         OPENAI_CHAT_STREAM_PLAN_KIND
+            | OPENAI_REALTIME_STREAM_PLAN_KIND
             | CLAUDE_CHAT_STREAM_PLAN_KIND
             | GEMINI_CHAT_STREAM_PLAN_KIND
             | OPENAI_RESPONSES_STREAM_PLAN_KIND
@@ -529,7 +538,8 @@ mod tests {
         GEMINI_CLI_STREAM_PLAN_KIND, GEMINI_CLI_SYNC_PLAN_KIND, GEMINI_EMBEDDING_SYNC_PLAN_KIND,
         GEMINI_INTERACTIONS_STREAM_PLAN_KIND, GEMINI_INTERACTIONS_SYNC_PLAN_KIND,
         OPENAI_CHAT_STREAM_PLAN_KIND, OPENAI_CHAT_SYNC_PLAN_KIND, OPENAI_EMBEDDING_SYNC_PLAN_KIND,
-        OPENAI_IMAGE_STREAM_PLAN_KIND, OPENAI_IMAGE_SYNC_PLAN_KIND, OPENAI_RERANK_SYNC_PLAN_KIND,
+        OPENAI_IMAGE_STREAM_PLAN_KIND, OPENAI_IMAGE_SYNC_PLAN_KIND,
+        OPENAI_REALTIME_STREAM_PLAN_KIND, OPENAI_RERANK_SYNC_PLAN_KIND,
         OPENAI_RESPONSES_COMPACT_STREAM_PLAN_KIND, OPENAI_RESPONSES_COMPACT_SYNC_PLAN_KIND,
         OPENAI_RESPONSES_STREAM_PLAN_KIND, OPENAI_RESPONSES_SYNC_PLAN_KIND,
         OPENAI_SEARCH_SYNC_PLAN_KIND,
@@ -601,6 +611,35 @@ mod tests {
         ));
         assert!(supports_stream_execution_decision_kind(
             OPENAI_RESPONSES_STREAM_PLAN_KIND
+        ));
+    }
+
+    #[test]
+    fn resolves_openai_realtime_as_websocket_stream_only() {
+        assert_eq!(
+            resolve_execution_runtime_stream_plan_kind(
+                Some("ai_public"),
+                Some("openai"),
+                Some("realtime"),
+                None,
+                &Method::GET,
+                "/v1/realtime",
+            ),
+            Some(OPENAI_REALTIME_STREAM_PLAN_KIND)
+        );
+        assert_eq!(
+            resolve_execution_runtime_sync_plan_kind(
+                Some("ai_public"),
+                Some("openai"),
+                Some("realtime"),
+                None,
+                &Method::GET,
+                "/v1/realtime",
+            ),
+            None
+        );
+        assert!(supports_stream_execution_decision_kind(
+            OPENAI_REALTIME_STREAM_PLAN_KIND
         ));
     }
 

@@ -8,6 +8,7 @@ const apiFormats = [
   { value: 'gemini:interactions', default_path: '/v1/interactions' },
   { value: 'gemini:embedding', default_path: '/v1beta/models/{model}:embedContent' },
   { value: 'openai:responses', default_path: '/v1/responses' },
+  { value: 'openai:realtime', default_path: '/v1/realtime' },
   { value: 'openai:search', default_path: '/v1/alpha/search' },
   { value: 'openai:embedding', default_path: '/v1/embeddings' },
   { value: 'openai:rerank', default_path: '/v1/rerank' },
@@ -45,6 +46,18 @@ describe('endpoint default paths', () => {
       apiFormats,
     })).toBe('/alpha/search')
 
+  })
+
+  it('builds OpenAI Realtime endpoints relative to the v1 API root', () => {
+    expect(getDefaultEndpointBaseUrl({
+      apiFormat: 'openai:realtime',
+      baseUrl: 'https://api.openai.com',
+    })).toBe('https://api.openai.com/v1')
+    expect(getDefaultEndpointPath({
+      apiFormat: 'openai:realtime',
+      baseUrl: 'https://api.openai.com/v1',
+      apiFormats,
+    })).toBe('/realtime')
   })
 
   it('drops /v1 from API-root defaults because base URL is the API root', () => {

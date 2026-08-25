@@ -59,6 +59,7 @@ function usesVersionedApiRootByDefault(apiFormat: string): boolean {
   return apiFormat === 'openai:chat'
     || apiFormat === 'openai:responses'
     || apiFormat === 'openai:responses:compact'
+    || apiFormat === 'openai:realtime'
     || apiFormat === 'openai:search'
     || apiFormat === 'openai:embedding'
     || apiFormat === 'openai:rerank'

@@ -6,6 +6,7 @@ pub const CLAUDE_COUNT_TOKENS_SYNC_PLAN_KIND: &str = "claude_count_tokens_sync";
 pub const GEMINI_CHAT_STREAM_PLAN_KIND: &str = "gemini_chat_stream";
 pub const GEMINI_INTERACTIONS_STREAM_PLAN_KIND: &str = "gemini_interactions_stream";
 pub const OPENAI_RESPONSES_STREAM_PLAN_KIND: &str = "openai_responses_stream";
+pub const OPENAI_REALTIME_STREAM_PLAN_KIND: &str = "openai_realtime_stream";
 pub const OPENAI_RESPONSES_COMPACT_STREAM_PLAN_KIND: &str = "openai_responses_compact_stream";
 pub const CLAUDE_CLI_STREAM_PLAN_KIND: &str = "claude_cli_stream";
 pub const GEMINI_CLI_STREAM_PLAN_KIND: &str = "gemini_cli_stream";

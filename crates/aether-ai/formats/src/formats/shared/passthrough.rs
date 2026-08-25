@@ -10,12 +10,13 @@ use crate::contracts::{
     OPENAI_CHAT_SYNC_PLAN_KIND, OPENAI_CHAT_SYNC_SUCCESS_REPORT_KIND,
     OPENAI_EMBEDDING_SYNC_PLAN_KIND, OPENAI_IMAGE_STREAM_PLAN_KIND,
     OPENAI_IMAGE_STREAM_SUCCESS_REPORT_KIND, OPENAI_IMAGE_SYNC_PLAN_KIND,
-    OPENAI_IMAGE_SYNC_SUCCESS_REPORT_KIND, OPENAI_RERANK_SYNC_PLAN_KIND,
-    OPENAI_RESPONSES_COMPACT_STREAM_PLAN_KIND, OPENAI_RESPONSES_COMPACT_STREAM_SUCCESS_REPORT_KIND,
-    OPENAI_RESPONSES_COMPACT_SYNC_PLAN_KIND, OPENAI_RESPONSES_COMPACT_SYNC_SUCCESS_REPORT_KIND,
-    OPENAI_RESPONSES_STREAM_PLAN_KIND, OPENAI_RESPONSES_STREAM_SUCCESS_REPORT_KIND,
-    OPENAI_RESPONSES_SYNC_PLAN_KIND, OPENAI_RESPONSES_SYNC_SUCCESS_REPORT_KIND,
-    OPENAI_SEARCH_SYNC_PLAN_KIND, OPENAI_SEARCH_SYNC_SUCCESS_REPORT_KIND,
+    OPENAI_IMAGE_SYNC_SUCCESS_REPORT_KIND, OPENAI_REALTIME_STREAM_PLAN_KIND,
+    OPENAI_RERANK_SYNC_PLAN_KIND, OPENAI_RESPONSES_COMPACT_STREAM_PLAN_KIND,
+    OPENAI_RESPONSES_COMPACT_STREAM_SUCCESS_REPORT_KIND, OPENAI_RESPONSES_COMPACT_SYNC_PLAN_KIND,
+    OPENAI_RESPONSES_COMPACT_SYNC_SUCCESS_REPORT_KIND, OPENAI_RESPONSES_STREAM_PLAN_KIND,
+    OPENAI_RESPONSES_STREAM_SUCCESS_REPORT_KIND, OPENAI_RESPONSES_SYNC_PLAN_KIND,
+    OPENAI_RESPONSES_SYNC_SUCCESS_REPORT_KIND, OPENAI_SEARCH_SYNC_PLAN_KIND,
+    OPENAI_SEARCH_SYNC_SUCCESS_REPORT_KIND,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -154,6 +155,14 @@ pub fn resolve_sync_spec(plan_kind: &str) -> Option<LocalSameFormatProviderSpec>
 
 pub fn resolve_stream_spec(plan_kind: &str) -> Option<LocalSameFormatProviderSpec> {
     match plan_kind {
+        OPENAI_REALTIME_STREAM_PLAN_KIND => Some(LocalSameFormatProviderSpec {
+            api_format: "openai:realtime",
+            decision_kind: OPENAI_REALTIME_STREAM_PLAN_KIND,
+            report_kind: "openai_realtime_websocket_success",
+            family: LocalSameFormatProviderFamily::Standard,
+            require_streaming: true,
+            operation: None,
+        }),
         OPENAI_CHAT_STREAM_PLAN_KIND => Some(LocalSameFormatProviderSpec {
             api_format: "openai:chat",
             decision_kind: OPENAI_CHAT_STREAM_PLAN_KIND,
@@ -247,6 +256,15 @@ mod tests {
         let spec = resolve_stream_spec("gemini_cli_stream").expect("spec");
         assert_eq!(spec.api_format, "gemini:generate_content");
         assert_eq!(spec.report_kind, "gemini_cli_stream_success");
+        assert!(spec.require_streaming);
+    }
+
+    #[test]
+    fn resolves_openai_realtime_same_format_spec() {
+        let spec = resolve_stream_spec("openai_realtime_stream").expect("spec");
+        assert_eq!(spec.api_format, "openai:realtime");
+        assert_eq!(spec.report_kind, "openai_realtime_websocket_success");
+        assert_eq!(spec.family, super::LocalSameFormatProviderFamily::Standard);
         assert!(spec.require_streaming);
     }
 

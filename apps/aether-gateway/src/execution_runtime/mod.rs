@@ -1,3 +1,4 @@
+mod admission;
 mod fallback;
 #[cfg(test)]
 pub(crate) mod remote_test_support;
@@ -9,6 +10,7 @@ pub(crate) mod submission;
 pub(crate) mod sync;
 pub(crate) mod transport;
 mod transport_failure;
+pub(crate) use self::admission::acquire_upstream_execution_gate;
 pub(crate) use self::fallback::{
     analyze_local_candidate_failover_sync, local_failover_response_text,
     resolve_core_stream_direct_finalize_report_kind,
