@@ -80,6 +80,40 @@ pub(crate) async fn connect_upstream_websocket(
     })
 }
 
+pub(crate) async fn connect_upstream_websocket_plan(
+    plan: &aether_contracts::ExecutionPlan,
+    limits: WebSocketSessionLimits,
+    errors: UpstreamWebSocketErrorCodes,
+) -> Result<UpstreamWebSocketConnection, &'static str> {
+    let upstream_url = guarded_websocket_upstream_url(
+        plan.url.as_str(),
+        errors.upstream_url_invalid,
+        errors.frontdoor_self_loop,
+    )?;
+    let headers = websocket_handshake_headers(&plan.headers, errors.headers_invalid)?;
+    let client = build_websocket_client_for_plan(plan, errors)?;
+    let response = client
+        .websocket(upstream_url.as_str())
+        .headers(headers)
+        .max_frame_size(limits.max_frame_size)
+        .max_message_size(limits.max_message_size)
+        .send()
+        .await
+        .map_err(|_| errors.handshake_failed)?;
+    if response.status().as_u16() != 101 {
+        return Err(errors.upgrade_rejected);
+    }
+    let response_headers = websocket_response_headers(response.headers());
+    let socket = response
+        .into_websocket()
+        .await
+        .map_err(|_| errors.upgrade_failed)?;
+    Ok(UpstreamWebSocketConnection {
+        socket,
+        response_headers,
+    })
+}
+
 fn guarded_websocket_upstream_url(
     raw: &str,
     invalid_code: &'static str,
@@ -192,6 +226,33 @@ fn build_websocket_client(
 ) -> Result<wreq::Client, &'static str> {
     let timeouts = websocket_timeouts(decision);
     if let Some(profile) = decision.transport_profile.as_ref() {
+        return build_browser_wreq_client(
+            timeouts.as_ref(),
+            profile,
+            ExecutionTransportControls::default(),
+            false,
+        )
+        .map_err(|_| errors.client_build_failed);
+    }
+
+    let mut builder = wreq::Client::builder();
+    if let Some(connect_ms) = timeouts.as_ref().and_then(|timeouts| timeouts.connect_ms) {
+        builder = builder.connect_timeout(Duration::from_millis(connect_ms));
+    }
+    builder.build().map_err(|_| errors.client_build_failed)
+}
+
+fn build_websocket_client_for_plan(
+    plan: &aether_contracts::ExecutionPlan,
+    errors: UpstreamWebSocketErrorCodes,
+) -> Result<wreq::Client, &'static str> {
+    let mut timeouts = plan.timeouts.clone();
+    if let Some(timeouts) = timeouts.as_mut() {
+        timeouts.read_ms = None;
+        timeouts.first_byte_ms = None;
+        timeouts.total_ms = None;
+    }
+    if let Some(profile) = plan.transport_profile.as_ref() {
         return build_browser_wreq_client(
             timeouts.as_ref(),
             profile,

@@ -8,6 +8,19 @@ use crate::provider_transport::GatewayProviderTransportSnapshot;
 use crate::AppState;
 
 pub(crate) const CYBER_CONTINUE_FAILOVER_CONFIG_KEY: &str = "cyber_continue_failover";
+pub(crate) const RESPONSES_WEBSOCKET_CONFIG_KEY: &str = "responses_websocket";
+
+/// Responses WebSocket support is opt-in per provider because an ordinary
+/// HTTP-compatible `/v1/responses` endpoint does not necessarily implement
+/// the WebSocket upgrade protocol.
+pub(crate) fn responses_websocket_enabled(provider_config: Option<&Value>) -> bool {
+    provider_config
+        .and_then(|config| config.get(RESPONSES_WEBSOCKET_CONFIG_KEY))
+        .and_then(Value::as_object)
+        .and_then(|responses| responses.get("enabled"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LocalFailoverPolicy {
@@ -292,4 +305,20 @@ fn parse_u64_value(value: &serde_json::Value) -> Option<u64> {
     value
         .as_u64()
         .or_else(|| value.as_i64().and_then(|value| u64::try_from(value).ok()))
+}
+
+#[cfg(test)]
+mod responses_websocket_tests {
+    use super::responses_websocket_enabled;
+
+    #[test]
+    fn responses_websocket_is_provider_opt_in() {
+        assert!(!responses_websocket_enabled(None));
+        assert!(!responses_websocket_enabled(Some(&serde_json::json!({
+            "responses_websocket": {"enabled": false}
+        }))));
+        assert!(responses_websocket_enabled(Some(&serde_json::json!({
+            "responses_websocket": {"enabled": true}
+        }))));
+    }
 }

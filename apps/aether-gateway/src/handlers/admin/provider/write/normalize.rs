@@ -3,7 +3,12 @@ use std::collections::BTreeSet;
 pub(crate) fn retain_supported_provider_config(
     config: &mut serde_json::Map<String, serde_json::Value>,
 ) {
-    config.retain(|key, _| matches!(key.as_str(), "chat_pii_redaction" | "failover_rules"));
+    config.retain(|key, _| {
+        matches!(
+            key.as_str(),
+            "chat_pii_redaction" | "failover_rules" | "responses_websocket"
+        )
+    });
 }
 
 pub(crate) fn normalize_api_format_list(values: Vec<String>) -> Vec<String> {
@@ -99,6 +104,41 @@ pub(crate) fn normalize_chat_pii_redaction_config(
     }
 }
 
+pub(crate) fn set_responses_websocket_enabled(
+    config: &mut serde_json::Map<String, serde_json::Value>,
+    enabled: bool,
+) -> Result<(), String> {
+    let mut responses = match config.remove("responses_websocket") {
+        None => serde_json::Map::new(),
+        Some(serde_json::Value::Object(config)) => config,
+        Some(_) => return Err("config.responses_websocket 必须是 JSON 对象".to_string()),
+    };
+    responses.insert("enabled".to_string(), serde_json::Value::Bool(enabled));
+    config.insert(
+        "responses_websocket".to_string(),
+        serde_json::Value::Object(responses),
+    );
+    Ok(())
+}
+
+pub(crate) fn validate_responses_websocket_config(
+    config: &serde_json::Map<String, serde_json::Value>,
+) -> Result<(), String> {
+    let Some(value) = config.get("responses_websocket") else {
+        return Ok(());
+    };
+    let responses = value
+        .as_object()
+        .ok_or_else(|| "config.responses_websocket 必须是 JSON 对象".to_string())?;
+    let enabled = responses
+        .get("enabled")
+        .ok_or_else(|| "config.responses_websocket.enabled 为必填布尔值".to_string())?;
+    if !enabled.is_boolean() {
+        return Err("config.responses_websocket.enabled 必须是布尔值".to_string());
+    }
+    Ok(())
+}
+
 fn normalize_json_like_object(
     value: Option<serde_json::Value>,
     field_name: &str,
@@ -110,5 +150,27 @@ fn normalize_json_like_object(
         serde_json::Value::Null => Ok(None),
         serde_json::Value::Object(map) => Ok(Some(serde_json::Value::Object(map))),
         _ => Err(format!("{field_name} 必须是 JSON 对象")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{set_responses_websocket_enabled, validate_responses_websocket_config};
+
+    #[test]
+    fn responses_websocket_setting_requires_an_explicit_boolean() {
+        let mut config = serde_json::Map::new();
+        set_responses_websocket_enabled(&mut config, true).expect("setting should normalize");
+        assert_eq!(
+            config.get("responses_websocket"),
+            Some(&serde_json::json!({"enabled": true}))
+        );
+        validate_responses_websocket_config(&config).expect("setting should validate");
+
+        config.insert(
+            "responses_websocket".to_string(),
+            serde_json::json!({"enabled": "yes"}),
+        );
+        assert!(validate_responses_websocket_config(&config).is_err());
     }
 }

@@ -44,6 +44,17 @@ pub(super) fn classify_ai_public_route(
             "openai:realtime",
             true,
         ))
+    } else if method == http::Method::GET
+        && normalized_path == "/v1/responses"
+        && is_websocket_upgrade_request(headers)
+    {
+        Some(classified(
+            "ai_public",
+            "openai",
+            "responses",
+            "openai:responses",
+            true,
+        ))
     } else if method == http::Method::POST
         && matches!(normalized_path, "/v1/responses" | "/v1/responses/compact")
     {
@@ -214,5 +225,24 @@ mod tests {
             classify_ai_public_route(&Method::GET, "/v1/realtime", &HeaderMap::new()).is_none()
         );
         assert!(classify_ai_public_route(&Method::POST, "/v1/realtime", &headers).is_none());
+    }
+
+    #[test]
+    fn responses_get_requires_a_websocket_upgrade_while_post_remains_http() {
+        let mut headers = HeaderMap::new();
+        headers.insert(CONNECTION, HeaderValue::from_static("Upgrade"));
+        headers.insert(UPGRADE, HeaderValue::from_static("websocket"));
+
+        let websocket = classify_ai_public_route(&Method::GET, "/v1/responses", &headers)
+            .expect("Responses WebSocket should classify");
+        assert_eq!(websocket.route_kind, "responses");
+        assert_eq!(websocket.auth_endpoint_signature, "openai:responses");
+
+        assert!(
+            classify_ai_public_route(&Method::GET, "/v1/responses", &HeaderMap::new()).is_none()
+        );
+        assert!(
+            classify_ai_public_route(&Method::POST, "/v1/responses", &HeaderMap::new()).is_some()
+        );
     }
 }

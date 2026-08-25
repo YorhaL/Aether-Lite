@@ -88,6 +88,21 @@
             />
           </div>
         </div>
+
+        <div class="flex items-center justify-between gap-4 rounded-lg border p-3">
+          <div class="space-y-1">
+            <Label for="responses-websocket-enabled">
+              {{ legacyT('Responses WebSocket') }}
+            </Label>
+            <p class="text-xs text-muted-foreground">
+              {{ legacyT('仅当该提供商的 OpenAI Responses 端点支持标准 WebSocket Upgrade 时开启。') }}
+            </p>
+          </div>
+          <Switch
+            id="responses-websocket-enabled"
+            v-model="form.responses_websocket_enabled"
+          />
+        </div>
       </div>
     </form>
 
@@ -117,6 +132,7 @@ import {
   Button,
   Input,
   Label,
+  Switch,
 } from '@/components/ui'
 import { Server, SquarePen } from 'lucide-vue-next'
 import { useToast } from '@/composables/useToast'
@@ -179,6 +195,7 @@ const form = ref({
   // 超时配置（秒）
   stream_first_byte_timeout: undefined as number | undefined,
   request_timeout: undefined as number | undefined,
+  responses_websocket_enabled: false,
 })
 
 // 重置表单
@@ -196,6 +213,7 @@ function resetForm() {
     // 超时配置
     stream_first_byte_timeout: undefined,
     request_timeout: undefined,
+    responses_websocket_enabled: false,
   }
 }
 
@@ -215,6 +233,7 @@ function loadProviderData() {
     // 超时配置
     stream_first_byte_timeout: props.provider.stream_first_byte_timeout ?? undefined,
     request_timeout: props.provider.request_timeout ?? undefined,
+    responses_websocket_enabled: props.provider.responses_websocket_enabled === true,
   }
 }
 
@@ -242,6 +261,7 @@ const handleSubmit = async () => {
       // 超时配置（null 表示清除，使用全局配置）
       stream_first_byte_timeout: form.value.stream_first_byte_timeout ?? null,
       request_timeout: form.value.request_timeout ?? null,
+      responses_websocket_enabled: form.value.responses_websocket_enabled,
     }
 
     if (isEditMode.value && props.provider) {

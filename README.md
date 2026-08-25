@@ -167,6 +167,7 @@ Provider 使用管理员配置的 API 格式。运行时按原请求和响应格
 - [Provider 接口定义](docs/api/provider-interface-definitions.md)
 - [Embeddings API](docs/api/embeddings.md)
 - [Rerank API](docs/api/rerank.md)
+- [OpenAI WebSocket 模式](docs/api/websocket.md)
 
 数据库支持：
 

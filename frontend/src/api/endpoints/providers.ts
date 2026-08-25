@@ -43,6 +43,7 @@ function normalizeProviderSummary(
   return {
     ...provider,
     chat_pii_redaction: normalizeChatPiiRedactionProvider(provider.chat_pii_redaction),
+    responses_websocket_enabled: provider.responses_websocket_enabled === true,
   }
 }
 
@@ -109,6 +110,7 @@ export async function updateProvider(
     is_active: boolean
     failover_rules: FailoverRulesConfig | null
     config: ProviderConfig | null
+    responses_websocket_enabled: boolean
   }>,
   requestOptions?: ProviderRequestOptions,
 ): Promise<ProviderWithEndpointsSummary> {
@@ -131,6 +133,7 @@ export async function createProvider(
     request_timeout?: number | null
     failover_rules?: FailoverRulesConfig | null
     config?: ProviderConfig | null
+    responses_websocket_enabled?: boolean
   }
 ): Promise<{ id: string; name: string; message?: string }> {
   const response = await client.post('/api/admin/providers/', data)

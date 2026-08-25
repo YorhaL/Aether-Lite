@@ -8,7 +8,7 @@ use super::{claude, gemini, openai};
 use crate::api::response::build_local_http_error_response_with_request_path;
 use crate::headers::extract_or_generate_trace_id;
 use crate::{
-    handlers::proxy::{proxy_request, realtime_websocket},
+    handlers::proxy::{proxy_request, realtime_websocket, responses_websocket},
     state::AppState,
     GatewayError,
 };
@@ -18,7 +18,6 @@ const AI_POST_ROUTE_PATTERNS: &[&str] = &[
     "/v1/chat/completions",
     "/v1/embeddings",
     "/v1/rerank",
-    "/v1/responses",
     "/v1/responses/compact",
     "/v1/alpha/search",
     "/v1/images/generations",
@@ -44,6 +43,10 @@ const AI_ANY_ROUTE_PATTERNS: &[&str] =
 
 pub(crate) fn mount_ai_routes(mut router: Router<AppState>) -> Router<AppState> {
     router = router.route("/v1/realtime", get(realtime_websocket));
+    router = router.route(
+        "/v1/responses",
+        get(responses_websocket).post(proxy_request),
+    );
     for path in AI_POST_ROUTE_PATTERNS {
         router = router.route(path, post(proxy_request));
     }

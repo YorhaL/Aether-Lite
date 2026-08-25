@@ -147,8 +147,13 @@ export interface ChatPiiRedactionProviderConfig {
   enabled: boolean
 }
 
+export interface ResponsesWebSocketProviderConfig {
+  enabled: boolean
+}
+
 export interface ProviderConfig {
   chat_pii_redaction?: ChatPiiRedactionProviderConfig
+  responses_websocket?: ResponsesWebSocketProviderConfig
   failover_rules?: FailoverRulesConfig
   [key: string]: unknown
 }
@@ -537,6 +542,7 @@ export interface ProviderWithEndpointsSummary {
   api_formats: string[]
   endpoint_health_details: EndpointHealthDetail[]
   chat_pii_redaction?: ChatPiiRedactionProviderConfig | null
+  responses_websocket_enabled: boolean
   failover_rules?: FailoverRulesConfig | null
   created_at: string
   updated_at: string

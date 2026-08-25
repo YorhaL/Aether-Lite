@@ -123,6 +123,7 @@ pub(crate) fn build_admin_provider_summary_value(
         "request_timeout": provider.request_timeout_secs,
         "failover_rules": config.and_then(|cfg| cfg.get("failover_rules")).cloned(),
         "chat_pii_redaction": config.and_then(|cfg| cfg.get("chat_pii_redaction")).cloned(),
+        "responses_websocket_enabled": crate::orchestration::responses_websocket_enabled(provider.config.as_ref()),
         "total_endpoints": total_endpoints,
         "active_endpoints": active_endpoints,
         "total_keys": total_keys,

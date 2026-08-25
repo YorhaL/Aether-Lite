@@ -1,6 +1,7 @@
 use crate::handlers::admin::provider::shared::payloads::AdminProviderCreateRequest;
 use crate::handlers::admin::provider::write::normalize::{
     normalize_chat_pii_redaction_config, retain_supported_provider_config,
+    set_responses_websocket_enabled, validate_responses_websocket_config,
 };
 use crate::handlers::admin::request::AdminAppState;
 use crate::handlers::admin::shared::normalize_json_object;
@@ -93,6 +94,10 @@ pub(crate) async fn build_admin_create_provider_record(
             config_map.insert("chat_pii_redaction".to_string(), value);
         }
     }
+    if let Some(enabled) = payload.responses_websocket_enabled {
+        set_responses_websocket_enabled(&mut config_map, enabled)?;
+    }
+    validate_responses_websocket_config(&config_map)?;
     let config = (!config_map.is_empty()).then_some(serde_json::Value::Object(config_map));
     let now_unix_secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
