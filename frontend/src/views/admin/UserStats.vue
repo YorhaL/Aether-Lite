@@ -160,7 +160,7 @@
                   </div>
                   <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
                     <div
-                      class="h-full rounded-full bg-primary/75"
+                      class="h-full rounded-full bg-primary"
                       :style="{ width: usageShare(item.total_tokens) }"
                     />
                   </div>
