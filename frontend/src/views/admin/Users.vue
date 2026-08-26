@@ -174,6 +174,7 @@ import {
   type UserSession,
   type UserBatchActionResponse,
   type UserBatchSelectionFilters,
+  type EffectivePolicyField,
   type UserGroup,
   type AdminUserSortBy,
   type AdminUserSortOrder,
@@ -369,7 +370,10 @@ const userRows = computed<UserManagementRow[]>(() =>
       rateLimitAsBadge: isRateLimitInherited(effectiveRateLimit) || isRateLimitUnlimited(effectiveRateLimit),
       dailyUsageLimitLabel: formatUserEffectiveDailyUsageLimit(user),
       dailyUsageLimitSource: formatUserEffectiveDailyUsageLimitSource(user),
-      dailyUsageLimitAsBadge: isUserDailyUsageLimitInherited(user) || isUserDailyUsageLimitUnlimited(user),
+      dailyUsageLimitAsBadge: isUserDailyUsageLimitUnlimited(user),
+      concurrentLimitLabel: formatUserEffectiveConcurrentLimit(user),
+      concurrentLimitSource: formatUserEffectiveConcurrentLimitSource(user),
+      concurrentLimitAsBadge: isUserConcurrentLimitUnlimited(user),
       createdAtLabel: formatDate(user.created_at),
       statusLabel: legacyT(user.is_active ? '活跃' : '禁用'),
       statusVariant: user.is_active ? 'success' : 'destructive',
@@ -587,32 +591,50 @@ function parseIpRulesInput(value: string): string[] | null {
 function formatUserEffectiveDailyUsageLimit(user: User): string {
   const policy = user.effective_policy?.daily_usage_limit_usd
   if (!policy) return '-'
-  if (policy.mode === 'system') return legacyT('跟随系统')
   const value = policy.value
   if (typeof value !== 'number') return '-'
   if (value === 0) return legacyT('无日上限')
   return locale.value === 'en-US' ? `$${value.toFixed(2)}/day` : `$${value.toFixed(2)}/日`
 }
 
-function isUserDailyUsageLimitInherited(user: User): boolean {
-  return user.effective_policy?.daily_usage_limit_usd?.mode === 'system'
-}
-
 function isUserDailyUsageLimitUnlimited(user: User): boolean {
-  return user.effective_policy?.daily_usage_limit_usd?.mode !== 'system'
-    && user.effective_policy?.daily_usage_limit_usd?.value === 0
+  return user.effective_policy?.daily_usage_limit_usd?.value === 0
 }
 
 function formatUserEffectiveDailyUsageLimitSource(user: User): string {
-  const source = user.effective_policy?.daily_usage_limit_usd
-  if (!source) return ''
-  if (source.source === 'group' && source.group_name) {
-    return `${legacyT('继承自分组：')}${source.group_name}`
+  return formatUserEffectiveAdmissionPolicySource(user.effective_policy?.daily_usage_limit_usd)
+}
+
+function formatUserEffectiveConcurrentLimit(user: User): string {
+  const policy = user.effective_policy?.concurrent_limit
+  if (!policy || typeof policy.value !== 'number') return '-'
+  return formatConcurrentLimitSimple(policy.value)
+}
+
+function isUserConcurrentLimitUnlimited(user: User): boolean {
+  return user.effective_policy?.concurrent_limit?.value === 0
+}
+
+function formatUserEffectiveConcurrentLimitSource(user: User): string {
+  return formatUserEffectiveAdmissionPolicySource(user.effective_policy?.concurrent_limit)
+}
+
+function formatUserEffectiveAdmissionPolicySource(
+  policy?: EffectivePolicyField<number>,
+): string {
+  if (!policy) return ''
+  if (policy.source === 'group' && policy.group_name) {
+    return `${legacyT('继承自分组：')}${policy.group_name}`
   }
-  if (source.source === 'combined') {
-    const groupNames = Array.isArray(source.group_names) ? source.group_names.join(locale.value === 'en-US' ? ', ' : '、') : ''
-    return groupNames ? `${legacyT('组合分组：')}${groupNames}` : legacyT('组合分组')
+  if (policy.source === 'combined') {
+    const groupNames = Array.isArray(policy.group_names)
+      ? policy.group_names.join(locale.value === 'en-US' ? ', ' : '、')
+      : ''
+    return groupNames
+      ? `${legacyT('继承自多个分组：')}${groupNames}`
+      : legacyT('继承自多个分组')
   }
+  if (policy.source === 'user') return legacyT('用户单独配置')
   return legacyT('系统默认')
 }
 

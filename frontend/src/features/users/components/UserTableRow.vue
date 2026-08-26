@@ -23,40 +23,90 @@
           <span class="w-14">Tokens:</span>
           <span class="font-medium text-foreground">{{ row.tokensLabel }}</span>
         </div>
-        <div class="flex items-center text-muted-foreground">
-          <span class="w-14">{{ legacyT('限速:') }}</span>
-          <Badge
-            v-if="row.rateLimitAsBadge"
-            variant="secondary"
-            class="h-5 px-1.5 py-0 text-[10px] font-medium"
-          >
-            {{ legacyT(row.rateLimitLabel) }}
-          </Badge>
-          <span
-            v-else
-            class="font-medium text-foreground"
-          >
-            {{ legacyT(row.rateLimitLabel) }}
-          </span>
+      </div>
+    </TableCell>
+    <TableCell class="py-4">
+      <div class="space-y-2 text-xs">
+        <div
+          class="flex items-start text-muted-foreground"
+          :title="legacyT(row.rateLimitSource)"
+        >
+          <span class="w-14 shrink-0 pt-0.5">RPM:</span>
+          <div class="min-w-0">
+            <Badge
+              v-if="row.rateLimitAsBadge"
+              variant="secondary"
+              class="h-5 px-1.5 py-0 text-[10px] font-medium"
+            >
+              {{ legacyT(row.rateLimitLabel) }}
+            </Badge>
+            <span
+              v-else
+              class="font-medium text-foreground"
+            >
+              {{ legacyT(row.rateLimitLabel) }}
+            </span>
+            <div
+              v-if="row.rateLimitSource"
+              class="mt-0.5 break-words text-[10px] leading-4 text-muted-foreground/80"
+            >
+              {{ legacyT(row.rateLimitSource) }}
+            </div>
+          </div>
         </div>
         <div
-          class="flex items-center text-muted-foreground"
+          class="flex items-start text-muted-foreground"
           :title="legacyT(row.dailyUsageLimitSource)"
         >
-          <span class="w-14">{{ legacyT('日限额:') }}</span>
-          <Badge
-            v-if="row.dailyUsageLimitAsBadge"
-            variant="secondary"
-            class="h-5 px-1.5 py-0 text-[10px] font-medium"
-          >
-            {{ legacyT(row.dailyUsageLimitLabel) }}
-          </Badge>
-          <span
-            v-else
-            class="font-medium text-foreground"
-          >
-            {{ legacyT(row.dailyUsageLimitLabel) }}
-          </span>
+          <span class="w-14 shrink-0 pt-0.5">{{ legacyT('日限额:') }}</span>
+          <div class="min-w-0">
+            <Badge
+              v-if="row.dailyUsageLimitAsBadge"
+              variant="secondary"
+              class="h-5 px-1.5 py-0 text-[10px] font-medium"
+            >
+              {{ legacyT(row.dailyUsageLimitLabel) }}
+            </Badge>
+            <span
+              v-else
+              class="font-medium text-foreground"
+            >
+              {{ legacyT(row.dailyUsageLimitLabel) }}
+            </span>
+            <div
+              v-if="row.dailyUsageLimitSource"
+              class="mt-0.5 break-words text-[10px] leading-4 text-muted-foreground/80"
+            >
+              {{ legacyT(row.dailyUsageLimitSource) }}
+            </div>
+          </div>
+        </div>
+        <div
+          class="flex items-start text-muted-foreground"
+          :title="legacyT(row.concurrentLimitSource)"
+        >
+          <span class="w-14 shrink-0 pt-0.5">{{ legacyT('并发') }}:</span>
+          <div class="min-w-0">
+            <Badge
+              v-if="row.concurrentLimitAsBadge"
+              variant="secondary"
+              class="h-5 px-1.5 py-0 text-[10px] font-medium"
+            >
+              {{ legacyT(row.concurrentLimitLabel) }}
+            </Badge>
+            <span
+              v-else
+              class="font-medium text-foreground"
+            >
+              {{ legacyT(row.concurrentLimitLabel) }}
+            </span>
+            <div
+              v-if="row.concurrentLimitSource"
+              class="mt-0.5 break-words text-[10px] leading-4 text-muted-foreground/80"
+            >
+              {{ legacyT(row.concurrentLimitSource) }}
+            </div>
+          </div>
         </div>
       </div>
     </TableCell>

@@ -24,24 +24,118 @@
         mobile
       />
 
-      <div class="grid grid-cols-2 gap-2.5 text-xs">
-        <div class="rounded-lg border border-border/50 bg-background/70 p-2.5">
-          <div class="mb-1 text-muted-foreground">
-            {{ legacyT('请求次数') }}
+      <section class="space-y-2">
+        <h3 class="text-xs font-semibold text-foreground">
+          {{ legacyT('统计') }}
+        </h3>
+        <div class="grid grid-cols-2 gap-2.5 text-xs">
+          <div class="rounded-lg border border-border/50 bg-background/70 p-2.5">
+            <div class="mb-1 text-muted-foreground">
+              {{ legacyT('请求次数') }}
+            </div>
+            <div class="font-semibold text-foreground">
+              {{ row.requestCountLabel }}
+            </div>
           </div>
-          <div class="font-semibold text-foreground">
-            {{ row.requestCountLabel }}
+          <div class="rounded-lg border border-border/50 bg-background/70 p-2.5">
+            <div class="mb-1 text-muted-foreground">
+              Tokens
+            </div>
+            <div class="font-semibold text-foreground">
+              {{ row.tokensLabel }}
+            </div>
           </div>
         </div>
-        <div class="rounded-lg border border-border/50 bg-background/70 p-2.5">
-          <div class="mb-1 text-muted-foreground">
-            Tokens
+      </section>
+
+      <section class="space-y-2">
+        <h3 class="text-xs font-semibold text-foreground">
+          {{ legacyT('流控策略') }}
+        </h3>
+        <div class="space-y-2 rounded-lg border border-border/50 bg-background/70 p-2.5 text-xs">
+          <div
+            class="flex items-start justify-between gap-3"
+            :title="legacyT(row.rateLimitSource)"
+          >
+            <span class="pt-0.5 text-muted-foreground">RPM:</span>
+            <div class="min-w-0 text-right">
+              <Badge
+                v-if="row.rateLimitAsBadge"
+                variant="secondary"
+                class="h-5 px-1.5 py-0 text-[10px] font-medium"
+              >
+                {{ legacyT(row.rateLimitLabel) }}
+              </Badge>
+              <div
+                v-else
+                class="font-medium text-foreground"
+              >
+                {{ legacyT(row.rateLimitLabel) }}
+              </div>
+              <div
+                v-if="row.rateLimitSource"
+                class="mt-0.5 break-words text-[10px] leading-4 text-muted-foreground/80"
+              >
+                {{ legacyT(row.rateLimitSource) }}
+              </div>
+            </div>
           </div>
-          <div class="font-semibold text-foreground">
-            {{ row.tokensLabel }}
+          <div
+            class="flex items-start justify-between gap-3"
+            :title="legacyT(row.dailyUsageLimitSource)"
+          >
+            <span class="pt-0.5 text-muted-foreground">{{ legacyT('日限额:') }}</span>
+            <div class="min-w-0 text-right">
+              <Badge
+                v-if="row.dailyUsageLimitAsBadge"
+                variant="secondary"
+                class="h-5 px-1.5 py-0 text-[10px] font-medium"
+              >
+                {{ legacyT(row.dailyUsageLimitLabel) }}
+              </Badge>
+              <div
+                v-else
+                class="font-medium text-foreground"
+              >
+                {{ legacyT(row.dailyUsageLimitLabel) }}
+              </div>
+              <div
+                v-if="row.dailyUsageLimitSource"
+                class="mt-0.5 break-words text-[10px] leading-4 text-muted-foreground/80"
+              >
+                {{ legacyT(row.dailyUsageLimitSource) }}
+              </div>
+            </div>
+          </div>
+          <div
+            class="flex items-start justify-between gap-3"
+            :title="legacyT(row.concurrentLimitSource)"
+          >
+            <span class="pt-0.5 text-muted-foreground">{{ legacyT('并发') }}:</span>
+            <div class="min-w-0 text-right">
+              <Badge
+                v-if="row.concurrentLimitAsBadge"
+                variant="secondary"
+                class="h-5 px-1.5 py-0 text-[10px] font-medium"
+              >
+                {{ legacyT(row.concurrentLimitLabel) }}
+              </Badge>
+              <div
+                v-else
+                class="font-medium text-foreground"
+              >
+                {{ legacyT(row.concurrentLimitLabel) }}
+              </div>
+              <div
+                v-if="row.concurrentLimitSource"
+                class="mt-0.5 break-words text-[10px] leading-4 text-muted-foreground/80"
+              >
+                {{ legacyT(row.concurrentLimitSource) }}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
       <div class="rounded-lg bg-muted/35 p-2.5 text-[11px] text-muted-foreground">
         <div class="flex items-center justify-between gap-2">
@@ -66,6 +160,7 @@
 </template>
 
 <script setup lang="ts">
+import Badge from '@/components/ui/badge.vue'
 import Checkbox from '@/components/ui/checkbox.vue'
 import { useI18n } from '@/i18n'
 import UserActionButtons from './UserActionButtons.vue'

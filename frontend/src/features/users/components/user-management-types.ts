@@ -52,6 +52,9 @@ export interface UserManagementRow {
   dailyUsageLimitLabel: string
   dailyUsageLimitSource: string
   dailyUsageLimitAsBadge: boolean
+  concurrentLimitLabel: string
+  concurrentLimitSource: string
+  concurrentLimitAsBadge: boolean
   createdAtLabel: string
   statusLabel: string
   statusVariant: BadgeVariant

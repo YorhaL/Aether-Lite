@@ -18,8 +18,11 @@
             <TableHead class="w-[240px] h-12 font-semibold">
               {{ legacyT('钱包') }}
             </TableHead>
-            <TableHead class="w-[170px] h-12 font-semibold">
-              {{ legacyT('统计/限速') }}
+            <TableHead class="w-[130px] h-12 font-semibold">
+              {{ legacyT('统计') }}
+            </TableHead>
+            <TableHead class="w-[250px] h-12 font-semibold">
+              {{ legacyT('流控策略') }}
             </TableHead>
             <SortableTableHead
               class="w-[110px] h-12 font-semibold"

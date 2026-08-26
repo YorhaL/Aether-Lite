@@ -816,7 +816,7 @@ const legacyExactEnglishMessages: Record<string, string> = {
   '总可用：': 'Total available:',
   '已消费': 'Consumed',
   '已消费：': 'Consumed:',
-  '统计/限速': 'Stats / rate limit',
+  '流控策略': 'Traffic control policy',
   'Token 计费': 'Token billing',
   'Tokens': 'Tokens',
   '创建时间': 'Created at',

@@ -14,22 +14,6 @@
       {{ legacyT(row.walletStatusLabel) }}
     </Badge>
     <Badge
-      v-if="mobile"
-      variant="secondary"
-      class="h-5 px-1.5 py-0 text-[10px] font-medium"
-      :title="legacyT(row.rateLimitSource)"
-    >
-      {{ legacyT(row.rateLimitLabel) }}
-    </Badge>
-    <Badge
-      v-if="mobile"
-      variant="secondary"
-      class="h-5 px-1.5 py-0 text-[10px] font-medium"
-      :title="legacyT(row.dailyUsageLimitSource)"
-    >
-      {{ legacyT('日限额') }}: {{ legacyT(row.dailyUsageLimitLabel) }}
-    </Badge>
-    <Badge
       v-for="group in mobile ? row.user.groups || [] : []"
       :key="group.id"
       variant="outline"
