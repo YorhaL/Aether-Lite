@@ -58,8 +58,25 @@
         :items="leaderboard"
         :metric="metric"
         :loading="leaderboardLoading"
+        selectable
+        :selected-item-id="selectedUserId"
         @update:metric="metric = $event"
+        @select-item="selectLeaderboardUser"
       >
+        <template #name="{ item }">
+          <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+            <span class="min-w-0 truncate font-medium">{{ item.name }}</span>
+            <Badge
+              v-for="group in leaderboardUserGroups(item.id)"
+              :key="group.id"
+              variant="outline"
+              class="h-5 max-w-32 px-1.5 py-0 text-[10px] font-medium"
+              :title="group.name"
+            >
+              <span class="truncate">{{ group.name }}</span>
+            </Badge>
+          </div>
+        </template>
         <template #pagination>
           <Pagination
             v-if="leaderboardTotal > 0"
@@ -160,7 +177,7 @@
                   </div>
                   <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
                     <div
-                      class="h-full rounded-full bg-primary"
+                      class="h-full rounded-full bg-emerald-500/75"
                       :style="{ width: usageShare(item.total_tokens) }"
                     />
                   </div>
@@ -261,7 +278,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { Card, Pagination, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui'
+import { Badge, Card, Pagination, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui'
 import LineChart from '@/components/charts/LineChart.vue'
 import { LoadingState, TimeRangePicker } from '@/components/common'
 import { LeaderboardTable } from '@/components/stats'
@@ -278,6 +295,7 @@ const metric = ref<'requests' | 'tokens' | 'cost'>('requests')
 const users = ref<User[]>([])
 const selectedUserId = ref<string | null>(null)
 const compareUserId = ref<string>('__none__')
+const usersById = computed(() => new Map(users.value.map(user => [user.id, user])))
 
 const leaderboard = ref<LeaderboardItem[]>([])
 const leaderboardPage = ref(1)
@@ -328,10 +346,29 @@ function buildTimeRangeParams() {
 }
 
 async function loadUsers() {
-  users.value = await usersApi.getAllUsers()
+  const loadedUsers: User[] = []
+  const pageSize = 1000
+  let skip = 0
+
+  while (true) {
+    const page = await usersApi.getAllUsersPage({ skip, limit: pageSize })
+    loadedUsers.push(...page.items)
+    if (!page.has_more || page.items.length === 0) break
+    skip += page.items.length
+  }
+
+  users.value = loadedUsers
   if (!selectedUserId.value && users.value.length > 0) {
     selectedUserId.value = users.value[0].id
   }
+}
+
+function leaderboardUserGroups(userId: string) {
+  return usersById.value.get(userId)?.groups ?? []
+}
+
+function selectLeaderboardUser(item: LeaderboardItem) {
+  selectedUserId.value = item.id
 }
 
 async function loadLeaderboard() {

@@ -8,9 +8,9 @@ const source = readFileSync(
 )
 
 describe('UserStats usage progress bars', () => {
-  it('uses a valid theme color while preserving the calculated model width', () => {
-    expect(source).toContain('class="h-full rounded-full bg-primary"')
+  it('uses the same green color while preserving the calculated width', () => {
+    expect(source.match(/class="h-full rounded-full bg-emerald-500\/75"/g)).toHaveLength(2)
     expect(source).toContain(':style="{ width: usageShare(item.total_tokens) }"')
-    expect(source).not.toContain('bg-primary/75')
+    expect(source).not.toContain('class="h-full rounded-full bg-primary"')
   })
 })

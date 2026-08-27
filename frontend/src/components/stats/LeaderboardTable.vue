@@ -62,11 +62,25 @@
         <TableRow
           v-for="item in items"
           :key="item.id"
+          :class="selectable ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring' : undefined"
+          :data-state="selectable && selectedItemId === item.id ? 'selected' : undefined"
+          :tabindex="selectable ? 0 : undefined"
+          :aria-selected="selectable ? selectedItemId === item.id : undefined"
+          @click="selectItem(item)"
+          @keydown.enter.prevent="selectItem(item)"
+          @keydown.space.prevent="selectItem(item)"
         >
           <TableCell class="font-medium">
             {{ item.rank }}
           </TableCell>
-          <TableCell>{{ item.name }}</TableCell>
+          <TableCell>
+            <slot
+              name="name"
+              :item="item"
+            >
+              {{ item.name }}
+            </slot>
+          </TableCell>
           <TableCell class="text-right">
             {{ item.requests }}
           </TableCell>
@@ -110,15 +124,20 @@ interface Props {
   metric: 'requests' | 'tokens' | 'cost'
   loading?: boolean
   showMetricSelect?: boolean
+  selectable?: boolean
+  selectedItemId?: string | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
   loading: false,
-  showMetricSelect: true
+  showMetricSelect: true,
+  selectable: false,
+  selectedItemId: null,
 })
 
 const emit = defineEmits<{
-  (e: 'update:metric', value: 'requests' | 'tokens' | 'cost'): void
+  'update:metric': [value: 'requests' | 'tokens' | 'cost']
+  'select-item': [item: LeaderboardItem]
 }>()
 
 const metric = computed(() => props.metric)
@@ -126,6 +145,12 @@ const metric = computed(() => props.metric)
 function emitMetric(value: string) {
   if (value === 'requests' || value === 'tokens' || value === 'cost') {
     emit('update:metric', value)
+  }
+}
+
+function selectItem(item: LeaderboardItem) {
+  if (props.selectable) {
+    emit('select-item', item)
   }
 }
 </script>
