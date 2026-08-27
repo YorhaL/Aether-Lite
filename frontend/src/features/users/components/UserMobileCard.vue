@@ -54,10 +54,10 @@
         </h3>
         <div class="space-y-2 rounded-lg border border-border/50 bg-background/70 p-2.5 text-xs">
           <div
-            class="flex items-start justify-between gap-3"
+            class="flex items-center justify-between gap-3"
             :title="legacyT(row.rateLimitSource)"
           >
-            <span class="pt-0.5 text-muted-foreground">RPM:</span>
+            <span class="text-muted-foreground">RPM:</span>
             <div class="min-w-0 text-right">
               <Badge
                 v-if="row.rateLimitAsBadge"
@@ -72,19 +72,13 @@
               >
                 {{ legacyT(row.rateLimitLabel) }}
               </div>
-              <div
-                v-if="row.rateLimitSource"
-                class="mt-0.5 break-words text-[10px] leading-4 text-muted-foreground/80"
-              >
-                {{ legacyT(row.rateLimitSource) }}
-              </div>
             </div>
           </div>
           <div
-            class="flex items-start justify-between gap-3"
+            class="flex items-center justify-between gap-3"
             :title="legacyT(row.dailyUsageLimitSource)"
           >
-            <span class="pt-0.5 text-muted-foreground">{{ legacyT('日限额:') }}</span>
+            <span class="text-muted-foreground">{{ legacyT('日限额:') }}</span>
             <div class="min-w-0 text-right">
               <Badge
                 v-if="row.dailyUsageLimitAsBadge"
@@ -99,19 +93,13 @@
               >
                 {{ legacyT(row.dailyUsageLimitLabel) }}
               </div>
-              <div
-                v-if="row.dailyUsageLimitSource"
-                class="mt-0.5 break-words text-[10px] leading-4 text-muted-foreground/80"
-              >
-                {{ legacyT(row.dailyUsageLimitSource) }}
-              </div>
             </div>
           </div>
           <div
-            class="flex items-start justify-between gap-3"
+            class="flex items-center justify-between gap-3"
             :title="legacyT(row.concurrentLimitSource)"
           >
-            <span class="pt-0.5 text-muted-foreground">{{ legacyT('并发') }}:</span>
+            <span class="text-muted-foreground">{{ legacyT('并发') }}:</span>
             <div class="min-w-0 text-right">
               <Badge
                 v-if="row.concurrentLimitAsBadge"
@@ -125,12 +113,6 @@
                 class="font-medium text-foreground"
               >
                 {{ legacyT(row.concurrentLimitLabel) }}
-              </div>
-              <div
-                v-if="row.concurrentLimitSource"
-                class="mt-0.5 break-words text-[10px] leading-4 text-muted-foreground/80"
-              >
-                {{ legacyT(row.concurrentLimitSource) }}
               </div>
             </div>
           </div>
